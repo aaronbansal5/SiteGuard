@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
 import type { Session } from "@siteguard/contracts";
-import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { api, useResource, useAction } from "../lib/api";
 import { useSessionStream } from "../lib/session-stream";
 import {
@@ -65,8 +64,7 @@ export function Measurement() {
       0,
       Math.floor((now - Date.parse(s.startedAt)) / 1000),
     ),
-    quality = stream.readings.at(-1)?.reading.quality,
-    target = RECOMMENDED_CHECK_IN_SECONDS[s.source];
+    quality = stream.readings.at(-1)?.reading.quality;
   return (
     <>
       <PageHeading
@@ -120,15 +118,11 @@ export function Measurement() {
             </strong>
             <span>elapsed</span>
           </div>
-          <div className="progress">
-            <span
-              style={{ width: `${Math.min(100, (elapsed / target) * 100)}%` }}
-            />
-          </div>
           <p className="fine-print">
-            {s.source === "mock"
-              ? `Demo walkthrough: ${target} seconds.`
-              : `Recommended: ${target} seconds. Readings need about 30–45 seconds of warm-up before they count.`}{" "}
+            No time limit. Keep testing for as long as you need, then select
+            Finish check-in to stop recording.
+            {s.source === "presage" &&
+              " Positioning and warm-up may delay valid readings."}{" "}
             Data sufficiency is not a medical threshold.
           </p>
           <button

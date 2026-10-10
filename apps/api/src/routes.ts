@@ -78,6 +78,7 @@ export async function registerRoutes(
     await r.driver.query("SELECT 1");
     return {
       status: "ok",
+      checkInTestMode: c.checkInTestMode && c.demoMode && !c.hosted,
       database: r.driver.kind,
       measurementSources: {
         mock: c.demoMode,
@@ -196,6 +197,9 @@ export async function registerRoutes(
   app.post("/api/sessions", async (req, reply) => {
     const workerId = worker(req);
     const b = StartSessionSchema.parse(req.body);
+    const localTest = c.checkInTestMode && c.demoMode && !c.hosted;
+    if (b.consentVersion === "local-test" && !localTest)
+      fail(403, "TEST_MODE_DISABLED", "Local check-in testing is disabled");
     if (b.source === "mock" && !c.demoMode)
       fail(403, "MOCK_DISABLED", "Synthetic measurements are disabled");
     if (b.source === "presage" && c.hosted)
@@ -205,7 +209,10 @@ export async function registerRoutes(
       const now = Date.now();
       if (!br || br.workerId !== workerId)
         fail(403, "FORBIDDEN", "Break does not belong to worker");
-      if (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
+      if (
+        !localTest &&
+        (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
+      )
         fail(
           409,
           "BREAK_INACTIVE",

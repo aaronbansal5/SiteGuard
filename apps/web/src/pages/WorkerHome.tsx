@@ -35,6 +35,7 @@ export function ChooseWorker() {
   );
 }
 function Worker({ workerId }: { workerId: string }) {
+  const health = useResource<{ checkInTestMode?: boolean }>("/health");
   const breaks = useResource<{ breaks: Break[] }>("/breaks", 10000),
     history = useResource<{ sessions: (Session & { summary: Summary })[] }>(
       `/workers/${workerId}/history`,
@@ -44,6 +45,8 @@ function Worker({ workerId }: { workerId: string }) {
     br = breaks.data?.breaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
     ),
+    checkInBreak =
+      br ?? (health.data?.checkInTestMode ? breaks.data?.breaks[0] : undefined),
     active = history.data?.sessions.find((s) => s.status === "active"),
     latest = history.data?.sessions.find((s) => s.status === "completed");
   return (
@@ -55,6 +58,12 @@ function Worker({ workerId }: { workerId: string }) {
         action={<span className="badge">Worker W-{workerId.slice(-2)}</span>}
       />
       <ErrorNotice message={breaks.error || history.error || requests.error} />
+      {health.data?.checkInTestMode && (
+        <p className="notice demo">
+          Local check-in testing enabled: no consent form or scheduled-break
+          time gate.
+        </p>
+      )}
       {breaks.loading ? (
         <Loading />
       ) : (
@@ -84,8 +93,11 @@ function Worker({ workerId }: { workerId: string }) {
             >
               Resume check-in <ArrowRight size={17} />
             </Link>
-          ) : br ? (
-            <Link className="button primary" to={`/check-in?breakId=${br.id}`}>
+          ) : checkInBreak ? (
+            <Link
+              className="button primary"
+              to={`/check-in?breakId=${checkInBreak.id}`}
+            >
               Start voluntary check-in <ArrowRight size={17} />
             </Link>
           ) : (

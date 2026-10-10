@@ -18,8 +18,10 @@ export function CheckIn() {
     [workload, setWorkload] = useState("heavy"),
     [temp, setTemp] = useState("26");
   const health = useResource<{
+    checkInTestMode?: boolean;
     measurementSources: { mock: boolean; presage: boolean };
   }>("/health");
+  const localTest = health.data?.checkInTestMode === true;
   if (identity?.role !== "worker") return <ChooseWorker />;
   return (
     <>
@@ -29,61 +31,63 @@ export function CheckIn() {
         description="Choose what to record. Your protected break remains yours."
       />
       <div className="consent-layout">
-        <section className="card">
-          <div className="card-header">
-            <span className="portal-icon">
-              <ShieldCheck size={24} />
-            </span>
-            <div>
-              <h2>Before you begin</h2>
-              <p>Understand what this check-in collects.</p>
+        {!localTest && (
+          <section className="card">
+            <div className="card-header">
+              <span className="portal-icon">
+                <ShieldCheck size={24} />
+              </span>
+              <div>
+                <h2>Before you begin</h2>
+                <p>Understand what this check-in collects.</p>
+              </div>
             </div>
-          </div>
-          <div className="consent-point">
-            <span>01</span>
-            <div>
-              <h3>Only normalized observations</h3>
-              <p>
-                We record timestamped pulse, breathing rate, source, and
-                quality. SiteGuard does not store camera images or video.
-              </p>
+            <div className="consent-point">
+              <span>01</span>
+              <div>
+                <h3>Only normalized observations</h3>
+                <p>
+                  We record timestamped pulse, breathing rate, source, and
+                  quality. SiteGuard does not store camera images or video.
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="consent-point">
-            <span>02</span>
-            <div>
-              <h3>No identification, no clearance</h3>
-              <p>
-                No facial identification. Measurements cannot establish recovery
-                or whether you are fit to return to work.
-              </p>
+            <div className="consent-point">
+              <span>02</span>
+              <div>
+                <h3>No identification, no clearance</h3>
+                <p>
+                  No facial identification. Measurements cannot establish
+                  recovery or whether you are fit to return to work.
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="consent-point">
-            <span>03</span>
-            <div>
-              <h3>Your history is private by default</h3>
-              <p>
-                Your supervisor sees break times and requests. Sharing this
-                session's physiological summary is optional.
-              </p>
+            <div className="consent-point">
+              <span>03</span>
+              <div>
+                <h3>Your history is private by default</h3>
+                <p>
+                  Your supervisor sees break times and requests. Sharing this
+                  session's physiological summary is optional.
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="notice demo">
-            Synthetic mode uses no camera. Before real use, verify the Presage
-            bridge's processing and telemetry privacy separately.
-          </div>
-        </section>
+            <div className="notice demo">
+              Synthetic mode uses no camera. Before real use, verify the Presage
+              bridge's processing and telemetry privacy separately.
+            </div>
+          </section>
+        )}
         <form
           className="card"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!consent || a.busy) return;
+            if ((!localTest && !consent) || a.busy) return;
             void a.run(async () => {
               const result = await api<{ session: Session }>("/sessions", {
                 breakId: search.get("breakId"),
                 source,
-                consentVersion: "v1",
+                consentVersion: localTest ? "local-test" : "v1",
                 shareWithSupervisor: share,
                 context: {
                   workload: workload || null,
@@ -95,6 +99,12 @@ export function CheckIn() {
           }}
         >
           <h2>Check-in preferences</h2>
+          {localTest && (
+            <p className="notice demo">
+              Local testing: no consent form or scheduled-break time gate. Begin
+              check-in starts recording; Finish check-in stops it.
+            </p>
+          )}
           <label>
             Measurement source
             <select
@@ -151,18 +161,20 @@ export function CheckIn() {
             />
             <span>Share this session's summary with safety operations</span>
           </label>
-          <label className="checkbox consent-check">
-            <input
-              type="checkbox"
-              required
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-            />
-            <span>
-              I understand the limitations and voluntarily agree to record these
-              observations.
-            </span>
-          </label>
+          {!localTest && (
+            <label className="checkbox consent-check">
+              <input
+                type="checkbox"
+                required
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+              />
+              <span>
+                I understand the limitations and voluntarily agree to record
+                these observations.
+              </span>
+            </label>
+          )}
           <ErrorNotice
             message={
               a.error ||
@@ -174,7 +186,9 @@ export function CheckIn() {
           />
           <button
             className="button primary full"
-            disabled={!consent || a.busy || !search.get("breakId")}
+            disabled={
+              (!localTest && !consent) || a.busy || !search.get("breakId")
+            }
           >
             {a.busy ? "Starting…" : "Begin check-in"}
             <ArrowRight size={17} />
@@ -183,8 +197,9 @@ export function CheckIn() {
             Skip measurement
           </Link>
           <p className="fine-print">
-            <LockKeyhole size={12} /> Consent version v1 · You can stop at any
-            time.
+            <LockKeyhole size={12} />{" "}
+            {localTest ? "Local test session ·" : "Consent version v1 ·"} You
+            can stop at any time.
           </p>
         </form>
       </div>

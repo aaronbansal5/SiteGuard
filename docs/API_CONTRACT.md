@@ -48,3 +48,7 @@ Example reading: {"timestamp":"2026-10-10T15:00:01.000Z","heartRateBpm":104,"res
 ## Resource limits
 
 Demo login:30 requests/minute/IP; other writes:120/minute/IP (IPv6 counted per /64; client address from CLIENT_IP_HEADER only when configured behind a proxy). SSE:6 streams/identity,12/worker,64/process; quotas release on close. Heartbeats revalidate signed identity expiry every5seconds without stopping the underlying measurement source. Native-source transport status is configured/unverified until a successful bridge check-in. Limits are process-local; production ingress/shared quotas require separate deployment validation.
+
+## Local check-in testing
+
+With `CHECK_IN_TEST_MODE=true`, `DEMO_MODE=true`, and `HOSTED=false`, `/health` reports `checkInTestMode:true`. Local test clients omit the consent form and submit `consentVersion:"local-test"`, which is preserved in the session record rather than recording v1 consent. An owned break is still required, but its active-time check is bypassed without editing the break. Normal mode rejects local-test sessions; hosted deployments never enable this bypass. Start/finish remain explicit and sharing remains opt-in.

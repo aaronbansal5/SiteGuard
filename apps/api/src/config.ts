@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 export interface Config {
+  checkInTestMode: boolean;
   authMode: "demo" | "oidc";
   appOrigin: string;
   siteId: string;
@@ -30,6 +31,7 @@ export interface Config {
 export function loadConfig(overrides: Partial<Config> = {}): Config {
   const hosted = process.env.HOSTED === "true";
   const c: Config = {
+    checkInTestMode: process.env.CHECK_IN_TEST_MODE === "true",
     authMode: process.env.AUTH_MODE === "oidc" ? "oidc" : "demo",
     appOrigin: process.env.APP_ORIGIN || "http://127.0.0.1:3001",
     siteId: process.env.SITE_ID || "local-demo",

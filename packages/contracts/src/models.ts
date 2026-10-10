@@ -38,7 +38,7 @@ export const SessionSchema = z.strictObject({
   startedAt: ISO,
   endedAt: ISO.nullable(),
   context: ContextSchema,
-  consentVersion: z.literal("v1"),
+  consentVersion: z.enum(["v1", "local-test"]),
   shareWithSupervisor: z.boolean(),
   interruption: z.string().nullable(),
 });

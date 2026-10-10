@@ -30,7 +30,6 @@ import type {
   Worker,
   MetricSummary,
 } from "@siteguard/contracts";
-import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { useIdentity } from "../App";
 import { api, useAction, useResource, number, time } from "../lib/api";
 import { useSessionStream } from "../lib/session-stream";
@@ -52,7 +51,10 @@ import { ErrorNotice, HelpActions, Loading } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
 import { PersonalInsightsPanel } from "../components/PersonalInsights";
 
-type Health = { measurementSources: { mock: boolean; presage: boolean } };
+type Health = {
+  checkInTestMode?: boolean;
+  measurementSources: { mock: boolean; presage: boolean };
+};
 type Stage =
   | { kind: "home" }
   | { kind: "consent" }
@@ -88,7 +90,8 @@ export function MobileApp() {
         )}
       </header>
       <div className="mobile-demo-strip">
-        <FlaskConical size={14} /> Fictional workforce · synthetic demo readings
+        <FlaskConical size={14} /> Local check-in · measurement source shown
+        below
       </div>
       <main id="main" className="mobile-main">
         {identity?.role !== "worker" || choosing ? (
@@ -233,14 +236,16 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const sorted = [...(breaks.data?.breaks ?? [])].sort(
     (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
   );
+  const localTest = health.data?.checkInTestMode === true;
   const activeBreak = sorted.find(
     (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
   );
+  const checkInBreak = activeBreak ?? (localTest ? sorted[0] : undefined);
   const nextBreak = sorted.find((b) => Date.parse(b.startsAt) > now);
-  const canMeasure = Boolean(demoMode) && Boolean(activeBreak);
+  const canMeasure = Boolean(demoMode) && Boolean(checkInBreak);
   const blockedReason = !demoMode
     ? "Measurement is not available in this phone browser. The Presage SDK runs only in native apps or the local camera bridge."
-    : !activeBreak
+    : !checkInBreak
       ? `Check-ins open during your scheduled break${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
       : "";
 
@@ -261,7 +266,9 @@ function MobileWorker({ workerId }: { workerId: string }) {
       )}
       {stage.kind === "consent" && (
         <MobileConsent
-          breakId={activeBreak?.id ?? null}
+          localTest={localTest}
+          presageAvailable={Boolean(health.data?.measurementSources.presage)}
+          breakId={checkInBreak?.id ?? null}
           canMeasure={canMeasure}
           blockedReason={blockedReason}
           onCancel={() => setStage({ kind: "home" })}
@@ -456,8 +463,7 @@ function MobileHome({
       <section className="mobile-card">
         <h2>Check in now</h2>
         <p className="muted">
-          Voluntary, about {RECOMMENDED_CHECK_IN_SECONDS.mock} seconds, and you
-          can stop at any time.
+          Voluntary, with no time limit, and you can stop at any time.
         </p>
         {blockedReason && <p className="fine-print">{blockedReason}</p>}
         <button
@@ -523,12 +529,16 @@ function NotificationOptIn() {
 }
 
 function MobileConsent({
+  localTest,
+  presageAvailable,
   breakId,
   canMeasure,
   blockedReason,
   onCancel,
   onStarted,
 }: {
+  localTest: boolean;
+  presageAvailable: boolean;
   breakId: string | null;
   canMeasure: boolean;
   blockedReason: string;
@@ -540,18 +550,19 @@ function MobileConsent({
     [share, setShare] = useState(false),
     [workload, setWorkload] = useState(""),
     [temp, setTemp] = useState("");
+  const [source, setSource] = useState<"mock" | "presage">("mock");
   const a = useAction();
   return (
     <form
       className="mobile-card"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!consent || !breakId || a.busy) return;
+        if ((!localTest && !consent) || !breakId || a.busy) return;
         void a.run(async () => {
           const result = await api<{ session: Session }>("/sessions", {
             breakId,
-            source: "mock",
-            consentVersion: "v1",
+            source,
+            consentVersion: localTest ? "local-test" : "v1",
             shareWithSupervisor: share,
             context: {
               workload: workload || null,
@@ -563,30 +574,55 @@ function MobileConsent({
       }}
     >
       <span className="eyebrow">VOLUNTARY CHECK-IN · CONSENT</span>
-      <h1>Before you begin</h1>
-      <ul className="mobile-consent-points">
-        <li>
-          <strong>Synthetic readings on this phone.</strong> Phone browsers
-          cannot run the Presage SDK, so this check-in uses labeled synthetic
-          demo readings. No camera is used.
-        </li>
-        <li>
-          <strong>Only normalized observations.</strong> Timestamped pulse,
-          breathing rate, source and quality. No images or video are stored.
-        </li>
-        <li>
-          <strong>No identification, no clearance.</strong> Readings cannot show
-          that you have recovered or are fit to return to work.
-        </li>
-        <li>
-          <strong>Private by default.</strong> Your supervisor sees break times
-          and requests. Sharing this summary is optional.
-        </li>
-      </ul>
+      <h1>{localTest ? "Test your check-in" : "Before you begin"}</h1>
+      {localTest && (
+        <p className="notice demo">
+          Local testing: no consent form or scheduled-break time gate. Begin
+          check-in starts recording.
+        </p>
+      )}
+      {!localTest && (
+        <ul className="mobile-consent-points">
+          <li>
+            <strong>Synthetic readings on this phone.</strong> Phone browsers
+            cannot run the Presage SDK, so this check-in uses labeled synthetic
+            demo readings. No camera is used.
+          </li>
+          <li>
+            <strong>Only normalized observations.</strong> Timestamped pulse,
+            breathing rate, source and quality. No images or video are stored.
+          </li>
+          <li>
+            <strong>No identification, no clearance.</strong> Readings cannot
+            show that you have recovered or are fit to return to work.
+          </li>
+          <li>
+            <strong>Private by default.</strong> Your supervisor sees break
+            times and requests. Sharing this summary is optional.
+          </li>
+        </ul>
+      )}
       <div className="mobile-source">
-        <SourceBadge source="mock" />
+        <SourceBadge source={source} />
         <span>Measurement source for this check-in</span>
       </div>
+      {localTest && (
+        <label>
+          Measurement source
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value as "mock" | "presage")}
+          >
+            <option value="mock">Synthetic demo · no camera</option>
+            <option value="presage" disabled={!presageAvailable}>
+              Presage · laptop camera bridge
+            </option>
+          </select>
+          <p className="fine-print">
+            Presage uses the camera on the laptop running the native bridge.
+          </p>
+        </label>
+      )}
       <div className="form-grid">
         <label>
           Recent workload
@@ -620,22 +656,24 @@ function MobileConsent({
         />
         <span>Share this session's summary with safety operations</span>
       </label>
-      <label className="checkbox consent-check mobile-toggle">
-        <input
-          type="checkbox"
-          checked={consent}
-          onChange={(e) => setConsent(e.target.checked)}
-        />
-        <span>
-          I understand the limitations and voluntarily agree to record this
-          check-in.
-        </span>
-      </label>
+      {!localTest && (
+        <label className="checkbox consent-check mobile-toggle">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+          />
+          <span>
+            I understand the limitations and voluntarily agree to record this
+            check-in.
+          </span>
+        </label>
+      )}
       <ErrorNotice message={a.error || blockedReason} />
       <div className="mobile-stack">
         <button
           className="button primary mobile-big"
-          disabled={!consent || !canMeasure || a.busy}
+          disabled={(!localTest && !consent) || !canMeasure || a.busy}
         >
           {a.busy ? "Starting…" : "Begin check-in"}
           <ArrowRight size={18} />
@@ -649,7 +687,10 @@ function MobileConsent({
         </button>
       </div>
       <p className="fine-print">
-        <LockKeyhole size={12} /> Consent version v1 · asked every check-in ·
+        <LockKeyhole size={12} />{" "}
+        {localTest
+          ? "Local test session ·"
+          : "Consent version v1 · asked every check-in ·"}
         you can stop at any time.
       </p>
     </form>
@@ -692,7 +733,6 @@ function MobileMeasuring({
         )}
       </section>
     );
-  const target = RECOMMENDED_CHECK_IN_SECONDS[s.source];
   const elapsed = Math.max(
     0,
     Math.floor((now - Date.parse(s.startedAt)) / 1000),
@@ -716,22 +756,9 @@ function MobileMeasuring({
           {formatCountdown(elapsed)}
         </strong>
       </div>
-      <div
-        className="progress"
-        role="progressbar"
-        aria-label="Check-in progress"
-        aria-valuemin={0}
-        aria-valuemax={target}
-        aria-valuenow={Math.min(target, elapsed)}
-      >
-        <span
-          style={{ width: `${Math.min(100, (elapsed / target) * 100)}%` }}
-        />
-      </div>
       <p className="fine-print">
-        {elapsed >= target
-          ? `${target} seconds reached. Finish when you are ready.`
-          : `Suggested length: ${target} seconds (a data-sufficiency guide, not a medical threshold).`}
+        No time limit. Keep testing for as long as you need, then select Finish
+        check-in to stop recording. Data sufficiency is not a medical threshold.
       </p>
       <div className="mobile-readings">
         <div>

@@ -16,7 +16,7 @@ export type Identity = z.infer<typeof LoginSchema>;
 export const StartSessionSchema = z.strictObject({
   breakId: Id,
   source: SourceSchema,
-  consentVersion: z.literal("v1"),
+  consentVersion: z.enum(["v1", "local-test"]),
   shareWithSupervisor: z.boolean(),
   context: ContextSchema,
 });
