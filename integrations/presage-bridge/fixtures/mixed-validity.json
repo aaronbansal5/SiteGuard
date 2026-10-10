@@ -1,0 +1,86 @@
+{
+  "fixtureFormat": 1,
+  "name": "mixed-validity",
+  "provenance": "SYNTHETIC: hand-authored in the bridge's normalized AdapterSample form. Not recorded from the Presage SDK or a camera; contains no vendor field names. For tests/smoke only.",
+  "description": "Pulse and breathing validity differ, plus single-metric samples. Expect split readings with the other rate null.",
+  "events": [
+    {
+      "atMs": 0,
+      "type": "status",
+      "state": "measuring",
+      "message": null
+    },
+    {
+      "atMs": 1000,
+      "type": "sample",
+      "pulse": {
+        "value": 95,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17,
+        "status": "invalid"
+      }
+    },
+    {
+      "atMs": 2000,
+      "type": "sample",
+      "pulse": {
+        "value": 94.5,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.8,
+        "status": "unknown"
+      }
+    },
+    {
+      "atMs": 3000,
+      "type": "sample",
+      "pulse": {
+        "value": 94,
+        "status": "invalid"
+      },
+      "breathing": {
+        "value": 16.5,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 4000,
+      "type": "sample",
+      "pulse": {
+        "value": 93.6,
+        "status": "valid"
+      },
+      "breathing": null
+    },
+    {
+      "atMs": 5000,
+      "type": "sample",
+      "pulse": null,
+      "breathing": {
+        "value": 16.2,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 6000,
+      "type": "sample",
+      "pulse": null,
+      "breathing": null
+    },
+    {
+      "atMs": 7000,
+      "type": "sample",
+      "pulse": {
+        "value": 93,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16,
+        "status": "valid"
+      }
+    }
+  ]
+}
