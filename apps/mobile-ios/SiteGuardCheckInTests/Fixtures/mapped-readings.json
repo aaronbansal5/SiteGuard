@@ -1,0 +1,145 @@
+{
+  "description": "Shared mapping fixture. Inputs are SmartSpectra MeasurementWithConfidence samples (value, stable, timestamp in microseconds since the Unix epoch, per docs/data-types.md). expected is the SiteGuard VitalReading list. Checked by Swift (ReadingMapperTests) and by TypeScript against the contract schema and the Presage bridge normalizer (packages/contracts/src/mobile-ios-fixture.test.ts).",
+  "cases": [
+    {
+      "name": "both stable, same timestamp",
+      "pulse": {
+        "value": 92.5,
+        "stable": true,
+        "timestampMicros": 1791644401000000
+      },
+      "breathing": {
+        "value": 18.25,
+        "stable": true,
+        "timestampMicros": 1791644401000000
+      },
+      "expected": [
+        {
+          "timestamp": "2026-10-10T15:00:01.000Z",
+          "heartRateBpm": 92.5,
+          "respiratoryRateBrpm": 18.25,
+          "quality": "valid",
+          "source": "presage"
+        }
+      ]
+    },
+    {
+      "name": "validity differs: separate readings, other rate null",
+      "pulse": {
+        "value": 101,
+        "stable": true,
+        "timestampMicros": 1791644402000000
+      },
+      "breathing": {
+        "value": 22,
+        "stable": false,
+        "timestampMicros": 1791644402000000
+      },
+      "expected": [
+        {
+          "timestamp": "2026-10-10T15:00:02.000Z",
+          "heartRateBpm": 101,
+          "respiratoryRateBrpm": null,
+          "quality": "valid",
+          "source": "presage"
+        },
+        {
+          "timestamp": "2026-10-10T15:00:02.000Z",
+          "heartRateBpm": null,
+          "respiratoryRateBrpm": 22,
+          "quality": "invalid",
+          "source": "presage"
+        }
+      ]
+    },
+    {
+      "name": "plausible number but not stable stays invalid",
+      "pulse": {
+        "value": 75,
+        "stable": false,
+        "timestampMicros": 1791644403000000
+      },
+      "breathing": null,
+      "expected": [
+        {
+          "timestamp": "2026-10-10T15:00:03.000Z",
+          "heartRateBpm": 75,
+          "respiratoryRateBrpm": null,
+          "quality": "invalid",
+          "source": "presage"
+        }
+      ]
+    },
+    {
+      "name": "stable flag absent maps to unknown",
+      "pulse": null,
+      "breathing": {
+        "value": 16,
+        "stable": null,
+        "timestampMicros": 1791644404000000
+      },
+      "expected": [
+        {
+          "timestamp": "2026-10-10T15:00:04.000Z",
+          "heartRateBpm": null,
+          "respiratoryRateBrpm": 16,
+          "quality": "unknown",
+          "source": "presage"
+        }
+      ]
+    },
+    {
+      "name": "stable but no usable number is unknown, never valid",
+      "pulse": {
+        "value": 0,
+        "stable": true,
+        "timestampMicros": 1791644405000000
+      },
+      "breathing": null,
+      "expected": [
+        {
+          "timestamp": "2026-10-10T15:00:05.000Z",
+          "heartRateBpm": null,
+          "respiratoryRateBrpm": null,
+          "quality": "unknown",
+          "source": "presage"
+        }
+      ]
+    },
+    {
+      "name": "different timestamps: one reading per metric",
+      "pulse": {
+        "value": 88,
+        "stable": true,
+        "timestampMicros": 1791644406000000
+      },
+      "breathing": {
+        "value": 17,
+        "stable": true,
+        "timestampMicros": 1791644406500000
+      },
+      "expected": [
+        {
+          "timestamp": "2026-10-10T15:00:06.000Z",
+          "heartRateBpm": 88,
+          "respiratoryRateBrpm": null,
+          "quality": "valid",
+          "source": "presage"
+        },
+        {
+          "timestamp": "2026-10-10T15:00:06.500Z",
+          "heartRateBpm": null,
+          "respiratoryRateBrpm": 17,
+          "quality": "valid",
+          "source": "presage"
+        }
+      ]
+    },
+    {
+      "name": "no samples yet",
+      "pulse": null,
+      "breathing": null,
+      "expected": []
+    }
+  ]
+}

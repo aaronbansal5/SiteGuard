@@ -19,6 +19,7 @@ import {
 } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
 import { VitalChart } from "../components/VitalChart";
+import { PersonalInsightsPanel } from "../components/PersonalInsights";
 import { useIdentity } from "../App";
 export function SessionSummary() {
   const { id } = useParams(),
@@ -80,7 +81,11 @@ export function SessionSummary() {
               {s.shareWithSupervisor
                 ? "This session summary is shared with safety operations."
                 : "This session summary is private to your worker workspace."}{" "}
-              {s.context.workload || "Unrecorded"} workload ·{" "}
+              {s.context.workload
+                ? s.context.workload[0].toUpperCase() +
+                  s.context.workload.slice(1)
+                : "Unrecorded"}{" "}
+              workload ·{" "}
               {s.context.temperatureC === null
                 ? "Temperature not recorded"
                 : `${s.context.temperatureC}°C`}
@@ -145,6 +150,12 @@ export function SessionSummary() {
               ))}
             </div>
           </section>
+          {identity?.role === "worker" && identity.workerId === s.workerId && (
+            <PersonalInsightsPanel
+              sessionId={s.id}
+              completed={s.status === "completed"}
+            />
+          )}
           {identity?.role === "worker" && (
             <section className="card">
               <div className="card-header">

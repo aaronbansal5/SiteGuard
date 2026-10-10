@@ -8,6 +8,7 @@ The app runs as one same-origin Fastify service that also serves the built React
 
 - Node 24.7+; run from the repository root (SQL migrations and `apps/web/dist` are read from there). Migrations run automatically at API startup.
 - `HOST=0.0.0.0`, `PORT`, `HOSTED=true`, `DEMO_MODE=true`.
+- Behind a reverse proxy, set `CLIENT_IP_HEADER` to a header the proxy overwrites with the client address (`fly-client-ip` on Fly.io, already in `fly.toml`). Otherwise all clients share the proxy's address and one login/write quota. Never set it when clients can reach the app directly: they could then choose their own quota key.
 - Strong, independent `COOKIE_SECRET` (32+ chars) and `MEASUREMENT_TOKEN` (16+ chars). Hosted mode refuses to start without both.
 - TLS in front of the app: hosted cookies are `Secure` and the app sends HSTS.
 - SQLite needs a mounted persistent volume and **exactly one** API process (`SQLITE_PATH=/data/siteguard.sqlite`). Never run SQLite on ephemeral storage. Alternatively set `DATABASE_URL` for PostgreSQL/Tiger Data, still with one process (measurement sources and subscriptions live in-process; startup finalizes interrupted sessions). A database outage fails visibly; there is no fallback to another database.

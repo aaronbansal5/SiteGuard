@@ -12,6 +12,20 @@ import { registerRoutes } from "./routes.js";
 import { registerSafetyRoutes } from "./fall/routes.js";
 import { registerAuth } from "./auth-service.js";
 import { AppError } from "./errors.js";
+import { clientAddress, rateLimitKey } from "./client-ip.js";
+// Generic, fixed messages for framework-level client errors (never echo the
+// underlying parser/static-file error text).
+const clientErrors: Record<number, [string, string]> = {
+  400: ["VALIDATION", "Check the submitted request body"],
+  403: ["FORBIDDEN", "Request not allowed"],
+  404: ["NOT_FOUND", "Endpoint not found"],
+  405: ["METHOD_NOT_ALLOWED", "Method not allowed"],
+  413: ["PAYLOAD_TOO_LARGE", "Request body is too large"],
+  415: [
+    "UNSUPPORTED_MEDIA_TYPE",
+    "Send a JSON body with Content-Type: application/json",
+  ],
+};
 export async function createApp(
   overrides: Partial<Config> = {},
   logger = false,
@@ -50,7 +64,9 @@ export async function createApp(
           if (value.resetsAt <= now) writeRates.delete(key);
       }
       const login = req.url.split("?")[0] === "/api/demo/login";
-      const key = `${req.ip}:${login ? "login" : "write"}`;
+      // Behind a reverse proxy the socket address is the proxy's, so every
+      // client would share one quota unless CLIENT_IP_HEADER is configured.
+      const key = `${rateLimitKey(clientAddress(req, c.clientIpHeader))}:${login ? "login" : "write"}`;
       const old = writeRates.get(key);
       const rate =
         old && old.resetsAt > now ? old : { count: 0, resetsAt: now + 60000 };
@@ -109,30 +125,28 @@ export async function createApp(
       try {
         origin = new URL(req.headers.origin);
       } catch {
-        reply.code(403);
-        return {
+        // An async hook must send (and return the reply) to stop the request;
+        // merely returning a value lets the route handler run anyway.
+        return reply.code(403).send({
           error: {
             code: "ORIGIN_REJECTED",
             message: "Invalid origin",
             requestId: req.id,
           },
-        };
+        });
       }
       if (
         c.authMode === "oidc"
           ? origin.origin !== c.appOrigin
-          : origin.host !== req.headers.host ||
-            origin.protocol !== `${c.hosted ? "https" : req.protocol}:`
-      ) {
-        reply.code(403);
-        return {
+          : origin.host !== req.headers.host || origin.protocol !== `${c.hosted ? "https" : req.protocol}:`
+      )
+        return reply.code(403).send({
           error: {
             code: "ORIGIN_REJECTED",
             message: "Cross-origin writes are not allowed",
             requestId: req.id,
           },
-        };
-      }
+        });
     }
   });
   app.setErrorHandler((error, req, reply) => {
@@ -154,6 +168,27 @@ export async function createApp(
           message: error.message,
           requestId: req.id,
         },
+      });
+      return;
+    }
+    // Framework client errors (malformed/empty JSON, prototype poisoning,
+    // unsupported media type, oversized body) are the caller's fault: report
+    // them as 4xx with a generic message instead of a retryable dependency
+    // outage. Parser internals are never echoed.
+    const status = (error as { statusCode?: unknown }).statusCode;
+    if (
+      typeof status === "number" &&
+      Number.isInteger(status) &&
+      status >= 400 &&
+      status < 500
+    ) {
+      const [code, message] = clientErrors[status] ?? [
+        "BAD_REQUEST",
+        "The request could not be processed",
+      ];
+      req.log.info({ statusCode: status }, "Rejected client request");
+      reply.code(status).send({
+        error: { code, message, requestId: req.id },
       });
       return;
     }

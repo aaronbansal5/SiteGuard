@@ -12,6 +12,7 @@ import {
   SafetyNote,
 } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
+import { PersonalTrendCard } from "../components/PersonalInsights";
 export function HistoryPage() {
   const { identity } = useIdentity();
   if (identity?.role !== "worker") return <ChooseWorker />;
@@ -33,6 +34,7 @@ function HistoryTable({ workerId }: { workerId: string }) {
         description="Review observations over time. Every session keeps its source and context."
       />
       <ErrorNotice message={resource.error} />
+      <PersonalTrendCard workerId={workerId} />
       {resource.loading ? (
         <Loading />
       ) : (

@@ -16,10 +16,14 @@ import {
   ExplainSchema,
   EmptySchema,
   HistoryQuerySchema,
+  SelfReportInputSchema,
+  PersonalTrendQuerySchema,
+  SharingUpdateSchema,
   Id,
   type Session,
   type RestRequest,
   type Symptom,
+  type SupervisorView,
 } from "@siteguard/contracts";
 import type { Repository } from "./db/repository.js";
 import type { Config } from "./config.js";
@@ -33,7 +37,8 @@ import {
   validateAssignments,
 } from "./domain/scheduling.js";
 import { audit } from "./domain/requests.js";
-import { Explainer, sessionFacts } from "./insights/explain.js";
+import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
+import { personalInsights, personalTrend } from "./domain/personal.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
   app: FastifyInstance,
@@ -281,6 +286,69 @@ export async function registerRoutes(
     const s = await access(req, id(req));
     return { summary: await sessionSummary(r, s.id) };
   });
+  // Worker-only experimental personal insights (docs/RECOVERY_MODEL.md).
+  // worker() rejects supervisors outright, regardless of sharing consent.
+  const ownSession = async (req: FastifyRequest) => {
+    const workerId = worker(req),
+      s = await r.get("sessions", id(req));
+    if (!s) fail(404, "NOT_FOUND", "Session not found");
+    if (s.workerId !== workerId)
+      fail(403, "FORBIDDEN", "This session belongs to another worker");
+    return s;
+  };
+  app.get("/api/sessions/:id/personal-insights", async (req) => {
+    const s = await ownSession(req);
+    return { insights: await personalInsights(r, s.id) };
+  });
+  app.post("/api/sessions/:id/self-report", async (req) => {
+    const b = SelfReportInputSchema.parse(req.body);
+    const s = await ownSession(req);
+    if (s.status !== "completed")
+      fail(409, "SESSION_ACTIVE", "Complete the check-in before rating it");
+    if (b.tiredness === null) {
+      await r.deleteSelfReport(s.id);
+      return { selfReport: null };
+    }
+    const selfReport = {
+      sessionId: s.id,
+      workerId: s.workerId,
+      tiredness: b.tiredness,
+      origin: "worker" as const,
+      createdAt: new Date().toISOString(),
+    };
+    await r.putSelfReport(selfReport);
+    return { selfReport };
+  });
+  // Withdraw sharing consent for one session. Owning worker only; idempotent.
+  // Requests, symptom reports and their staffing blocks are untouched: only
+  // supervisor access to this session's observations ends.
+  app.patch("/api/sessions/:id/sharing", async (req) => {
+    SharingUpdateSchema.parse(req.body);
+    const owned = await ownSession(req);
+    const session = await r.transaction(async (tx) => {
+      const current = (await tx.get("sessions", owned.id))!;
+      if (!current.shareWithSupervisor) return current;
+      const updated = { ...current, shareWithSupervisor: false };
+      await tx.put("sessions", updated);
+      await audit(
+        tx,
+        "session_sharing_withdrawn",
+        current.id,
+        { shareWithSupervisor: true },
+        { shareWithSupervisor: false },
+        "worker",
+      );
+      return updated;
+    });
+    return { session };
+  });
+  app.get("/api/workers/:id/personal-trend", async (req) => {
+    const workerId = worker(req);
+    if (workerId !== id(req))
+      fail(403, "FORBIDDEN", "Personal insights are private");
+    const q = PersonalTrendQuerySchema.parse(req.query);
+    return { trend: await personalTrend(r, workerId, q.source) };
+  });
   app.get("/api/sessions/:id/events", async (req, reply) => {
     const s = await access(req, id(req));
     const last = Number(req.headers["last-event-id"] ?? -1);
@@ -351,6 +419,7 @@ export async function registerRoutes(
       else send(e);
     });
     const heartbeat = setInterval(async () => {
+      if (reply.raw.writableEnded) return;
       try {
         if (!(await sessionStillValid(r, c, req)))
           fail(401, "UNAUTHENTICATED", "Session expired");
@@ -363,6 +432,23 @@ export async function registerRoutes(
         });
         reply.raw.end();
         return;
+      }
+      if (actor.role === "supervisor") {
+        // A worker can withdraw sharing while a supervisor is watching; end
+        // the supervisor's stream at the next heartbeat when that happens.
+        void r.get("sessions", s.id).then(
+          (current) => {
+            if (current?.shareWithSupervisor || reply.raw.writableEnded) return;
+            write({
+              type: "error",
+              code: "SHARING_WITHDRAWN",
+              message: "The worker stopped sharing this session.",
+              retryable: false,
+            });
+            reply.raw.end();
+          },
+          () => {},
+        );
       }
       if (!reply.raw.destroyed) reply.raw.write(": heartbeat\n\n");
     }, 5000);
@@ -617,6 +703,24 @@ export async function registerRoutes(
           "REST_MINIMUM",
           "Approved rest duration cannot shrink or move into the past",
         );
+      // Same invariant as approval: additional rest stays separate from the
+      // worker's protected break, including after it is moved.
+      const start = Date.parse(b.startsAt),
+        end = Date.parse(b.endsAt);
+      if (
+        (await tx.list("breaks")).some(
+          (x) =>
+            x.workerId === br.workerId &&
+            x.kind === "protected" &&
+            start < Date.parse(x.endsAt) &&
+            end > Date.parse(x.startsAt),
+        )
+      )
+        fail(
+          409,
+          "REST_OVERLAPS_PROTECTED",
+          "Additional rest must be separate from the worker's protected break",
+        );
       const before = { ...br };
       br.startsAt = b.startsAt;
       br.endsAt = b.endsAt;
@@ -637,21 +741,63 @@ export async function registerRoutes(
       return { break: br, scheduleRevision: await tx.bump() };
     });
   });
+  // One source for the supervisor overview and the worker's mirror of it, so
+  // the mirror cannot drift from what supervisors actually receive.
+  const supervisorOverview = async () => {
+    const schedule = await r.transaction((tx) => tx.schedule());
+    const sessions = await r.list("sessions");
+    return {
+      overview: {
+        ...schedule,
+        symptomReports: await r.list("symptom_reports"),
+        sharedSessionIds: sessions
+          .filter(
+            (s) =>
+              s.shareWithSupervisor &&
+              schedule.requests.some((request) => request.sessionId === s.id),
+          )
+          .map((s) => s.id),
+        coverageGaps: coverageGaps(schedule),
+      },
+      sessions,
+    };
+  };
   app.get("/api/supervisor/overview", async (req) => {
     supervisor(req);
-    const schedule = await r.transaction((tx) => tx.schedule());
-    return {
-      ...schedule,
-      symptomReports: await r.list("symptom_reports"),
-      sharedSessionIds: (await r.list("sessions"))
-        .filter(
-          (s) =>
-            s.shareWithSupervisor &&
-            schedule.requests.some((request) => request.sessionId === s.id),
-        )
-        .map((s) => s.id),
-      coverageGaps: coverageGaps(schedule),
+    return (await supervisorOverview()).overview;
+  });
+  // Worker-only mirror: the records about this worker that safety operations
+  // can read right now. Supervisors get 403; it is the worker's own view.
+  app.get("/api/workers/:id/supervisor-view", async (req) => {
+    const workerId = worker(req);
+    if (workerId !== id(req))
+      fail(403, "FORBIDDEN", "This view belongs to another worker");
+    const { overview: o, sessions } = await supervisorOverview();
+    const assignments = o.assignments.filter((x) => x.workerId === workerId);
+    const view: SupervisorView = {
+      workerId,
+      generatedAt: new Date().toISOString(),
+      breaks: o.breaks.filter((x) => x.workerId === workerId),
+      assignments,
+      tasks: o.tasks.filter((t) => assignments.some((x) => x.taskId === t.id)),
+      availability: o.availability.filter((x) => x.workerId === workerId),
+      requests: o.requests.filter((x) => x.workerId === workerId),
+      symptomReports: o.symptomReports.filter((x) => x.workerId === workerId),
+      // Supervisors can open any shared session's summary directly (access()),
+      // not only the ones the overview links, so list every shared session.
+      sharedSessions: sessions
+        .filter((s) => s.workerId === workerId && s.shareWithSupervisor)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+        .map((s) => ({
+          id: s.id,
+          source: s.source,
+          status: s.status,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          linkedToRequest: o.sharedSessionIds.includes(s.id),
+        })),
     };
+    return { view };
   });
   app.post("/api/schedule/preview", async (req) => {
     supervisor(req);
@@ -707,14 +853,11 @@ export async function registerRoutes(
       protectedBreakCount: number;
     };
     return explainer.explain(
-      {
-        coverage: [
-          `The committed proposal contains ${after.assignments.length} assignment intervals and ${after.gapCount} coverage gaps.`,
-        ],
-        breaks: [
-          `${after.protectedBreakCount} protected breaks were preserved.`,
-        ],
-      },
+      scheduleFacts({
+        assignmentCount: after.assignments.length,
+        gapCount: after.gapCount,
+        protectedBreakCount: after.protectedBreakCount,
+      }),
       [
         "Staffing changes are operational decisions; measurements do not establish fitness for work.",
       ],

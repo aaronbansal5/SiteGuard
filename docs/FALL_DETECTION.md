@@ -1,6 +1,8 @@
 # Possible-person-down feature proposal
 
-Status: researched proposal; no detector, ingestion endpoint, or incident UI has been implemented in SiteGuard. Keep sponsor integration work separate.
+Status: a standalone, loopback-only detector prototype exists in `integrations/fall-detection` (see its README and INTEGRATION.md). No ingestion endpoint, contract, migration, or incident UI has been implemented in the SiteGuard app. Keep sponsor integration work separate.
+
+The prototype's camera never starts at launch: the local dashboard shows a monitoring notice and starts capture only after explicit consent (`POST /api/camera/start` with `{"consent": true}`), shows a persistent **Camera active** bar while running, and stops on demand. Closed incidents and their events/actions are pruned after a configurable retention window (default 30 days); free-text notes may contain names and are retained until then.
 
 ## Reference implementation findings
 
@@ -26,7 +28,9 @@ For the first demo, emit an explicitly synthetic incident without camera access,
 
 ## Boundaries and interface
 
-The detector is an independently owned Python project, outside the npm workspace, with its own environment and dependency lock. It owns capture and inference; the Fastify API owns incident persistence and supervisor actions. Default capture is local processing with no stored or uploaded images/video. Do not reuse the reference recording hotkey or screenshot uploads. Show a consent/monitoring notice before enabling a real camera.
+The detector is an independently owned Python project, outside the npm workspace, with its own environment and dependency lock. It owns capture and inference; the Fastify API owns incident persistence and supervisor actions. Default capture is local processing with no stored or uploaded images/video. Do not reuse the reference recording hotkey or screenshot uploads. Show a consent/monitoring notice before enabling a real camera; the prototype gates capture behind an explicit dashboard confirmation and keeps a visible camera-active indicator.
+
+Licensing: the optional camera path depends on Ultralytics YOLOv8 code and weights, licensed **AGPL-3.0** (or a paid Ultralytics Enterprise License). Distributing the detector, or running a modified version that others use over a network, triggers AGPL source-availability obligations for the combined work. Get legal review or an enterprise license before shipping it beyond local demos or bundling it with SiteGuard.
 
 Do not have the detector and Presage bridge contend for the same webcam. Use distinct cameras or explicitly stop one before starting the other. A hosted app receives events only through an explicitly configured authenticated connection; it must not discover or connect to local cameras automatically.
 
@@ -46,7 +50,7 @@ Proposed internal event, to be finalized in shared Zod contracts:
   "source": "synthetic",
   "method": "bbox-aspect-v1",
   "durationSeconds": 1.5,
-  "evidence": { "heightWidthRatio": 0.6 }
+  "evidence": { "heightWidthRatio": 0.6, "region": [0.25, 0.42, 0.47, 0.56] }
 }
 ```
 
@@ -59,6 +63,8 @@ A bounded local delivery spool with retries preserves events during API outages;
 ## Detector development
 
 First build a testable state machine fed bounding boxes, confidence and monotonic timestamps, with capture/inference outside it. Require valid boxes and continuity; missing frames must not count toward observed horizontal duration. Separate candidate timing, emitted incident identity, and cooldown state. Reject backward timestamps. Keep detector state changes distinct from human incident resolution.
+
+The prototype adds filters to the reference heuristic: boxes touching the frame edge (2% margin) or outside 0.2–35% of the frame area are ignored; a horizontal phase only counts if the same track was upright (height/width ≥ 1.2) within the preceding 5 seconds; horizontal must then persist 1.5 seconds; and repeats are suppressed when their normalized region overlaps an unresolved incident or a recent (60-second) alert region. On the ultralytics `zidane.jpg` close-up, which previously alerted, these rules produce no incident. They also miss people whose track ID changes mid-transition or who lie at the frame edge.
 
 The reference heuristic can demonstrate event plumbing. Bending, crawling, lying down intentionally, occlusion and camera angle can create misleading boxes. A later pose-based experiment may combine upright-to-horizontal transition, torso orientation, relative vertical movement and sustained posture. Treat those as candidate signals requiring testing, not accuracy improvements already established. Camera configuration and any thresholds must be versioned and documented.
 

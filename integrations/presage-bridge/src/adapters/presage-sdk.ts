@@ -33,13 +33,86 @@ import type {
  *      missing          -> "unknown"
  *    The numeric value never changes the status.
  *  - 'validationStatus' (code, tsUs, hint): ValidationCode.kOk (0) means the
- *    input is good -> "measuring"; any other code -> "positioning" + hint.
+ *    input is good -> "measuring"; any other code -> "positioning" with a
+ *    fixed SiteGuard guidance message per ValidationCode (VALIDATION_GUIDANCE).
+ *    The vendor hint text is never forwarded (debug log only). The first
+ *    "measuring" status carries a one-time warm-up message.
  *  - 'error' (code, message, retryable): passed through with the vendor's
  *    retryable flag; code is reported by its SmartSpectraErrorCode name.
  */
 
 const SDK_PACKAGE = "@smartspectra/node-sdk";
 const START_TIMEOUT_MS = 45_000;
+
+/**
+ * ValidationCode names/values as shipped in @smartspectra/node-sdk 3.4.0
+ * (js/index.d.ts). Used only when the loaded module does not expose a name
+ * for a code.
+ */
+export const PINNED_VALIDATION_CODES = {
+  kOk: 0,
+  kNoFaceFound: 1,
+  kMultipleFacesFound: 2,
+  kFaceNotCentered: 3,
+  kFaceSizeOutOfRange: 4,
+  kTooDark: 5,
+  kTooBright: 6,
+  kChestNotVisible: 7,
+  kCameraTuning: 10,
+  kFrameRateTooLow: 11,
+  kExcessiveMotion: 12,
+  kFaceTooClose: 13,
+  kFaceTooFar: 14,
+  kFaceTooHigh: 15,
+  kFaceTooLow: 16,
+  kFaceNotForward: 17,
+} as const;
+
+type PositioningCode = Exclude<keyof typeof PINNED_VALIDATION_CODES, "kOk">;
+
+/**
+ * Fixed, SiteGuard-owned positioning guidance per vendor ValidationCode.
+ * Short, non-clinical camera/posture instructions only.
+ */
+export const VALIDATION_GUIDANCE: Record<PositioningCode, string> = {
+  kNoFaceFound: "Sit facing the camera so your face is visible",
+  kMultipleFacesFound: "Only one person should be in view",
+  kFaceNotCentered: "Adjust position so your face is centered",
+  kFaceSizeOutOfRange: "Adjust your distance from the camera",
+  kTooDark: "Move somewhere brighter",
+  kTooBright: "Avoid bright light behind you",
+  kChestNotVisible: "Sit back so your upper chest is visible",
+  kCameraTuning: "Camera is adjusting, one moment",
+  kFrameRateTooLow: "Add light or close other apps",
+  kExcessiveMotion: "Hold still for a moment",
+  kFaceTooClose: "Move back from the camera",
+  kFaceTooFar: "Move closer to the camera",
+  kFaceTooHigh: "Move down a little",
+  kFaceTooLow: "Move up a little",
+  kFaceNotForward: "Face the camera directly",
+};
+
+/** Guidance for a code with no entry above (new or unknown vendor code). */
+export const GENERIC_GUIDANCE = "Adjust position so your face is centered";
+
+/** Sent once per capture, the first time the input becomes good. */
+export const WARM_UP_MESSAGE =
+  "Measuring — readings become reliable after about 30–45 seconds";
+
+/** Maps a vendor ValidationCode value to SiteGuard guidance text. */
+export function guidanceFor(
+  code: number,
+  names: Readonly<Record<string, number>> = PINNED_VALIDATION_CODES,
+): string {
+  const name =
+    Object.entries(names).find(([, v]) => v === code)?.[0] ??
+    Object.entries(PINNED_VALIDATION_CODES).find(([, v]) => v === code)?.[0];
+  return (
+    (name && Object.hasOwn(VALIDATION_GUIDANCE, name)
+      ? VALIDATION_GUIDANCE[name as PositioningCode]
+      : undefined) ?? GENERIC_GUIDANCE
+  );
+}
 
 /** Minimal structural view of the vendor module that this adapter uses. */
 export interface SmartSpectraModule {
@@ -54,7 +127,7 @@ export interface SmartSpectraModule {
   };
   MetricType: { PULSE_RATE: number; BREATHING_RATE: number };
   ProcessingStatus: { kRunning: number; kError: number };
-  ValidationCode: { kOk: number };
+  ValidationCode: { kOk: number } & Readonly<Record<string, number>>;
   SmartSpectraErrorCode: Record<string, number>;
   CameraSelection: { default: unknown };
   decodeMetrics(buf: Buffer): unknown;
@@ -167,6 +240,7 @@ export class PresageSdkAdapter implements SdkAdapter {
       throw new SdkNotVerifiedError("SMARTSPECTRA_API_KEY is not set");
     if (this.open_) throw new Error("Camera already in use by this bridge");
     const m = await this.module();
+    const debug = this.env.PRESAGE_DEBUG === "1";
     const errorName = (code: number) =>
       Object.entries(m.SmartSpectraErrorCode).find(
         ([, v]) => v === code,
@@ -180,7 +254,6 @@ export class PresageSdkAdapter implements SdkAdapter {
     this.open_ = true;
     let lastKey = 0;
     let lastStatus = "";
-    const debug = this.env.PRESAGE_DEBUG === "1";
     let closed = false;
 
     // Started = first of: processingStatus kRunning, first validation feedback,
@@ -203,17 +276,25 @@ export class PresageSdkAdapter implements SdkAdapter {
       else if (status === m.ProcessingStatus.kError)
         settle(new Error("SmartSpectra entered error state while starting"));
     }) as never);
+    let warmUpAnnounced = false;
     sdk.on("validationStatus", ((code: number, _ts: number, hint: string) => {
       settle(); // the pipeline is running once it reports input feedback
+      if (debug)
+        console.error(`[presage-sdk] validation code=${code} hint=${hint}`);
       // The SDK reports validation on every frame; forward only changes.
-      const next =
-        code === m.ValidationCode.kOk
-          ? "measuring|"
-          : `positioning|${hint || ""}`;
+      // Vendor hint text is not forwarded: guidance is SiteGuard-owned.
+      const measuring = code === m.ValidationCode.kOk;
+      const message = measuring ? null : guidanceFor(code, m.ValidationCode);
+      const next = measuring ? "measuring|" : `positioning|${message}`;
       if (next === lastStatus) return;
       lastStatus = next;
-      if (code === m.ValidationCode.kOk) handlers.onStatus("measuring", null);
-      else handlers.onStatus("positioning", hint || null);
+      if (measuring) {
+        handlers.onStatus(
+          "measuring",
+          warmUpAnnounced ? null : WARM_UP_MESSAGE,
+        );
+        warmUpAnnounced = true;
+      } else handlers.onStatus("positioning", message);
     }) as never);
     sdk.on("error", ((code: number, message: string, retryable: boolean) => {
       settle(new Error(`${errorName(code)}: ${message}`));

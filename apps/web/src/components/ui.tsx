@@ -115,6 +115,12 @@ export function Modal({
     </div>
   );
 }
+export const SYMPTOM_LABELS: Record<string, string> = {
+  dizzy: "Feeling dizzy",
+  nauseated: "Feeling nauseated",
+  headache: "Headache",
+  other: "Other",
+};
 export function HelpActions({
   sessionId = null,
   onSent,
@@ -232,10 +238,11 @@ export function HelpActions({
                     value={symptom}
                     onChange={(e) => setSymptom(e.target.value)}
                   >
-                    <option value="dizzy">Feeling dizzy</option>
-                    <option value="nauseated">Feeling nauseated</option>
-                    <option value="headache">Headache</option>
-                    <option value="other">Other</option>
+                    {Object.entries(SYMPTOM_LABELS).map(([code, label]) => (
+                      <option key={code} value={code}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label>

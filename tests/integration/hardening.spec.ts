@@ -18,10 +18,10 @@ test("stale coverage proposal cannot overwrite a newer worker need", async ({
   ).toBeVisible();
   const worker = await browser.newContext();
   try {
-    await worker.request.post("http://127.0.0.1:5173/api/demo/login", {
+    await worker.request.post("/api/demo/login", {
       data: { role: "worker", workerId: fixtureId(1) },
     });
-    await worker.request.post("http://127.0.0.1:5173/api/rest-requests", {
+    await worker.request.post("/api/rest-requests", {
       data: { sessionId: null, kind: "assistance", requestedMinutes: null },
     });
     await expect(

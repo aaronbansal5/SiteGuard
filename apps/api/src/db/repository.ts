@@ -13,8 +13,9 @@ import type {
   Audit,
   ReadingEnvelope,
   Schedule,
+  SelfReport,
 } from "@siteguard/contracts";
-import { IngestSchema } from "@siteguard/contracts";
+import { IngestSchema, SelfReportSchema } from "@siteguard/contracts";
 import type { Config } from "../config.js";
 import { sqliteDriver } from "./sqlite.js";
 import { postgresDriver } from "./postgres.js";
@@ -56,12 +57,7 @@ export class Repository {
     await this.driver.exec(
       "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
     );
-    for (const version of [
-      "001_initial",
-      "003_auth",
-      "004_safety",
-      "005_mobile",
-    ]) {
+    for (const version of ["001_initial", "003_self_reports", "003_auth", "004_safety", "005_mobile"]) {
       await this.transaction(async (r) => {
         const applied = await r.driver.query(
           "SELECT version FROM schema_migrations WHERE version=$1",
@@ -82,6 +78,27 @@ export class Repository {
         );
       });
     }
+  }
+  /** Worker-only voluntary self-reports, keyed by session. */
+  async selfReports(workerId: string): Promise<SelfReport[]> {
+    return (
+      await this.driver.query(
+        "SELECT payload FROM self_reports WHERE worker_id=$1",
+        [workerId],
+      )
+    ).map((r) => SelfReportSchema.parse(JSON.parse(r.payload as string)));
+  }
+  async putSelfReport(report: SelfReport) {
+    const value = SelfReportSchema.parse(report);
+    await this.driver.query(
+      "INSERT INTO self_reports (session_id,worker_id,payload) VALUES ($1,$2,$3) ON CONFLICT (session_id) DO UPDATE SET worker_id=excluded.worker_id,payload=excluded.payload",
+      [value.sessionId, value.workerId, JSON.stringify(value)],
+    );
+  }
+  async deleteSelfReport(sessionId: string) {
+    await this.driver.query("DELETE FROM self_reports WHERE session_id=$1", [
+      sessionId,
+    ]);
   }
 
   async list<K extends keyof Entities>(table: K): Promise<Entities[K][]> {

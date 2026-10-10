@@ -3,13 +3,17 @@
 Loopback-only HTTP/SSE bridge implementing `docs/PRESAGE_CONTRACT.md` v1. The
 application consumer is `apps/api/src/measurement/presage.ts`.
 
-**Status: the real Presage SmartSpectra SDK is NOT wired in and NOT verified.**
-The bridge server, contract behavior, fixtures, tests, and smoke command are
-done. The production entry point (`npm start`) uses `PresageSdkAdapter`, which
-reports `status: "unavailable"` and refuses to start sessions until someone
-with SDK access, credentials, and a camera finishes it (see "What remains").
-No SDK success is claimed or simulated outside the explicitly labelled fixture
-adapter.
+**Status: the real Presage SmartSpectra adapter is implemented (SDK 3.4.0) and
+partially verified on hardware.** `npm start` uses `PresageSdkAdapter`, built
+on `@smartspectra/node-sdk` 3.4.0 (see "Real SDK adapter"). It is unit-tested
+against a fake module with the vendor's shapes. Hardware smoke runs on the demo
+Mac have confirmed that the camera and pipeline start, that validation-status
+events arrive, and that readings reach the bridge (these runs drove the start
+and status-flood fixes). Not yet observed end to end: a full app check-in with
+real readings producing an `available` summary, and the vendor warm-up timing
+(see "What remains"). Without `SMARTSPECTRA_API_KEY`, a loadable SDK and a
+camera, the bridge reports `status: "unavailable"` and refuses sessions. No SDK
+success is claimed or simulated outside the explicitly labelled fixture adapter.
 
 ## Layout
 
@@ -17,7 +21,7 @@ adapter.
 | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `src/server.ts`               | `PresageBridge`: routes, auth, session lifecycle, SSE, heartbeat, replay                             |
 | `src/adapter.ts`              | **Vendor boundary**: `SdkAdapter`, `AdapterSample`, `Clock`. SiteGuard-owned types, not Presage APIs |
-| `src/adapters/presage-sdk.ts` | `PresageSdkAdapter` stub. Throws `SdkNotVerifiedError`; TODOs list every field it must fill          |
+| `src/adapters/presage-sdk.ts` | `PresageSdkAdapter`: real SmartSpectra 3.4.0 adapter (metrics, validity, status guidance, errors)    |
 | `src/adapters/fixture.ts`     | `FixtureAdapter`: replays `fixtures/*.json`. Tests and smoke only; the CLI never uses it             |
 | `src/normalize.ts`            | Sample to contract `VitalReading`(s): validity mapping, metric splitting, monotonic-to-UTC           |
 | `src/event-log.ts`            | Per-session numeric event IDs and the 120 s replay window                                            |
@@ -118,9 +122,10 @@ the bridge's monotonic clock (`AdapterSample.monotonicMs`). The bridge then
 computes `timestamp = anchorWall + (monotonicMs − anchorMono)`, written as an
 ISO 8601 UTC string. This keeps readings monotonic even if the wall clock
 jumps mid-session. Samples timed before the anchor are dropped and an
-`error SAMPLE_TIME_INVALID` (retryable) is emitted. **The SDK's own timestamp
-semantics and how to convert them to `monotonicMs` are UNVERIFIED** (TODO in
-`presage-sdk.ts`).
+`error SAMPLE_TIME_INVALID` (retryable) is emitted. The real adapter converts
+the vendor's epoch-microsecond sample timestamps to `monotonicMs` (see "Real
+SDK adapter"); this conversion follows the vendor docs and has not yet been
+checked against a full hardware session.
 
 ## Fixtures
 
@@ -151,7 +156,7 @@ for a real check-in. `npm start` cannot select it.
 - **Requested metrics:** only `MetricType.PULSE_RATE` and `MetricType.BREATHING_RATE`.
 - **Validity:** taken only from the vendor's `stable` flag on each `MeasurementWithConfidence` (vendor docs: `stable` means confidence ≥ 40 for pulse and ≥ 45 for breathing). `true` → `valid`, `false` → `invalid`, missing → `unknown`. Numbers never change the status.
 - **Timing:** vendor `timestamp` is microseconds since the Unix epoch. It is converted to the bridge monotonic clock once per sample, then to UTC through the session anchor. Packets with no new timestamp are ignored.
-- **Status:** `validationStatus` `kOk` → `measuring`; any other code → `positioning` with the vendor's hint text.
+- **Status:** `validationStatus` `kOk` → `measuring`; any other code → `positioning` with a fixed SiteGuard guidance message per `ValidationCode` (`VALIDATION_GUIDANCE` in `src/adapters/presage-sdk.ts`; unknown codes → "Adjust position so your face is centered"). The vendor hint text is not forwarded (it is logged only with `PRESAGE_DEBUG=1`). The first `measuring` status of a capture carries the one-time message "Measuring — readings become reliable after about 30–45 seconds".
 - **Errors:** vendor `error` events are forwarded as `SmartSpectraErrorCode` names (for example `kAuthenticationFailed`, `kInputUnavailable`) with the vendor's `retryable` flag. A start-time error rejects `open()` and releases the SDK.
 - **Privacy and network use** (vendor docs, [SDK Telemetry & Privacy](https://smartspectra.presagetech.com/docs/telemetry-and-privacy)):
   - All metric computation runs on-device. The SDK contacts Presage to validate the API key/subscription.
@@ -160,8 +165,22 @@ for a real check-in. `npm start` cannot select it.
   - Neither the bridge nor SiteGuard stores frames or footage. If SiteGuard were distributed with telemetry enabled, that collection would need to be disclosed to users per Presage's privacy policy.
 - **Tests:** `test/presage-sdk-adapter.test.ts` exercises the adapter against a fake module with the same names and shapes as the 3.4.0 type declarations.
 
+## Debug: `npm run inspect:metrics` (opt-in, needs the real SDK)
+
+Runs the real SDK on a video file (`--file clip.mp4`, via `useFile`) or the
+default camera (`--camera`) and prints **which** metric fields each packet
+populates, with sample counts, `stable` counts and the latest `confidence`,
+plus a summary of when each field first appeared and first became stable. It
+never prints or writes metric values, frames or footage, and it runs with
+telemetry off. It needs `SMARTSPECTRA_API_KEY` and network access, and every
+run uses subscription quota. `--strict` requests only the Strict codes,
+because SDK 3.4.0 rejects sessions that mix strict and standard metrics. Other
+flags: `--all`, `--max-seconds N`, `--interframe-ms N`, `--verbose`. The
+bridge server never uses it. See `docs/PRESAGE_OPPORTUNITIES.md` §6. It has
+not been run against a real session (no key in CI or dev sandboxes).
+
 ## What remains (needs the demo laptop, camera and API key)
 
-1. **Observed camera session:** on the demo Mac, with `SMARTSPECTRA_API_KEY` and `PRESAGE_BRIDGE_TOKEN` set, run `npm run smoke:hardware`, then a check-in in the app with Presage selected. Record start/stop/reconnect results here.
+1. **Full observed check-in:** start-up, status events and readings have been seen in hardware smoke runs. Still to record: on the demo Mac, with `SMARTSPECTRA_API_KEY` and `PRESAGE_BRIDGE_TOKEN` set, run `npm run smoke:hardware`, then a 90 s check-in in the app with Presage selected; confirm the summary is `available` and record start/stop/reconnect results and first-valid times (`npm run inspect:metrics`) here.
 2. **Camera permission:** the first run triggers the macOS camera prompt for the terminal app running the bridge.
 3. **Vendor terms:** confirm subscription/credit limits for the hackathon key (`kCreditExhausted` is surfaced as an error).

@@ -2,10 +2,22 @@ node_modules
 **/node_modules
 **/dist
 .git
+# Secrets and local state at any depth (Docker patterns are root-anchored, so
+# a bare ".env" would not exclude apps/web/.env or apps/api/.env).
 .env
 .env.*
+**/.env
+**/.env.*
 .data
+**/.data
 **/*.sqlite*
+**/*.pem
+**/*.key
+.npmrc
+**/.npmrc
+.claude/settings.local.json
 test-results
 playwright-report
 integrations/presage-bridge
+# Standalone Python detector; not part of the app image
+integrations/fall-detection

@@ -1,3 +1,5 @@
+# Exact versions previously recorded for CPython 3.9 (numpy 2.0.2/scipy 1.13.1 are the last 3.9 lines).
+# Wheel-only resolution fails on Python 3.13 (numpy 2.0.2 has no cp313 wheels); use requirements-camera.py313.lock.txt there.
 certifi==2026.7.22
 charset-normalizer==3.5.2
 contourpy==1.3.0

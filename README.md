@@ -48,6 +48,11 @@ Copy `.env.example` to `.env` and configure only the required adapters. Secrets 
 - Gemini: `GEMINI_API_KEY` and an account-verified `GEMINI_MODEL`. Selects server-approved factual sentences, with deterministic fallback. No schedule/medical decisions.
 - Presage: separately supplied native bridge plus `PRESAGE_BRIDGE_TOKEN`. Local app only. Source remains fixed within each session.
 
+## Phones
+
+- Phone web layout: open `/mobile` for reminder-driven voluntary check-ins (60-second demo interval, consent every time, synthetic readings because browsers cannot run the Presage SDK). To try it from a phone on a trusted Wi-Fi network: `HOST=0.0.0.0 npm run dev`, then `http://<laptop-ip>:5173/mobile`.
+- Native iOS scaffold using the SmartSpectra Swift SDK: `apps/mobile-ios` (unbuilt here; no upload yet). Design and proposed phone ingestion contract: [docs/MOBILE_APP.md](docs/MOBILE_APP.md).
+
 Real Presage hardware, live Gemini, Tiger Data, and hosted deployment require separate verification; fixture tests are not sponsor-integration evidence.
 
 ## Handoff documents

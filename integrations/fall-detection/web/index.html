@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>SiteGuard · Scene review</title>
     <style>
+      /* Rules below set display (e.g. .camera-banner is flex), which would
+         otherwise override the hidden attribute and show the red camera
+         banner in synthetic mode. */
+      [hidden] {
+        display: none !important;
+      }
       :root {
         font-family:
           Inter,
@@ -289,6 +295,37 @@
         margin: 8px 0 0;
         font-size: 13px;
       }
+      .camera-banner {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 32px;
+        background: #6b1f2a;
+        color: #fff1f2;
+        font-weight: 700;
+        border-bottom: 2px solid #ff8f9c;
+      }
+      .camera-banner .dot {
+        background: #ff8f9c;
+      }
+      .camera-banner button {
+        padding: 7px 12px;
+        background: #fff1f2;
+        color: #4a1119;
+        border-color: #fff1f2;
+      }
+      .consent label {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-size: 13px;
+        line-height: 1.5;
+        margin-bottom: 14px;
+      }
       @media (max-width: 900px) {
         main {
           grid-template-columns: 1fr;
@@ -311,6 +348,13 @@
     </style>
   </head>
   <body>
+    <div class="camera-banner" id="camera-banner" role="status" hidden>
+      <span
+        ><span class="dot" aria-hidden="true"></span>Camera active · local
+        person detection running · frames not stored</span
+      >
+      <button type="button" id="camera-stop">Stop camera</button>
+    </div>
     <div class="shell">
       <header>
         <div class="brand">
@@ -350,12 +394,29 @@
               id="scene"
               width="960"
               height="600"
-              aria-label="Anonymous person bounding boxes; no camera video displayed"
+              aria-label="Anonymous person bounding-box overlay"
             ></canvas>
             <p class="caption" id="description">
               Synthetic mode has no camera. Camera mode offers a local preview
               without recording.
             </p>
+          </div>
+          <div class="controls consent" id="consent" hidden>
+            <h3>Camera is off</h3>
+            <p>
+              Starting the camera runs person detection on this laptop. The live
+              preview is shown only on this loopback dashboard; frames are not
+              stored or uploaded. Tell everyone in view before starting, and
+              stop the camera if anyone objects.
+            </p>
+            <label
+              ><input type="checkbox" id="consent-check" /><span
+                id="consent-text"
+              ></span
+            ></label>
+            <button type="button" class="primary" id="camera-start" disabled>
+              Start camera
+            </button>
           </div>
           <div class="controls" id="controls">
             <h3>Synthetic scenario controls</h3>
@@ -477,7 +538,7 @@
         }
         ctx.fillStyle = "#8fa3bb";
         ctx.font = "16px system-ui";
-        ctx.fillText("BOUNDING-BOX OBSERVATIONS · NO VIDEO", 24, 35);
+        ctx.fillText("BOUNDING-BOX OVERLAY · ANONYMOUS TRACKS", 24, 35);
         for (const track of state.tracks || []) {
           const [x1, y1, x2, y2] = track.bbox;
           const x = (x1 / w) * 960,
@@ -519,9 +580,17 @@
         $("description").textContent =
           state.source === "synthetic"
             ? "Synthetic bounding boxes only. No camera access is required."
-            : "Camera preview stays on this laptop over loopback. Frames are not stored.";
+            : state.cameraActive
+              ? "Live preview stays on this laptop over loopback. Frames are not stored."
+              : "Camera is off. No preview or detection until you start it.";
+        $("camera-banner").hidden = !state.cameraActive;
+        $("consent").hidden =
+          state.source === "synthetic" || state.cameraActive;
+        $("consent-text").textContent = state.consentText || "";
         $("preview").hidden =
-          state.source === "synthetic" || state.status !== "running";
+          state.source === "synthetic" ||
+          !state.cameraActive ||
+          state.status !== "running";
         if (!$("preview").hidden)
           $("preview").src = "/api/preview?t=" + Date.now();
         draw(state);
@@ -666,6 +735,32 @@
             button.disabled = false;
           }
         }),
+      );
+      $("consent-check").addEventListener("change", () => {
+        $("camera-start").disabled = !$("consent-check").checked;
+      });
+      async function cameraAction(path, body, button) {
+        if (busy) return;
+        busy = true;
+        button.disabled = true;
+        try {
+          render(await request(path, body));
+          showError("");
+        } catch (e) {
+          showError(e.message);
+        } finally {
+          busy = false;
+          button.disabled =
+            button.id === "camera-start" && !$("consent-check").checked;
+        }
+      }
+      $("camera-start").addEventListener("click", () => {
+        if (!$("consent-check").checked) return;
+        cameraAction("/api/camera/start", { consent: true }, $("camera-start"));
+        $("consent-check").checked = false;
+      });
+      $("camera-stop").addEventListener("click", () =>
+        cameraAction("/api/camera/stop", {}, $("camera-stop")),
       );
       (async function loop() {
         await poll();

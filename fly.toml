@@ -18,6 +18,10 @@ kill_timeout = "15s"
   HOSTED = "true"
   DEMO_MODE = "true"
   SQLITE_PATH = "/data/siteguard.sqlite"
+  # Fly's proxy sets Fly-Client-IP to the connecting client's address. Without
+  # this, every client shares the proxy's address and therefore one login/write
+  # quota. (Header behavior on a live Fly app: UNVERIFIED, see SECURITY_REVIEW.md.)
+  CLIENT_IP_HEADER = "fly-client-ip"
 
 # Persistent SQLite storage. One volume => exactly one machine can run the app,
 # which matches the app's single-process requirement.

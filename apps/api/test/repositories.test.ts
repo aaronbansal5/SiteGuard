@@ -130,7 +130,7 @@ describe("persistence and ingestion", () => {
       const ids = (await r.list("workers")).map((w) => w.id);
       await seed(r, true);
       expect((await r.list("workers")).map((w) => w.id)).toEqual(ids);
-      expect((await r.list("sessions")).length).toBe(24);
+      expect((await r.list("sessions")).length).toBe(72);
       expect((await r.readings(fixtureId(1001))).length).toBe(60);
     } finally {
       await r.close();

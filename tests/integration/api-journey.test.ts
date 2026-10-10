@@ -1,7 +1,7 @@
 // Full worker → supervisor journey at API level (in-process, no browser).
 // The real-time browser version lives in demo.spec.ts.
 import { test, expect, describe, beforeEach, afterEach } from "vitest";
-import { fixtureId } from "@siteguard/mock-data";
+import { fixtureId, fixtures } from "@siteguard/mock-data";
 import {
   SummarySchema,
   ExplanationSchema,
@@ -172,7 +172,10 @@ test("synthetic source is labeled on every reading, summary and history record",
 
   const history = (await worker.get(`/api/workers/${fixtureId(1)}/history`))
     .body.sessions;
-  expect(history.length).toBe(5);
+  // Seeded synthetic history for this worker plus the session just completed.
+  expect(history.length).toBe(
+    fixtures().sessions.filter((s) => s.workerId === fixtureId(1)).length + 1,
+  );
   for (const s of history) {
     expect(s.source).toBe("mock");
     expect(s.summary.source).toBe("mock");

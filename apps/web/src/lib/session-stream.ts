@@ -53,6 +53,8 @@ export function useSessionStream(id: string, enabled: boolean) {
       } else if (event.type === "error") {
         setError(event.message);
         setStatus("Measurement interrupted");
+        // Access ended for this viewer; reconnecting would only be refused.
+        if (event.code === "SHARING_WITHDRAWN") stream.close();
       } else {
         setStatus(event.message || event.state);
         if (event.state === "stopped") stream.close();

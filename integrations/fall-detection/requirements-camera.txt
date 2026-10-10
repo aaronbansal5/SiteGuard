@@ -1,5 +1,7 @@
-# Optional camera environment only; base synthetic demo uses Python standard library.
-ultralytics==8.3.221
-opencv-python==4.11.0.86
-
-lap==0.5.13
+# Optional camera environment only; base synthetic demo uses the Python standard library.
+# Supported Python: 3.9-3.13 (see README "Supported Python"). Exact pins per Python
+# version live in requirements-camera.py39.lock.txt and requirements-camera.py313.lock.txt.
+# Ultralytics is AGPL-3.0 licensed; read the README licensing note before distributing.
+ultralytics>=8.3.221,<8.4
+opencv-python>=4.11.0.86,<4.13
+lap>=0.5.13,<0.6

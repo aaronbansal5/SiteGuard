@@ -8,7 +8,17 @@ if (!c.databaseUrl) {
   console.error("FAIL: DATABASE_URL is not set (no SQLite fallback).");
   process.exit(1);
 }
-const host = new URL(c.databaseUrl).hostname.replace(/^[^.]+/, "***");
+let host: string;
+try {
+  host = new URL(c.databaseUrl).hostname.replace(/^[^.]+/, "***");
+} catch {
+  // Node's ERR_INVALID_URL error carries the full input (including the
+  // password) and is printed verbatim if uncaught. Never echo it.
+  console.error(
+    "FAIL: DATABASE_URL is not a valid URL (value hidden). Percent-encode special characters in the password.",
+  );
+  process.exit(1);
+}
 let ok = true;
 const r = await openRepository(c);
 try {

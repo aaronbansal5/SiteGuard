@@ -29,6 +29,23 @@ export function sessionFacts(s: Summary) {
   }
   return facts;
 }
+const count = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+/** Server-computed facts for a committed coverage change. */
+export function scheduleFacts(after: {
+  assignmentCount: number;
+  gapCount: number;
+  protectedBreakCount: number;
+}) {
+  return {
+    coverage: [
+      `The committed proposal contains ${count(after.assignmentCount, "assignment interval", "assignment intervals")} and ${count(after.gapCount, "coverage gap", "coverage gaps")}.`,
+    ],
+    breaks: [
+      `${count(after.protectedBreakCount, "protected break was", "protected breaks were")} preserved.`,
+    ],
+  };
+}
 const selectionSchema = z.strictObject({
   selections: z
     .array(

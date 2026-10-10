@@ -1,0 +1,8 @@
+// Shared, non-secret build settings. Secrets live in Secrets.xcconfig, which
+// is gitignored; copy Secrets.example.xcconfig to create it.
+SITEGUARD_CHECKIN_INTERVAL_SECONDS = 60
+SITEGUARD_DEMO_MODE = true
+SITEGUARD_WEB_URL =
+SMARTSPECTRA_API_KEY =
+
+#include? "Secrets.xcconfig"

@@ -25,6 +25,7 @@ import {
   ErrorNotice,
   Modal,
   SafetyNote,
+  SYMPTOM_LABELS,
 } from "../components/ui";
 import { ScheduleTimeline } from "../components/ScheduleTimeline";
 import { SafetyIncidentsPanel } from "../components/SafetyIncidentsPanel";
@@ -258,7 +259,10 @@ function Operations() {
                           .filter((s) => s.assistanceRequestId === r.id)
                           .map((s) => (
                             <div className="request-note" key={s.id}>
-                              Reported: {s.codes.join(", ")}
+                              Reported:{" "}
+                              {s.codes
+                                .map((c) => SYMPTOM_LABELS[c] ?? c)
+                                .join(", ")}
                               {s.note ? ` · ${s.note}` : ""}
                             </div>
                           ))}
@@ -385,8 +389,12 @@ function Operations() {
                         </p>
                       )}
                       <p>
-                        {proposal.assignments.length} assignment intervals ·{" "}
-                        {proposal.coverageGaps.length} remaining gaps
+                        {proposal.assignments.length} assignment{" "}
+                        {proposal.assignments.length === 1
+                          ? "interval"
+                          : "intervals"}{" "}
+                        · {proposal.coverageGaps.length} remaining{" "}
+                        {proposal.coverageGaps.length === 1 ? "gap" : "gaps"}
                       </p>
                       <p className="fine-print">
                         Revision {proposal.baseRevision}. No break or assistance
@@ -431,7 +439,11 @@ function Operations() {
                   <section className="card explanation">
                     <div className="card-header">
                       <h2>Why coverage changed</h2>
-                      <span className="badge">{explanation.origin}</span>
+                      <span className="badge">
+                        {explanation.origin === "gemini"
+                          ? "Gemini fact selection"
+                          : "Deterministic explanation"}
+                      </span>
                     </div>
                     {explanation.observations.map((p) => (
                       <p key={p}>{p}</p>
@@ -446,7 +458,8 @@ function Operations() {
                     <div className="task-row" key={t.id}>
                       <strong>{t.label}</strong>
                       <small>
-                        {t.staffingRequired} workers ·{" "}
+                        {t.staffingRequired}{" "}
+                        {t.staffingRequired === 1 ? "worker" : "workers"} ·{" "}
                         {t.requiredSkills.join(", ")}
                       </small>
                     </div>

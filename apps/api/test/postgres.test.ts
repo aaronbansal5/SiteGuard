@@ -3,7 +3,7 @@ import pg from "pg";
 import { it, expect } from "vitest";
 import { createApp } from "../src/app.js";
 import { login, populatedSession } from "./helpers.js";
-import { mockReading } from "@siteguard/mock-data";
+import { fixtureId, mockReading } from "@siteguard/mock-data";
 
 const databaseUrl = process.env.POSTGRES_TEST_DATABASE_URL;
 it.skipIf(!databaseUrl)(
@@ -44,10 +44,12 @@ it.skipIf(!databaseUrl)(
         await repo.driver.query("SELECT current_schema() AS schema"),
       ).toEqual([{ schema }]);
       expect(await repo.list("workers")).toHaveLength(6);
-      expect(await repo.list("sessions")).toHaveLength(24);
+      expect(await repo.list("sessions")).toHaveLength(72);
       expect(
-        await repo.driver.query("SELECT version FROM schema_migrations"),
-      ).toEqual([{ version: "001_initial" }]);
+        await repo.driver.query(
+          "SELECT version FROM schema_migrations ORDER BY version",
+        ),
+      ).toEqual([{ version: "001_initial" }, { version: "003_self_reports" }]);
 
       const s = await populatedSession(repo);
       expect(await repo.ingest(s.id, [mockReading(s.startedAt, 0)])).toEqual({
@@ -82,6 +84,64 @@ it.skipIf(!databaseUrl)(
           headers: { cookie },
           payload,
         });
+      // Worker-only personal insights and voluntary self-reports on PostgreSQL.
+      const [ownCompleted] = await repo.sessionPage(
+        fixtureId(1),
+        1,
+        undefined,
+        {
+          source: "mock",
+          since: "1970-01-01T00:00:00.000Z",
+          before: new Date(Date.now() + 1000).toISOString(),
+        },
+      );
+      expect(await repo.selfReports(fixtureId(1))).not.toHaveLength(0);
+      const personal = (
+        path: string,
+        cookie: string,
+        payload?: Record<string, unknown>,
+      ) =>
+        app.inject({
+          method: payload ? "POST" : "GET",
+          url: `/api/${path}`,
+          headers: { cookie },
+          payload,
+        });
+      const insightsPath = `sessions/${ownCompleted.id}/personal-insights`;
+      const reportPath = `sessions/${ownCompleted.id}/self-report`;
+      const trendPath = `workers/${fixtureId(1)}/personal-trend?source=mock`;
+      expect((await personal(insightsPath, workerCookie)).statusCode).toBe(200);
+      expect((await personal(trendPath, workerCookie)).statusCode).toBe(200);
+      const rated = await personal(reportPath, workerCookie, { tiredness: 4 });
+      expect(rated.statusCode).toBe(200);
+      expect(
+        await repo.driver.query(
+          "SELECT worker_id FROM self_reports WHERE session_id=$1",
+          [ownCompleted.id],
+        ),
+      ).toEqual([{ worker_id: fixtureId(1) }]);
+      expect(
+        (await repo.selfReports(fixtureId(1))).find(
+          (x) => x.sessionId === ownCompleted.id,
+        )?.tiredness,
+      ).toBe(4);
+      for (const response of [
+        await personal(insightsPath, supervisorCookie),
+        await personal(trendPath, supervisorCookie),
+        await personal(reportPath, supervisorCookie, { tiredness: 1 }),
+      ])
+        expect(response.statusCode).toBe(403);
+      const cleared = await personal(reportPath, workerCookie, {
+        tiredness: null,
+      });
+      expect(cleared.json()).toEqual({ selfReport: null });
+      expect(
+        await repo.driver.query(
+          "SELECT 1 FROM self_reports WHERE session_id=$1",
+          [ownCompleted.id],
+        ),
+      ).toHaveLength(0);
+
       const protectedBefore = (await repo.list("breaks")).filter(
         (b) => b.kind === "protected",
       );
@@ -114,7 +174,14 @@ it.skipIf(!databaseUrl)(
         (await repo.list("breaks")).filter((b) => b.kind === "additional"),
       ).toHaveLength(0);
 
-      const restStartsAt = new Date(Date.now() + 1000).toISOString();
+      // Start after the worker's own protected break: a fixed now+1s start
+      // overlaps it during part of the day and is rejected with 409.
+      const ownProtected = protectedBefore.find(
+        (b) => b.workerId === request.workerId,
+      )!;
+      const restStartsAt = new Date(
+        Math.max(Date.now() + 1000, Date.parse(ownProtected.endsAt)),
+      ).toISOString();
       const approved = await write(
         `rest-requests/${request.id}`,
         {
