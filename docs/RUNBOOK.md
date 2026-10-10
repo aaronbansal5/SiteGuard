@@ -9,7 +9,7 @@ Before rehearsal: verify Node/npm, install dependencies, build and run tests, th
 - Presage unavailable: confirm native bridge/token/camera setup. Stop failed session; separately choose synthetic source. Never relabel mock as real.
 - Bridge stop failure: confirm camera is stopped, then retry; app does not finalize until stop confirmed.
 - API restart: active sessions finalize with an interruption limitation. Start a fresh session.
-- Gemini unavailable: deterministic facts keep the app usable. Every failure (missing key or model, HTTP error, 5 s timeout, output that fails validation or leaves out a fact) returns `origin: "deterministic"`. Run `npm run verify:gemini` locally to see the reason; it never prints the key.
+- Gemini unavailable: deterministic facts keep the app usable. Every failure (missing key or model, HTTP error, 12 s timeout, output that fails validation or leaves out a fact) returns `origin: "deterministic"`. Run `npm run verify:gemini` locally to see the reason; it never prints the key.
 - Stale scheduling revision: preview again; never force old proposal over a new request.
 - Unfilled coverage: display gaps, preserve breaks and human needs; do not override safety constraints.
 - Reset blocked: stop active sessions; any real measurement prevents demo reset. Real records require deliberate manual data administration outside this demo control.

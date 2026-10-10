@@ -1,7 +1,7 @@
 // Fixture-based tests for the real Gemini call path (SDK -> fetch). No network, no real key.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../src/config.js";
-import { Explainer } from "../src/insights/explain.js";
+import { Explainer, GEMINI_TIMEOUT_MS } from "../src/insights/explain.js";
 
 const KEY = "fixture-gemini-key-not-real";
 const MODEL = "fixture-model";
@@ -207,7 +207,7 @@ describe("Gemini REST adapter (mocked fetch)", () => {
     stubFetch(() => new Promise<Response>(() => {}));
     const e = explainer();
     const pending = e.explain(facts, []);
-    await vi.advanceTimersByTimeAsync(5001);
+    await vi.advanceTimersByTimeAsync(GEMINI_TIMEOUT_MS + 1);
     const result = await pending;
     expect(result.origin).toBe("deterministic");
     expect(e.lastFallbackReason).toMatch(/timeout|abort/i);

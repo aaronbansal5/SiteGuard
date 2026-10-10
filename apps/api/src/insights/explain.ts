@@ -54,7 +54,8 @@ export function renderSelection(raw: unknown, facts: Record<string, string[]>) {
     return facts[s.factId][s.variant];
   });
 }
-export const GEMINI_TIMEOUT_MS = 5000;
+// Gemini rejects request deadlines under 10 s (INVALID_ARGUMENT), so stay above that.
+export const GEMINI_TIMEOUT_MS = 12000;
 export class Explainer {
   private cache = new Map<string, Explanation>();
   /** Why the most recent explain() call used the deterministic fallback; never contains the API key. */
