@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS rest_requests (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), session_id TEXT, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS breaks (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), request_id TEXT, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), break_id TEXT NOT NULL REFERENCES breaks(id), source TEXT NOT NULL CHECK(source IN ('mock','presage')), status TEXT NOT NULL CHECK(status IN ('active','completed')), started_at TEXT NOT NULL, payload TEXT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_session ON sessions(worker_id) WHERE status='active';
+CREATE INDEX IF NOT EXISTS worker_session_time ON sessions(worker_id,started_at);
+CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_assignments (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), worker_id TEXT NOT NULL REFERENCES workers(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS worker_availability (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS symptom_reports (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), session_id TEXT REFERENCES sessions(id), assistance_request_id TEXT NOT NULL REFERENCES rest_requests(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS schedule_state (id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);
+INSERT INTO schedule_state (id,revision) VALUES (1,0) ON CONFLICT(id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS vital_readings (session_id TEXT NOT NULL REFERENCES sessions(id), timestamp TIMESTAMPTZ NOT NULL, sequence INTEGER NOT NULL, heart_rate_bpm DOUBLE PRECISION, respiratory_rate_brpm DOUBLE PRECISION, quality TEXT NOT NULL CHECK(quality IN ('valid','invalid','unknown')), source TEXT NOT NULL CHECK(source IN ('mock','presage')), PRIMARY KEY(session_id,timestamp,sequence));
+CREATE INDEX IF NOT EXISTS session_reading_time ON vital_readings(session_id,timestamp);
+CREATE TABLE IF NOT EXISTS reading_receipts (session_id TEXT NOT NULL REFERENCES sessions(id), sequence INTEGER NOT NULL, timestamp TIMESTAMPTZ NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(session_id,sequence));
+DO $$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='request_session_fk' AND conrelid='rest_requests'::regclass) THEN ALTER TABLE rest_requests ADD CONSTRAINT request_session_fk FOREIGN KEY(session_id) REFERENCES sessions(id); END IF;
+IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='break_request_fk' AND conrelid='breaks'::regclass) THEN ALTER TABLE breaks ADD CONSTRAINT break_request_fk FOREIGN KEY(request_id) REFERENCES rest_requests(id); END IF;
+END $$;

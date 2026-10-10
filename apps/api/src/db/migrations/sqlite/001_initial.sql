@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS rest_requests (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), session_id TEXT REFERENCES sessions(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS breaks (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), request_id TEXT REFERENCES rest_requests(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), break_id TEXT NOT NULL REFERENCES breaks(id), source TEXT NOT NULL CHECK(source IN ('mock','presage')), status TEXT NOT NULL CHECK(status IN ('active','completed')), started_at TEXT NOT NULL, payload TEXT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_session ON sessions(worker_id) WHERE status='active';
+CREATE INDEX IF NOT EXISTS worker_session_time ON sessions(worker_id,started_at);
+CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_assignments (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), worker_id TEXT NOT NULL REFERENCES workers(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS worker_availability (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS symptom_reports (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), session_id TEXT REFERENCES sessions(id), assistance_request_id TEXT NOT NULL REFERENCES rest_requests(id), payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS schedule_state (id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);
+INSERT INTO schedule_state (id,revision) VALUES (1,0) ON CONFLICT(id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS vital_readings (session_id TEXT NOT NULL REFERENCES sessions(id), timestamp TEXT NOT NULL, sequence INTEGER NOT NULL, heart_rate_bpm REAL, respiratory_rate_brpm REAL, quality TEXT NOT NULL CHECK(quality IN ('valid','invalid','unknown')), source TEXT NOT NULL CHECK(source IN ('mock','presage')), PRIMARY KEY(session_id,timestamp,sequence));
+CREATE INDEX IF NOT EXISTS session_reading_time ON vital_readings(session_id,timestamp);
+CREATE TABLE IF NOT EXISTS reading_receipts (session_id TEXT NOT NULL REFERENCES sessions(id), sequence INTEGER NOT NULL, timestamp TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(session_id,sequence));
