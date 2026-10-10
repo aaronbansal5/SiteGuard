@@ -58,13 +58,13 @@ test("apps/api PresageSource consumes the bridge, reconnects after a dropped str
   });
 });
 
-test("apps/api PresageSource start fails cleanly against the unverified SDK stub", async () => {
+test("apps/api PresageSource start fails cleanly when the real SDK adapter has no API key", async () => {
   const { PresageBridge } = await import("../src/server.js");
   const { PresageSdkAdapter } = await import("../src/adapters/presage-sdk.js");
   const { systemClock } = await import("../src/adapter.js");
   const bridge = new PresageBridge({
     token: TOKEN,
-    adapter: new PresageSdkAdapter(systemClock),
+    adapter: new PresageSdkAdapter(systemClock, {}),
     port: 0,
   });
   const port = await bridge.listen();

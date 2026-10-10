@@ -59,14 +59,13 @@ rejected. It is also recorded in `package.json` under `presage.bundleId`.
 
 ## Environment
 
-| Variable               | Required | Meaning                                                                                                                       |
-| ---------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `PRESAGE_BRIDGE_TOKEN` | yes      | Shared bearer token (at least 16 characters). Must match the app's root `.env`. The bridge exits with code 2 if it is missing |
-| `PRESAGE_BRIDGE_PORT`  | no       | Defaults to `4311` (the contract port). If you change it, also change `PRESAGE_BRIDGE_URL` in the app                         |
+| Variable               | Required          | Meaning                                                                                                                       |
+| ---------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `PRESAGE_BRIDGE_TOKEN` | yes               | Shared bearer token (at least 16 characters). Must match the app's root `.env`. The bridge exits with code 2 if it is missing |
+| `SMARTSPECTRA_API_KEY` | yes (real camera) | Presage SmartSpectra API key from https://physiology.presagetech.com. Bridge process env only; never in the app or browser    |
+| `PRESAGE_BRIDGE_PORT`  | no                | Defaults to `4311` (the contract port). If you change it, also change `PRESAGE_BRIDGE_URL` in the app                         |
 
-The host is fixed to `127.0.0.1` and cannot be configured. The vendor API key
-variable is not defined yet because it has not been verified against vendor
-docs (TODO in `presage-sdk.ts`). It must live only in the bridge's environment.
+The host is fixed to `127.0.0.1` and cannot be configured.
 
 ## Contract behavior implemented
 
@@ -146,20 +145,23 @@ The fixture adapter's readings carry `source:"presage"` because the wire
 contract has no other value. Never point the app at a fixture-backed bridge
 for a real check-in. `npm start` cannot select it.
 
-## What remains (all UNVERIFIED; needs SDK access, credentials, and a camera)
+## Real SDK adapter (`src/adapters/presage-sdk.ts`)
 
-1. **Real SDK wiring** in `src/adapters/presage-sdk.ts`. Follow every TODO there:
-   - Package and loading.
-   - API key from the bridge environment.
-   - `probe()` readiness.
-   - `open()` camera acquisition.
-   - `onSample` field mapping (pulse/breathing values and explicit status fields).
-   - Positioning status mapping.
-   - Error and retryability mapping.
-   - Idempotent `close()` camera release.
-2. **SDK version, runtime, and platform**: the exact package version, Node/Electron requirement, OS, and camera model actually tested. Check the vendor docs: https://smartspectra.presagetech.com/docs/nodejs/
-3. **Validity mapping evidence**: which vendor fields express per-metric validity/confidence, and what they mean. Until this is documented, the adapter must report `unknown`.
-4. **Timing semantics**: what the SDK timestamps represent (capture time? processing time? which clock?) and the conversion to `monotonicMs`.
-5. **Vendor processing, privacy, and telemetry**: whether frames or derived data leave the device, retention, and network calls. This must be reviewed before any real use. SiteGuard stores no footage.
-6. **Camera permissions**: the OS permission prompts and failure behaviour.
-7. **An observed camera session**: run `npm run smoke:hardware` on the demo laptop, then run the app with Presage selected, and record the start/stop/reconnect results here. Neither has been run against real hardware.
+- **SDK:** `@smartspectra/node-sdk` **3.4.0** (pinned). Native builds for macOS Apple Silicon, Linux x64/arm64 (glibc ≥ 2.35), Windows x64. Node ≥ 20 (24 recommended).
+- **Requested metrics:** only `MetricType.PULSE_RATE` and `MetricType.BREATHING_RATE`.
+- **Validity:** taken only from the vendor's `stable` flag on each `MeasurementWithConfidence` (vendor docs: `stable` means confidence ≥ 40 for pulse and ≥ 45 for breathing). `true` → `valid`, `false` → `invalid`, missing → `unknown`. Numbers never change the status.
+- **Timing:** vendor `timestamp` is microseconds since the Unix epoch. It is converted to the bridge monotonic clock once per sample, then to UTC through the session anchor. Packets with no new timestamp are ignored.
+- **Status:** `validationStatus` `kOk` → `measuring`; any other code → `positioning` with the vendor's hint text.
+- **Errors:** vendor `error` events are forwarded as `SmartSpectraErrorCode` names (for example `kAuthenticationFailed`, `kInputUnavailable`) with the vendor's `retryable` flag. A start-time error rejects `open()` and releases the SDK.
+- **Privacy and network use** (vendor docs, [SDK Telemetry & Privacy](https://smartspectra.presagetech.com/docs/telemetry-and-privacy)):
+  - All metric computation runs on-device. The SDK contacts Presage to validate the API key/subscription.
+  - The SDK's optional telemetry is one aggregate summary per session (SDK build, runtime/device model, session outcome, performance and validation counts, timestamp). It never includes frames, metric values, file paths, free text, or user/device identifiers.
+  - Telemetry defaults **on**; this adapter sets `enableTelemetry: false`, so no telemetry session is started and nothing is transmitted for it.
+  - Neither the bridge nor SiteGuard stores frames or footage. If SiteGuard were distributed with telemetry enabled, that collection would need to be disclosed to users per Presage's privacy policy.
+- **Tests:** `test/presage-sdk-adapter.test.ts` exercises the adapter against a fake module with the same names and shapes as the 3.4.0 type declarations.
+
+## What remains (needs the demo laptop, camera and API key)
+
+1. **Observed camera session:** on the demo Mac, with `SMARTSPECTRA_API_KEY` and `PRESAGE_BRIDGE_TOKEN` set, run `npm run smoke:hardware`, then a check-in in the app with Presage selected. Record start/stop/reconnect results here.
+2. **Camera permission:** the first run triggers the macOS camera prompt for the terminal app running the bridge.
+3. **Vendor terms:** confirm subscription/credit limits for the hackathon key (`kCreditExhausted` is surfaced as an error).

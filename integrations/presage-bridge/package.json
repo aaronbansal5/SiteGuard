@@ -8,13 +8,14 @@
     "node": ">=24.7"
   },
   "scripts": {
-    "start": "tsx src/cli.ts",
+    "start": "tsx --env-file-if-exists=.env src/cli.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "smoke:hardware": "tsx scripts/smoke.ts --hardware",
+    "smoke:hardware": "tsx --env-file-if-exists=.env scripts/smoke.ts --hardware",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@smartspectra/node-sdk": "3.4.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

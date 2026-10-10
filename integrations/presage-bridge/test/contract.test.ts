@@ -125,10 +125,10 @@ describe("health", () => {
     expect(h.reason).toMatch(/FIXTURE REPLAY/);
   });
 
-  test("real SDK adapter stub reports unavailable and refuses to start", async () => {
+  test("real SDK adapter without SMARTSPECTRA_API_KEY reports unavailable and refuses to start", async () => {
     const bridge = new PresageBridge({
       token: TOKEN,
-      adapter: new PresageSdkAdapter(systemClock),
+      adapter: new PresageSdkAdapter(systemClock, {}),
       port: 0,
     });
     const port = await bridge.listen();
@@ -144,7 +144,7 @@ describe("health", () => {
     );
     expect(h).toMatchObject({
       status: "unavailable",
-      reason: expect.stringMatching(/not installed or verified/),
+      reason: expect.stringMatching(/SMARTSPECTRA_API_KEY is not set/),
     });
     const s = await fetch(`http://127.0.0.1:${port}/v1/sessions`, {
       method: "POST",

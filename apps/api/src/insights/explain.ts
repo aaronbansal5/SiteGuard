@@ -60,11 +60,23 @@ export class Explainer {
   private cache = new Map<string, Explanation>();
   /** Why the most recent explain() call used the deterministic fallback; never contains the API key. */
   lastFallbackReason: string | undefined;
+  /** Origin of the most recent explain() result, for the integrations panel. */
+  lastOrigin: "gemini" | "deterministic" | undefined;
+  lastAt: string | undefined;
   constructor(
     private config: Config,
     private generate?: (facts: Record<string, string[]>) => Promise<unknown>,
   ) {}
   async explain(
+    facts: Record<string, string[]>,
+    limitations: string[],
+  ): Promise<Explanation> {
+    const result = await this.explainInner(facts, limitations);
+    this.lastOrigin = result.origin;
+    this.lastAt = new Date().toISOString();
+    return result;
+  }
+  private async explainInner(
     facts: Record<string, string[]>,
     limitations: string[],
   ): Promise<Explanation> {

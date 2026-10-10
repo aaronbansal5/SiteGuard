@@ -1880,3 +1880,31 @@ textarea::placeholder {
   color: #52644c;
   opacity: 1;
 }
+.integrations-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.integrations-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.integration-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.integration-name {
+  font-weight: 600;
+  min-width: 120px;
+}
+.integration-detail {
+  flex-basis: 100%;
+  color: #5d6b62;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
