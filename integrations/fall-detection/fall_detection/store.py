@@ -18,6 +18,7 @@ class Store:
         CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS incidents(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS actions(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS delivery(event_id TEXT PRIMARY KEY REFERENCES events(id), delivered_at TEXT);
         ''')
 
     def record(self, observation, source, run_id, sequence, camera_id, zone_id):
@@ -29,6 +30,7 @@ class Store:
         with self.lock, self.db:
             self.db.execute('INSERT INTO events VALUES (?,?)', (event['eventId'], json.dumps(event)))
             self.db.execute('INSERT INTO incidents VALUES (?,?)', (incident['id'], json.dumps(incident)))
+            self.db.execute('INSERT INTO delivery VALUES (?,NULL)', (event['eventId'],))
         return event
 
     def list(self, table, limit=100):
@@ -59,3 +61,12 @@ class Store:
                      'createdAt': utc_now()}
             self.db.execute('INSERT INTO actions VALUES (?,?)', (str(uuid.uuid4()), json.dumps(audit)))
             return incident
+
+    def pending(self):
+        with self.lock:
+            return [json.loads(row[0]) for row in self.db.execute(
+                'SELECT e.payload FROM events e JOIN delivery d ON e.id=d.event_id WHERE d.delivered_at IS NULL ORDER BY e.rowid LIMIT 100')]
+
+    def delivered(self, event_id):
+        with self.lock, self.db:
+            self.db.execute('UPDATE delivery SET delivered_at=? WHERE event_id=?', (utc_now(), event_id))

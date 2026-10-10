@@ -15,6 +15,34 @@ import { useResource, useAction } from "../lib/api";
 import { useIdentity } from "../App";
 import { ErrorNotice, PageHeading } from "../components/ui";
 export function Landing() {
+  const { config } = useIdentity();
+  if (config?.mode === "oidc")
+    return (
+      <>
+        <PageHeading
+          eyebrow="SITEGUARD / SIGN IN"
+          title="Your workspace, your account."
+          description="Sign in to access your assigned worker or manager workspace."
+        />
+        <section className="card">
+          <h2>Secure account sign-in</h2>
+          <p>
+            Your site administrator assigns your role. Measurement consent is
+            separate from signing in.
+          </p>
+          {config.loginAvailable ? (
+            <a className="button primary" href="/api/auth/login">
+              Sign in to SiteGuard <ArrowRight size={17} />
+            </a>
+          ) : (
+            <ErrorNotice message="Account sign-in is not configured. Contact your site administrator." />
+          )}
+        </section>
+      </>
+    );
+  return <DemoLanding />;
+}
+function DemoLanding() {
   const workers = useResource<{ workers: Worker[] }>("/workers");
   const [workerId, setWorkerId] = useState("");
   const { login } = useIdentity(),

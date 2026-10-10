@@ -25,6 +25,10 @@ describe("hosted secrets", () => {
     expect(() =>
       loadConfig({
         hosted: true,
+        authMode: "oidc",
+        oidcIssuer: "https://identity.example.com",
+        oidcClientId: "test-client",
+        appOrigin: "https://siteguard.example.com",
         cookieSecret: "c".repeat(32),
         measurementToken: "m".repeat(16),
       }),

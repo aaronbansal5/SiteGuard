@@ -6,6 +6,7 @@ test("real-time mock check-in → summary → request → protected staffing cha
 }) => {
   await page.request.post("/api/demo/login", { data: { role: "supervisor" } });
   await page.request.post("/api/demo/reset", { data: {} });
+  await page.request.post("/api/auth/logout", { data: {} });
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "A better view of the break." }),

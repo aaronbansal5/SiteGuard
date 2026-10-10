@@ -7,10 +7,11 @@ export async function audit(
   entityId: string,
   before: unknown,
   after: unknown,
+  actor = "supervisor-demo",
 ): Promise<Audit> {
   const a: Audit = {
     id: randomUUID(),
-    actor: "supervisor-demo",
+    actor,
     action,
     entityId,
     before,

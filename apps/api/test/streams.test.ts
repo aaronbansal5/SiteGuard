@@ -1,5 +1,7 @@
 import { expect, it } from "vitest";
 import { testApp, login, populatedSession } from "./helpers.js";
+import { randomBytes } from "node:crypto";
+import { tokenDigest } from "../src/auth-service.js";
 it("limits concurrent streams per identity, releases quota on disconnect, and leaves the measurement session active", async () => {
   const { app, repo } = await testApp();
   const streams: Response[] = [];
@@ -39,9 +41,21 @@ it("closes an existing SSE stream when its signed identity expires at heartbeat"
   let response: Response | undefined;
   try {
     const s = await populatedSession(repo);
+    const authToken = randomBytes(32).toString("base64url");
+    const identity = { role: "worker", workerId: s.workerId };
+    const expiresAt = Date.now() + 1000;
+    await repo.driver.query(
+      "INSERT INTO auth_demo_sessions (token_digest,payload,expires_at) VALUES ($1,$2,$3)",
+      [
+        tokenDigest(authToken),
+        JSON.stringify(identity),
+        new Date(expiresAt).toISOString(),
+      ],
+    );
     const value = JSON.stringify({
-      identity: { role: "worker", workerId: s.workerId },
-      expiresAt: Date.now() + 1000,
+      identity,
+      authToken,
+      expiresAt,
     });
     const cookie = `siteguard=${encodeURIComponent(app.signCookie(value))}`;
     const base = await app.listen({ host: "127.0.0.1", port: 0 });

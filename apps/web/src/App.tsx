@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   BrowserRouter,
@@ -14,6 +15,7 @@ import {
   NavLink,
   Link,
   useLocation,
+  Navigate,
 } from "react-router-dom";
 import {
   Shield,
@@ -27,7 +29,7 @@ import {
 } from "lucide-react";
 import type { Identity } from "@siteguard/contracts";
 import { api } from "./lib/api";
-import { Loading } from "./components/ui";
+import { ErrorNotice, Loading } from "./components/ui";
 const Landing = lazy(() =>
   import("./pages/Landing").then((module) => ({ default: module.Landing })),
 );
@@ -57,37 +59,129 @@ const Supervisor = lazy(() =>
     default: module.Supervisor,
   })),
 );
+type AuthConfig = {
+  mode: "demo" | "oidc";
+  loginAvailable: boolean;
+  siteId: string;
+};
+type Account = { id: string; email: string; siteId: string };
 const AuthContext = createContext<{
   identity: Identity | null;
+  config: AuthConfig | null;
+  account?: Account;
   login: (a: Identity) => Promise<void>;
-}>({ identity: null, login: async () => {} });
+}>({ identity: null, config: null, login: async () => {} });
 export const useIdentity = () => useContext(AuthContext);
+function Protected({
+  children,
+  role,
+}: {
+  children: ReactNode;
+  role?: Identity["role"];
+}) {
+  const { identity } = useIdentity();
+  const location = useLocation();
+  if (!identity)
+    return (
+      <Navigate
+        to={"/?next=" + encodeURIComponent(location.pathname)}
+        replace
+      />
+    );
+  if (role && identity.role !== role)
+    return (
+      <section className="card empty-state">
+        <h1>Access restricted</h1>
+        <p>
+          This workspace is available to{" "}
+          {role === "supervisor" ? "managers" : "workers"} only.
+        </p>
+        <Link
+          className="button primary"
+          to={identity.role === "worker" ? "/worker" : "/supervisor"}
+        >
+          Return to your workspace
+        </Link>
+      </section>
+    );
+  return children;
+}
 function Shell() {
-  const [identity, setIdentity] = useState<Identity | null>(null),
-    [menu, setMenu] = useState(false);
+  const [identity, setIdentity] = useState<Identity | null>(null);
+  const [config, setConfig] = useState<AuthConfig | null>(null);
+  const [account, setAccount] = useState<Account>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [menu, setMenu] = useState(false);
   const location = useLocation();
   const loginRevision = useRef(0);
   useEffect(() => {
     const controller = new AbortController();
     const revision = loginRevision.current;
-    void api<Identity>("/demo/me", undefined, "GET", controller.signal)
-      .then((value) => {
-        if (!controller.signal.aborted && revision === loginRevision.current)
-          setIdentity(value);
-      })
-      .catch(() => {});
+    setLoading(true);
+    setError("");
+    void (async () => {
+      try {
+        const settings = await api<AuthConfig>(
+          "/auth/config",
+          undefined,
+          "GET",
+          controller.signal,
+        );
+        const current = await api<{
+          identity: Identity | null;
+          account?: Account;
+        }>("/auth/me", undefined, "GET", controller.signal);
+        if (!controller.signal.aborted && revision === loginRevision.current) {
+          setConfig(settings);
+          setIdentity(current.identity);
+          setAccount(current.account);
+        }
+      } catch (e) {
+        if (!controller.signal.aborted) setError((e as Error).message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    })();
     return () => controller.abort();
-  }, []);
+  }, [retry]);
   useEffect(() => {
     setMenu(false);
   }, [location.pathname]);
+  useEffect(() => {
+    const expired = () => {
+      setIdentity(null);
+      setAccount(undefined);
+    };
+    window.addEventListener("siteguard:unauthenticated", expired);
+    return () =>
+      window.removeEventListener("siteguard:unauthenticated", expired);
+  }, []);
   const login = async (a: Identity) => {
+    if (config?.mode !== "demo" || identity)
+      throw new Error("Sign out before selecting another demo account.");
     loginRevision.current += 1;
     await api("/demo/login", a);
     setIdentity(a);
   };
+  const logout = async () => {
+    if (logoutBusy) return;
+    setLogoutBusy(true);
+    setError("");
+    try {
+      await api("/auth/logout", {});
+      setIdentity(null);
+      setAccount(undefined);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLogoutBusy(false);
+    }
+  };
   return (
-    <AuthContext.Provider value={{ identity, login }}>
+    <AuthContext.Provider value={{ identity, login, config, account }}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -105,22 +199,26 @@ function Shell() {
         </Link>
         <div className="workspace-label">WORKSPACE</div>
         <nav>
-          <NavLink to="/" end>
-            <LayoutDashboard size={18} />
-            Overview
-          </NavLink>
-          <NavLink to="/worker">
-            <Activity size={18} />
-            Worker portal
-          </NavLink>
-          <NavLink to="/history">
-            <History size={18} />
-            Session history
-          </NavLink>
-          <NavLink to="/supervisor">
-            <Users size={18} />
-            Safety operations
-          </NavLink>
+          {!identity && (
+            <NavLink to="/" end>
+              <LayoutDashboard size={18} /> Sign in
+            </NavLink>
+          )}
+          {identity?.role === "worker" && (
+            <>
+              <NavLink to="/worker">
+                <Activity size={18} /> Worker portal
+              </NavLink>
+              <NavLink to="/history">
+                <History size={18} /> Session history
+              </NavLink>
+            </>
+          )}
+          {identity?.role === "supervisor" && (
+            <NavLink to="/supervisor">
+              <Users size={18} /> Safety operations
+            </NavLink>
+          )}
         </nav>
         <div className="sidebar-bottom">
           <div className="protected-card">
@@ -132,7 +230,11 @@ function Shell() {
               Coverage adapts around them.
             </p>
           </div>
-          <span className="sidebar-version">HACKATHON DEMONSTRATION · V1</span>
+          <span className="sidebar-version">
+            {config?.mode === "demo"
+              ? "LOCAL DEMONSTRATION"
+              : "ROLE-SCOPED WORKSPACE"}
+          </span>
         </div>
       </aside>
       <div className="app-shell">
@@ -149,17 +251,23 @@ function Shell() {
             </button>
             <span className="site-indicator" />
             <span>
-              North Yard <span className="muted">/ Demo site</span>
+              {config?.siteId || "SiteGuard"}{" "}
+              <span className="muted">
+                / {config?.mode === "demo" ? "Demo site" : "Workspace"}
+              </span>
             </span>
           </div>
           <div>
-            <span className="badge demo-badge">Fictional workforce</span>
-            <Link className="identity-chip" to="/">
+            {config?.mode === "demo" && (
+              <span className="badge demo-badge">Fictional workforce</span>
+            )}
+            <span className="identity-chip" title={account?.email}>
               {identity?.role === "worker"
                 ? "Worker"
                 : identity?.role === "supervisor"
                   ? "Safety ops"
-                  : "Demo"}
+                  : "Guest"}
+              {account && <span className="muted">{account.email}</span>}
               <span className="avatar small">
                 {identity?.role === "supervisor"
                   ? "SO"
@@ -167,36 +275,117 @@ function Shell() {
                     ? "W"
                     : "SG"}
               </span>
-            </Link>
+            </span>
+            {identity && (
+              <button
+                className="button secondary"
+                disabled={logoutBusy}
+                onClick={() => void logout()}
+              >
+                {logoutBusy ? "Signing out…" : "Sign out"}
+              </button>
+            )}
           </div>
         </header>
         <main id="main">
-          <Suspense fallback={<Loading />}>
-            <Routes
-              key={
-                identity?.role === "worker"
-                  ? identity.workerId
-                  : identity?.role || "guest"
-              }
-            >
-              <Route path="/" element={<Landing />} />
-              <Route path="/worker" element={<WorkerHome />} />
-              <Route path="/check-in" element={<CheckIn />} />
-              <Route path="/sessions/:id/measure" element={<Measurement />} />
-              <Route path="/sessions/:id" element={<SessionSummary />} />
-              <Route path="/history" element={<HistoryPage />} />
-              <Route path="/supervisor" element={<Supervisor />} />
-              <Route
-                path="*"
-                element={
-                  <div className="card">
-                    <h1>Page not found</h1>
-                    <Link to="/">Return to workspace</Link>
-                  </div>
+          <ErrorNotice message={error} />
+          {loading ? (
+            <Loading />
+          ) : !config ? (
+            <section className="card">
+              <h1>Sign-in service unavailable</h1>
+              <p>Your account could not be checked.</p>
+              <button
+                className="button primary"
+                onClick={() => setRetry((v) => v + 1)}
+              >
+                Retry sign-in check
+              </button>
+            </section>
+          ) : (
+            <Suspense fallback={<Loading />}>
+              <Routes
+                key={
+                  identity?.role === "worker"
+                    ? identity.workerId
+                    : identity?.role || "guest"
                 }
-              />
-            </Routes>
-          </Suspense>
+              >
+                <Route
+                  path="/"
+                  element={
+                    identity ? (
+                      <Navigate
+                        to={
+                          identity.role === "worker" ? "/worker" : "/supervisor"
+                        }
+                        replace
+                      />
+                    ) : (
+                      <Landing />
+                    )
+                  }
+                />
+                <Route
+                  path="/worker"
+                  element={
+                    <Protected role="worker">
+                      <WorkerHome />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="/check-in"
+                  element={
+                    <Protected role="worker">
+                      <CheckIn />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="/sessions/:id/measure"
+                  element={
+                    <Protected role="worker">
+                      <Measurement />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="/sessions/:id"
+                  element={
+                    <Protected>
+                      <SessionSummary />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="/history"
+                  element={
+                    <Protected role="worker">
+                      <HistoryPage />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="/supervisor"
+                  element={
+                    <Protected role="supervisor">
+                      <Supervisor />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="*"
+                  element={
+                    <div className="card">
+                      <h1>Page not found</h1>
+                      <Link to="/">Return to workspace</Link>
+                    </div>
+                  }
+                />
+              </Routes>
+            </Suspense>
+          )}
         </main>
         <footer className="app-footer">
           <span>

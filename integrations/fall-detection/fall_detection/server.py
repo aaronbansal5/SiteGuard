@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .detector import Detector, Observation
 from .store import Store
+from .delivery import from_environment
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,6 +25,7 @@ class Runtime:
         self.tracks, self.frame_size = [], [640, 360]
         self.scenario_revision = 0
         self.preview_jpeg = None
+        self.delivery = from_environment(store)
 
     def frame(self, observations, timestamp, frame_size):
         with self.lock:
@@ -42,7 +44,8 @@ class Runtime:
         with self.lock:
             return {'source': self.source, 'status': self.status, 'message': self.message,
                     'tracks': self.tracks, 'frameSize': self.frame_size,
-                    'incidents': self.store.list('incidents')}
+                    'incidents': self.store.list('incidents'),
+                    'delivery': {'configured': bool(self.delivery), 'pending': len(self.store.pending()), 'error': self.delivery.last_error if self.delivery else None}}
 
     def synthetic(self):
         self.status = 'running'
@@ -57,6 +60,14 @@ class Runtime:
         except Exception as error:
             with self.lock:
                 self.status, self.message, self.tracks = 'unavailable', str(error), []
+
+    def forward(self):
+        retry_seconds = 1
+        while not self.stop.is_set():
+            if self.delivery:
+                okay = self.delivery.flush()
+                retry_seconds = 1 if okay else min(30, retry_seconds * 2)
+            self.stop.wait(retry_seconds)
 
     def camera(self, video):
         capture = None
@@ -205,6 +216,8 @@ def main():
     target = runtime.synthetic if args.source == 'synthetic' else lambda: runtime.camera(str(args.video) if args.video else args.camera)
     thread = threading.Thread(target=target, daemon=True)
     thread.start()
+    delivery_thread = threading.Thread(target=runtime.forward, daemon=True)
+    delivery_thread.start()
     print('Open http://127.0.0.1:%s — source=%s' % (server.server_port, args.source), flush=True)
     try:
         server.serve_forever()
@@ -214,6 +227,7 @@ def main():
         runtime.stop.set()
         server.server_close()
         thread.join(timeout=5)
+        delivery_thread.join(timeout=5)
 
 
 if __name__ == '__main__':

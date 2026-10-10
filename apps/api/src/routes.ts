@@ -1,3 +1,5 @@
+import { sessionStillValid } from "./auth-service.js";
+import { randomBytes, createHash } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
@@ -22,7 +24,7 @@ import {
 import type { Repository } from "./db/repository.js";
 import type { Config } from "./config.js";
 import type { MeasurementManager } from "./measurement/manager.js";
-import { identity, worker, supervisor } from "./auth.js";
+import { identity, worker, supervisor, resolvedIdentity } from "./auth.js";
 import { fail } from "./errors.js";
 import { sessionSummary } from "./domain/sessions.js";
 import {
@@ -137,17 +139,34 @@ export async function registerRoutes(
     };
   });
   app.get("/api/workers", async (req) => {
-    if (!c.demoMode) supervisor(req);
-    return { workers: await r.list("workers") };
+    const a = resolvedIdentity(req)?.identity;
+    if (!a && !(c.demoMode && c.authMode === "demo" && !c.hosted))
+      identity(req);
+    return {
+      workers: (await r.list("workers")).filter(
+        (w) => !a || a.role === "supervisor" || w.id === a.workerId,
+      ),
+    };
   });
   app.post("/api/demo/login", async (req, reply) => {
-    if (!c.demoMode) fail(403, "DEMO_DISABLED", "Demo login is disabled");
+    if (!c.demoMode || c.hosted || c.authMode !== "demo")
+      fail(403, "DEMO_DISABLED", "Demo login is disabled");
     const a = LoginSchema.parse(req.body);
     if (a.role === "worker" && !(await r.get("workers", a.workerId)))
       fail(404, "NOT_FOUND", "Worker not found");
+    const authToken = randomBytes(32).toString("base64url");
+    const expiresAt = Date.now() + 86400000;
+    await r.driver.query(
+      "INSERT INTO auth_demo_sessions (token_digest,payload,expires_at) VALUES ($1,$2,$3)",
+      [
+        createHash("sha256").update(authToken).digest("hex"),
+        JSON.stringify(a),
+        new Date(expiresAt).toISOString(),
+      ],
+    );
     reply.setCookie(
       "siteguard",
-      JSON.stringify({ identity: a, expiresAt: Date.now() + 86400000 }),
+      JSON.stringify({ identity: a, expiresAt, authToken }),
       {
         signed: true,
         httpOnly: true,
@@ -331,14 +350,15 @@ export async function registerRoutes(
       if (replaying) buffered.push(e);
       else send(e);
     });
-    const heartbeat = setInterval(() => {
+    const heartbeat = setInterval(async () => {
       try {
-        identity(req);
+        if (!(await sessionStillValid(r, c, req)))
+          fail(401, "UNAUTHENTICATED", "Session expired");
       } catch {
         write({
           type: "error",
           code: "UNAUTHENTICATED",
-          message: "Demo identity expired. Sign in again.",
+          message: "Session ended. Sign in again.",
           retryable: false,
         });
         reply.raw.end();
@@ -559,7 +579,14 @@ export async function registerRoutes(
       request.revision++;
       request.note = b.note;
       await tx.put("rest_requests", request);
-      await audit(tx, "request_" + b.action, request.id, before, request);
+      await audit(
+        tx,
+        "request_" + b.action,
+        request.id,
+        before,
+        request,
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
+      );
       return { request, scheduleRevision: await tx.bump() };
     });
   });
@@ -599,7 +626,14 @@ export async function registerRoutes(
       request.revision++;
       await tx.put("breaks", br);
       await tx.put("rest_requests", request);
-      await audit(tx, "break_update", br.id, before, br);
+      await audit(
+        tx,
+        "break_update",
+        br.id,
+        before,
+        br,
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
+      );
       return { break: br, scheduleRevision: await tx.bump() };
     });
   });
@@ -646,6 +680,7 @@ export async function registerRoutes(
           protectedBreakCount: s.breaks.filter((x) => x.kind === "protected")
             .length,
         },
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
       );
       return {
         scheduleRevision: await tx.bump(),

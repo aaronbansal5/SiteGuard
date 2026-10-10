@@ -9,6 +9,8 @@ import { seed } from "./db/seed.js";
 import { interruptSessions } from "./domain/sessions.js";
 import { MeasurementManager } from "./measurement/manager.js";
 import { registerRoutes } from "./routes.js";
+import { registerSafetyRoutes } from "./fall/routes.js";
+import { registerAuth } from "./auth-service.js";
 import { AppError } from "./errors.js";
 export async function createApp(
   overrides: Partial<Config> = {},
@@ -79,6 +81,24 @@ export async function createApp(
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
       );
     }
+    if (
+      c.authMode === "oidc" &&
+      ["POST", "PATCH", "DELETE"].includes(req.method) &&
+      req.url.startsWith("/api/") &&
+      !req.headers.authorization &&
+      req.url.split("?")[0] !== "/api/auth/mobile/exchange"
+    ) {
+      if (
+        req.headers.origin !== c.appOrigin ||
+        !req.headers["content-type"]?.startsWith("application/json")
+      ) {
+        throw new AppError(
+          403,
+          "ORIGIN_REJECTED",
+          "Authenticated writes require the application origin and JSON",
+        );
+      }
+    }
     reply.header("Referrer-Policy", "same-origin");
     reply.header("Cache-Control", "no-store");
     if (
@@ -99,8 +119,10 @@ export async function createApp(
         };
       }
       if (
-        origin.host !== req.headers.host ||
-        origin.protocol !== `${c.hosted ? "https" : req.protocol}:`
+        c.authMode === "oidc"
+          ? origin.origin !== c.appOrigin
+          : origin.host !== req.headers.host ||
+            origin.protocol !== `${c.hosted ? "https" : req.protocol}:`
       ) {
         reply.code(403);
         return {
@@ -145,7 +167,9 @@ export async function createApp(
       },
     });
   });
+  await registerAuth(app, r, c);
   await registerRoutes(app, r, c, manager);
+  await registerSafetyRoutes(app, r, c);
   if (existsSync(c.webDist)) {
     await app.register(staticFiles, {
       root: c.webDist,

@@ -56,26 +56,34 @@ export class Repository {
     await this.driver.exec(
       "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
     );
-    await this.transaction(async (r) => {
-      const applied = await r.driver.query(
-        "SELECT version FROM schema_migrations WHERE version=$1",
-        ["001_initial"],
-      );
-      if (applied.length) return;
-      await r.driver.exec(
-        readFileSync(
-          resolve(
-            `apps/api/src/db/migrations/${r.driver.kind}/001_initial.sql`,
+    for (const version of [
+      "001_initial",
+      "003_auth",
+      "004_safety",
+      "005_mobile",
+    ]) {
+      await this.transaction(async (r) => {
+        const applied = await r.driver.query(
+          "SELECT version FROM schema_migrations WHERE version=$1",
+          [version],
+        );
+        if (applied.length) return;
+        await r.driver.exec(
+          readFileSync(
+            resolve(
+              `apps/api/src/db/migrations/${r.driver.kind}/${version}.sql`,
+            ),
+            "utf8",
           ),
-          "utf8",
-        ),
-      );
-      await r.driver.query(
-        "INSERT INTO schema_migrations (version,applied_at) VALUES ($1,$2)",
-        ["001_initial", new Date().toISOString()],
-      );
-    });
+        );
+        await r.driver.query(
+          "INSERT INTO schema_migrations (version,applied_at) VALUES ($1,$2)",
+          [version, new Date().toISOString()],
+        );
+      });
+    }
   }
+
   async list<K extends keyof Entities>(table: K): Promise<Entities[K][]> {
     return (await this.driver.query(`SELECT payload FROM ${table}`)).map((r) =>
       JSON.parse(r.payload as string),

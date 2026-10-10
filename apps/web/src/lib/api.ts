@@ -31,6 +31,8 @@ export async function api<T>(
       "The service did not return a valid response. Check the action status before retrying.",
     );
   }
+  if (response.status === 401 && path !== "/auth/me")
+    window.dispatchEvent(new Event("siteguard:unauthenticated"));
   if (!response.ok)
     throw new Error(data.error?.message || "Request could not be confirmed");
   return data as T;
