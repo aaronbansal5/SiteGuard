@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>SiteGuard · Scene review</title>
     <style>
+      /* Rules below set display (e.g. .camera-banner is flex), which would
+         otherwise override the hidden attribute and show the red camera
+         banner in synthetic mode. */
+      [hidden] {
+        display: none !important;
+      }
       :root {
         font-family:
           Inter,

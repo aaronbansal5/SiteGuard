@@ -50,7 +50,7 @@ test("real-time mock check-in → summary → request → protected staffing cha
   ).toBeVisible();
   const context = await browser.newContext();
   const supervisor = await context.newPage();
-  await supervisor.goto("http://127.0.0.1:5173/");
+  await supervisor.goto("/");
   await supervisor
     .getByRole("button", { name: "Open safety operations" })
     .click();
@@ -76,6 +76,11 @@ test("real-time mock check-in → summary → request → protected staffing cha
   await expect(
     supervisor.getByText("Coverage updated. Protected breaks preserved."),
   ).toBeVisible();
+  await expect(
+    supervisor
+      .locator("section.explanation")
+      .getByText("Deterministic explanation", { exact: true }),
+  ).toBeVisible();
   const after = (
     await (await supervisor.request.get("/api/breaks")).json()
   ).breaks.filter((b: Break) => b.kind === "protected");
@@ -85,6 +90,7 @@ test("real-time mock check-in → summary → request → protected staffing cha
   await expect(
     supervisor.getByRole("heading", { name: "Human assistance requested" }),
   ).toBeVisible();
+  await expect(supervisor.getByText("Reported: Feeling dizzy")).toBeVisible();
   await supervisor
     .getByRole("button", { name: "Acknowledge", exact: true })
     .click();
