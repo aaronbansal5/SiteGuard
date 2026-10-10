@@ -54,8 +54,11 @@ export function renderSelection(raw: unknown, facts: Record<string, string[]>) {
     return facts[s.factId][s.variant];
   });
 }
+export const GEMINI_TIMEOUT_MS = 5000;
 export class Explainer {
   private cache = new Map<string, Explanation>();
+  /** Why the most recent explain() call used the deterministic fallback; never contains the API key. */
+  lastFallbackReason: string | undefined;
   constructor(
     private config: Config,
     private generate?: (facts: Record<string, string[]>) => Promise<unknown>,
@@ -69,8 +72,14 @@ export class Explainer {
       observations: Object.values(facts).map((v) => v[0]),
       limitations,
     };
-    if ((!this.config.geminiKey || !this.config.geminiModel) && !this.generate)
+    this.lastFallbackReason = undefined;
+    if (
+      (!this.config.geminiKey || !this.config.geminiModel) &&
+      !this.generate
+    ) {
+      this.lastFallbackReason = "GEMINI_API_KEY or GEMINI_MODEL is not set";
       return fallback;
+    }
     const key = createHash("sha256")
       .update(JSON.stringify({ facts, limitations }))
       .digest("hex");
@@ -82,20 +91,34 @@ export class Explainer {
       const raw = await Promise.race([
         task,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("Timeout")), 5000);
+          timer = setTimeout(
+            () => reject(new Error("Timeout")),
+            GEMINI_TIMEOUT_MS,
+          );
         }),
       ]).finally(() => clearTimeout(timer));
+      const observations = renderSelection(raw, facts);
+      // Every server fact must be presented; Gemini may only reorder/rephrase via approved variants.
+      if (observations.length !== Object.keys(facts).length)
+        throw new Error("Incomplete fact selection");
       const result: Explanation = {
         origin: "gemini",
-        observations: renderSelection(raw, facts),
+        observations,
         limitations,
       };
       if (this.cache.size >= 100) this.cache.clear();
       this.cache.set(key, result);
       return result;
-    } catch {
+    } catch (e) {
+      this.lastFallbackReason = this.redact(
+        e instanceof Error ? e.message : String(e),
+      ).slice(0, 500);
       return fallback;
     }
+  }
+  private redact(message: string) {
+    const key = this.config.geminiKey;
+    return key ? message.split(key).join("[redacted]") : message;
   }
   private async call(facts: Record<string, string[]>) {
     const ai = new GoogleGenAI({ apiKey: this.config.geminiKey });
@@ -107,8 +130,11 @@ export class Explainer {
         facts,
       }),
       config: {
-        httpOptions: { timeout: 5000, retryOptions: { attempts: 1 } },
-        abortSignal: AbortSignal.timeout(5000),
+        httpOptions: {
+          timeout: GEMINI_TIMEOUT_MS,
+          retryOptions: { attempts: 1 },
+        },
+        abortSignal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
         responseMimeType: "application/json",
         responseJsonSchema: {
           type: "object",

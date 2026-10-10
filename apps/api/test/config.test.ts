@@ -20,3 +20,27 @@ describe("bridge configuration boundary", () => {
     );
   });
 });
+describe("hosted secrets", () => {
+  it("accepts secrets supplied through config overrides", () => {
+    expect(() =>
+      loadConfig({
+        hosted: true,
+        cookieSecret: "c".repeat(32),
+        measurementToken: "m".repeat(16),
+      }),
+    ).not.toThrow();
+  });
+  it("still requires secrets in hosted mode", () => {
+    const saved = [process.env.COOKIE_SECRET, process.env.MEASUREMENT_TOKEN];
+    delete process.env.COOKIE_SECRET;
+    delete process.env.MEASUREMENT_TOKEN;
+    try {
+      expect(() => loadConfig({ hosted: true })).toThrow(
+        "Hosted mode requires",
+      );
+    } finally {
+      if (saved[0] !== undefined) process.env.COOKIE_SECRET = saved[0];
+      if (saved[1] !== undefined) process.env.MEASUREMENT_TOKEN = saved[1];
+    }
+  });
+});

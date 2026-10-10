@@ -11,7 +11,7 @@ Gemini requires both key/model. Presage requires token and independently supplie
 ## Storage
 
 Relational identity/reference/status columns and SQL foreign keys enforce record relationships. Operational model fields are stored together in a JSON text payload to keep SQLite/PostgreSQL representations identical; rates, source, quality, sequence and timestamp use native time-series columns. `reading_receipts` enforces sequence replay identity separately from hypertable keys. Zod validates API writes; transactions serialize scheduling revisions and state changes.
-PostgreSQL serializes mutations with a schedule-state row lock. SQLite serializes transactions within the API process; run one API process per SQLite file and do not run CLI reset while serving.
+PostgreSQL serializes mutations with a transaction-scoped advisory lock. SQLite serializes transactions within the API process; run one API process per SQLite file and do not run CLI reset while serving.
 Historical analytics use the same TypeScript rules across stores. Sponsor-specific aggregation is not required for the demo.
 
 ## Commands
