@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
 import type { Session } from "@siteguard/contracts";
+import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { api, useResource, useAction } from "../lib/api";
 import { useSessionStream } from "../lib/session-stream";
 import {
@@ -64,7 +65,8 @@ export function Measurement() {
       0,
       Math.floor((now - Date.parse(s.startedAt)) / 1000),
     ),
-    quality = stream.readings.at(-1)?.reading.quality;
+    quality = stream.readings.at(-1)?.reading.quality,
+    target = RECOMMENDED_CHECK_IN_SECONDS[s.source];
   return (
     <>
       <PageHeading
@@ -120,12 +122,14 @@ export function Measurement() {
           </div>
           <div className="progress">
             <span
-              style={{ width: `${Math.min(100, (elapsed / 60) * 100)}%` }}
+              style={{ width: `${Math.min(100, (elapsed / target) * 100)}%` }}
             />
           </div>
           <p className="fine-print">
-            Demo walkthrough: 60 seconds. Data sufficiency is not a medical
-            threshold.
+            {s.source === "mock"
+              ? `Demo walkthrough: ${target} seconds.`
+              : `Recommended: ${target} seconds. Readings need about 30–45 seconds of warm-up before they count.`}{" "}
+            Data sufficiency is not a medical threshold.
           </p>
           <button
             className="button primary full"

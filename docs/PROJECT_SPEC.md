@@ -26,7 +26,7 @@ Slate/navy and restrained teal; amber pending requests. No recovery/safety score
 
 ## Analytics
 
-Metric-independent: quality=valid and non-null. Initial first 15 seconds; final last 15 seconds. Duration >=45 seconds; five readings spanning five seconds per window; no overlapping windows. Medians; delta=final-initial. Otherwise insufficient_data. These are data-sufficiency rules, not clinical thresholds.
+Metric-independent: quality=valid and non-null. Initial window: the 15 seconds starting at that metric's first valid reading (vendor warm-up differs per metric; pulse and breathing are anchored separately); final last 15 seconds. Duration >=45 seconds measured from that first valid reading; five readings spanning five seconds per window; no overlapping windows. Recommended check-in length: real Presage 90 seconds (positioning and warm-up come first); mock 60 seconds (synthetic, valid from the first reading, so its windows equal the first/last 15 seconds). Medians; delta=final-initial. Otherwise insufficient_data. These are data-sufficiency rules, not clinical thresholds.
 Historical: most recent five eligible completed prior sessions within 30 days; same worker/source/workload/temperature band (<20, 20-<30, >=30 Celsius); at least three per metric. Missing context prevents comparison. Bands are coarse context groups, not safety thresholds. Never mix synthetic/real history; no causal inference.
 
 ## Protected scheduling
