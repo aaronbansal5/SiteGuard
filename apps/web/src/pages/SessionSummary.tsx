@@ -81,7 +81,11 @@ export function SessionSummary() {
               {s.shareWithSupervisor
                 ? "This session summary is shared with safety operations."
                 : "This session summary is private to your worker workspace."}{" "}
-              {s.context.workload || "Unrecorded"} workload ·{" "}
+              {s.context.workload
+                ? s.context.workload[0].toUpperCase() +
+                  s.context.workload.slice(1)
+                : "Unrecorded"}{" "}
+              workload ·{" "}
               {s.context.temperatureC === null
                 ? "Temperature not recorded"
                 : `${s.context.temperatureC}°C`}

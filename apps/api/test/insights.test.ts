@@ -4,12 +4,39 @@ import {
   Explainer,
   GEMINI_TIMEOUT_MS,
   renderSelection,
+  scheduleFacts,
 } from "../src/insights/explain.js";
 const facts = {
   pulse: ["Pulse changed by -8 bpm."],
   limits: ["Insufficient history."],
 };
 describe("fact-only explanations", () => {
+  it("pluralizes schedule facts", () => {
+    expect(
+      scheduleFacts({
+        assignmentCount: 1,
+        gapCount: 1,
+        protectedBreakCount: 1,
+      }),
+    ).toEqual({
+      coverage: [
+        "The committed proposal contains 1 assignment interval and 1 coverage gap.",
+      ],
+      breaks: ["1 protected break was preserved."],
+    });
+    expect(
+      scheduleFacts({
+        assignmentCount: 20,
+        gapCount: 0,
+        protectedBreakCount: 6,
+      }),
+    ).toEqual({
+      coverage: [
+        "The committed proposal contains 20 assignment intervals and 0 coverage gaps.",
+      ],
+      breaks: ["6 protected breaks were preserved."],
+    });
+  });
   it("has deterministic no-key fallback", async () => {
     expect(
       (

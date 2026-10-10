@@ -33,7 +33,7 @@ import {
   validateAssignments,
 } from "./domain/scheduling.js";
 import { audit } from "./domain/requests.js";
-import { Explainer, sessionFacts } from "./insights/explain.js";
+import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
 import { personalInsights, personalTrend } from "./domain/personal.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
@@ -715,14 +715,11 @@ export async function registerRoutes(
       protectedBreakCount: number;
     };
     return explainer.explain(
-      {
-        coverage: [
-          `The committed proposal contains ${after.assignments.length} assignment intervals and ${after.gapCount} coverage gaps.`,
-        ],
-        breaks: [
-          `${after.protectedBreakCount} protected breaks were preserved.`,
-        ],
-      },
+      scheduleFacts({
+        assignmentCount: after.assignments.length,
+        gapCount: after.gapCount,
+        protectedBreakCount: after.protectedBreakCount,
+      }),
       [
         "Staffing changes are operational decisions; measurements do not establish fitness for work.",
       ],

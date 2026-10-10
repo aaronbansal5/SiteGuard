@@ -1,0 +1,162 @@
+{
+  "base": "http://127.0.0.1:3611",
+  "coreSeconds": 65.66174773,
+  "beats": [
+    {
+      "id": "B1",
+      "title": "Problem (landing page)",
+      "window": "0:00–0:20",
+      "targetSeconds": 20,
+      "status": "pass",
+      "checks": [
+        "landing shows 'Local demonstration' badge",
+        "no banned wording on landing"
+      ],
+      "screenshots": ["01-landing.png"],
+      "seconds": 0.5923043639999999
+    },
+    {
+      "id": "B2",
+      "title": "Protected schedule + Integrations (supervisor)",
+      "window": "0:20–0:35",
+      "targetSeconds": 15,
+      "status": "pass",
+      "checks": [
+        "Integrations panel visible",
+        "Integrations: Integrations Database Local SQLite Explanations Deterministic only No explanation requested yet Presage camera Not configured",
+        "six fictional workers on the timeline",
+        "six protected 15-minute breaks shown"
+      ],
+      "screenshots": ["02-supervisor-schedule.png"],
+      "seconds": 0.40607761600000003
+    },
+    {
+      "id": "B3",
+      "title": "Consent (worker W-01)",
+      "window": "0:35–0:55",
+      "targetSeconds": 20,
+      "status": "pass",
+      "checks": [
+        "sharing with supervisor is off by default",
+        "synthetic source selected"
+      ],
+      "screenshots": ["03-consent.png"],
+      "seconds": 0.6705270290000003
+    },
+    {
+      "id": "B4",
+      "title": "Measurement (60 s real time, not accelerated)",
+      "window": "0:55–1:55",
+      "targetSeconds": 60,
+      "status": "pass",
+      "checks": [
+        "'Synthetic demo' badge",
+        "'No camera required'",
+        "≥ 60 one-second readings stored",
+        "invalid segment is readings 20,21,22,23,24 (shown as a gap)"
+      ],
+      "screenshots": ["04a-measurement-gap.png", "04b-measurement-60s.png"],
+      "seconds": 60.468567507
+    },
+    {
+      "id": "B5",
+      "title": "Summary + worker-only personal comparison + tiredness rating",
+      "window": "1:55–2:30",
+      "targetSeconds": 35,
+      "status": "pass",
+      "checks": [
+        "pulse and breathing show 'Observed change'",
+        "comparison uses 4 matching synthetic prior sessions",
+        "explanation labeled deterministic",
+        "context line reads 'Heavy workload · 26°C'",
+        "no banned wording on summary",
+        "personal panel labeled experimental + synthetic demo data",
+        "rating saved, then removed by the worker",
+        "supervisor gets 403 for personal insights"
+      ],
+      "screenshots": ["05a-summary.png", "05b-personal-panel.png"],
+      "seconds": 0.5117533879999974
+    },
+    {
+      "id": "B6",
+      "title": "Request and approval",
+      "window": "2:30–2:55",
+      "targetSeconds": 25,
+      "status": "pass",
+      "checks": [
+        "request approved",
+        "approved rest starts after the protected break (2026-10-10T22:33:21.457Z ≥ 2026-10-10T22:33:21.457Z)"
+      ],
+      "screenshots": ["06a-approve-dialog.png", "06b-approved.png"],
+      "seconds": 0.7071415239999987
+    },
+    {
+      "id": "B7",
+      "title": "Coverage preview and commit",
+      "window": "2:55–3:15",
+      "targetSeconds": 20,
+      "status": "pass",
+      "checks": [
+        "coverage explanation labeled 'Deterministic explanation'",
+        "protected breaks unchanged after commit"
+      ],
+      "screenshots": ["07a-proposal.png", "07b-committed.png"],
+      "seconds": 0.3617342239999998
+    },
+    {
+      "id": "B8",
+      "title": "Human assistance",
+      "window": "3:15–3:35",
+      "targetSeconds": 20,
+      "status": "pass",
+      "checks": [
+        "supervisor sees the symptom label 'Feeling dizzy'",
+        "assistance still unresolved (acknowledged) after commit",
+        "worker has no current or future task assignment",
+        "protected breaks still unchanged"
+      ],
+      "screenshots": ["08-assistance.png"],
+      "seconds": 1.8711550530000023
+    },
+    {
+      "id": "B9",
+      "title": "Close",
+      "window": "3:35–3:45",
+      "targetSeconds": 10,
+      "status": "pass",
+      "checks": [
+        "approved additional rest drawn on the timeline (2026-10-10T22:33:21.457Z)",
+        "no banned wording on supervisor view",
+        "supervisor view shows no personal panel or rating"
+      ],
+      "screenshots": ["09-close-timeline.png"],
+      "seconds": 0.0710775020000001
+    },
+    {
+      "id": "X1",
+      "title": "Worker history (DEMO.md step 7; not in the spoken script)",
+      "window": "—",
+      "targetSeconds": 0,
+      "status": "pass",
+      "checks": ["personal trend shown for synthetic sessions"],
+      "screenshots": ["10-history.png"],
+      "seconds": 0.2823228690000105
+    },
+    {
+      "id": "F1",
+      "title": "Fall detection (standalone, synthetic)",
+      "window": "optional",
+      "targetSeconds": 30,
+      "status": "pass",
+      "checks": [
+        "no 'Camera active' banner in synthetic mode",
+        "exactly one incident raised",
+        "resolve without a note is refused",
+        "incident resolved with a note",
+        "brief bend raises no new incident"
+      ],
+      "screenshots": ["11a-fall-incident.png", "11b-fall-resolved.png"],
+      "seconds": 11.765908028999998
+    }
+  ]
+}

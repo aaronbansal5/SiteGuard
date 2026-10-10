@@ -42,6 +42,13 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.runtime.scenario, 'horizontal')
         self.assertEqual(json.load(urllib.request.urlopen(self.url + '/api/events')), {'events': []})
 
+    def test_dashboard_hidden_attribute_beats_display_rules(self):
+        # .camera-banner sets display:flex; without this override the red
+        # "Camera active" banner showed in synthetic mode (demo rehearsal).
+        html = urllib.request.urlopen(self.url + '/').read().decode()
+        self.assertRegex(html, r'\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}')
+        self.assertIn('id="camera-banner" role="status" hidden', html)
+
     def test_rejects_cross_origin_and_invalid_scenario(self):
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.post('/api/demo', {'scenario': 'horizontal'}, 'https://evil.example')

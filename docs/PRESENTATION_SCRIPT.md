@@ -17,14 +17,14 @@ Wording rules: say "observations", "measured change", "request", "protected brea
 Click "Begin check-in".
 
 **0:55 to 1:55 · Measurement (talk over the 60 seconds)**
-"Pulse and breathing arrive once a second. The badge says Synthetic demo. This dip around 20 seconds is a deliberately invalid segment. Invalid or missing readings are shown as gaps and left out of the calculations. A failed measurement means neither safe nor unsafe."
+"Pulse and breathing arrive once a second. The badge says Synthetic demo. This gap around 20 seconds is a deliberately invalid segment. Invalid or missing readings are shown as gaps and left out of the calculations. A failed measurement means neither safe nor unsafe."
 "In real use, Presage SmartSpectra supplies these observations from a camera through a local bridge. The app never stores footage, and the source can't change in the middle of a session."
 At 60 readings, click "Finish check-in".
 
 **1:55 to 2:30 · Summary and personal comparison**
 "We compare the first and last 15-second windows using medians, and only when there are enough valid observations. Otherwise it says insufficient data. The comparison uses only prior sessions from the same source and context, here four synthetic ones. This describes what was measured. It is not a recovery score."
 Point at "Compared with your own usual" and "How tired do you feel?" (worker only).
-"Only the worker sees this part. It's experimental and compares them only with their own past sessions. The worker can also rate how tired they feel, and remove that rating at any time. In this demo, the history and ratings are synthetic. Supervisors, the planner and Gemini never see any of it."
+"Only the worker sees this part. It's experimental and compares them only with their own past sessions, here twelve synthetic ones in any context. The worker can also rate how tired they feel, and remove that rating at any time. In this demo, the history and ratings are synthetic. Supervisors, the planner and Gemini never see any of it."
 
 **2:30 to 2:55 · Request and approval**
 Worker: "Request additional rest", 5 minutes, send. Supervisor: "Approve rest", confirm.

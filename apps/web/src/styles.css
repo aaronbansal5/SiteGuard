@@ -1933,6 +1933,12 @@ textarea::placeholder {
   line-height: 1.5;
   margin: 0 0 6px;
 }
+/* Separate the tiredness self-report from the pulse/breathing comparison. */
+.card.personal .two-columns + .personal-block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e8eeec;
+}
 .card.personal > p {
   font-size: 12px;
   line-height: 1.5;
