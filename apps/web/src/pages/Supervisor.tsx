@@ -27,6 +27,7 @@ import {
   SafetyNote,
 } from "../components/ui";
 import { ScheduleTimeline } from "../components/ScheduleTimeline";
+import { IntegrationsPanel } from "../components/IntegrationsPanel";
 type Proposal = {
   baseRevision: number;
   assignments: Assignment[];
@@ -154,6 +155,7 @@ function Operations() {
           </button>
         }
       />
+      <IntegrationsPanel />
       <ErrorNotice message={resource.error || a.error} />
       {resource.loading && !o ? (
         <Loading />

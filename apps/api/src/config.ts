@@ -30,15 +30,16 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     hosted,
     bridgeUrl: process.env.PRESAGE_BRIDGE_URL || "http://127.0.0.1:4311",
     bridgeToken: process.env.PRESAGE_BRIDGE_TOKEN,
-    geminiKey: process.env.GEMINI_API_KEY,
-    geminiModel: process.env.GEMINI_MODEL,
+    geminiKey: process.env.GEMINI_API_KEY?.trim() || undefined,
+    geminiModel: process.env.GEMINI_MODEL?.trim() || undefined,
     webDist: resolve("apps/web/dist"),
     mockIntervalMs: 1000,
     ...overrides,
   };
   if (
     c.hosted &&
-    (!process.env.COOKIE_SECRET || !process.env.MEASUREMENT_TOKEN)
+    (!(process.env.COOKIE_SECRET || overrides.cookieSecret) ||
+      !(process.env.MEASUREMENT_TOKEN || overrides.measurementToken))
   )
     throw new Error("Hosted mode requires COOKIE_SECRET and MEASUREMENT_TOKEN");
   if (c.cookieSecret.length < 32)

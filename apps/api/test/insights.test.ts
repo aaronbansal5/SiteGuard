@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { loadConfig } from "../src/config.js";
-import { Explainer, renderSelection } from "../src/insights/explain.js";
+import {
+  Explainer,
+  GEMINI_TIMEOUT_MS,
+  renderSelection,
+} from "../src/insights/explain.js";
 const facts = {
   pulse: ["Pulse changed by -8 bpm."],
   limits: ["Insufficient history."],
@@ -49,7 +53,7 @@ describe("fact-only explanations", () => {
     try {
       const e = new Explainer(loadConfig(), () => new Promise(() => {}));
       const result = e.explain(facts, []);
-      await vi.advanceTimersByTimeAsync(5001);
+      await vi.advanceTimersByTimeAsync(GEMINI_TIMEOUT_MS + 1);
       expect((await result).origin).toBe("deterministic");
     } finally {
       vi.useRealTimers();

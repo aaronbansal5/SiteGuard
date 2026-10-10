@@ -1,0 +1,158 @@
+{
+  "fixtureFormat": 1,
+  "name": "signal-gap",
+  "provenance": "SYNTHETIC: hand-authored in the bridge's normalized AdapterSample form. Not recorded from the Presage SDK or a camera; contains no vendor field names. For tests/smoke only.",
+  "description": "Valid samples, then the adapter reports positioning (signal lost) with a 9-second gap and no samples, then measuring resumes. The bridge must not invent readings for the gap.",
+  "events": [
+    {
+      "atMs": 0,
+      "type": "status",
+      "state": "measuring",
+      "message": null
+    },
+    {
+      "atMs": 1000,
+      "type": "sample",
+      "pulse": {
+        "value": 95.7,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.9,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 2000,
+      "type": "sample",
+      "pulse": {
+        "value": 95.4,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.8,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 3000,
+      "type": "sample",
+      "pulse": {
+        "value": 95.1,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.7,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 4000,
+      "type": "sample",
+      "pulse": {
+        "value": 94.8,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.6,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 5000,
+      "type": "sample",
+      "pulse": {
+        "value": 94.5,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.5,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 5500,
+      "type": "status",
+      "state": "positioning",
+      "message": "Fixture: face not detected."
+    },
+    {
+      "atMs": 15000,
+      "type": "status",
+      "state": "measuring",
+      "message": null
+    },
+    {
+      "atMs": 15000,
+      "type": "sample",
+      "pulse": {
+        "value": 93,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 16000,
+      "type": "sample",
+      "pulse": {
+        "value": 92.8,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.9,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 17000,
+      "type": "sample",
+      "pulse": {
+        "value": 92.6,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.8,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 18000,
+      "type": "sample",
+      "pulse": {
+        "value": 92.4,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.7,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 19000,
+      "type": "sample",
+      "pulse": {
+        "value": 92.2,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.6,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 20000,
+      "type": "sample",
+      "pulse": {
+        "value": 92,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.5,
+        "status": "valid"
+      }
+    }
+  ]
+}

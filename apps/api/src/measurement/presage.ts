@@ -53,7 +53,9 @@ export class PresageSource implements MeasurementSource {
       headers: this.headers(),
       redirect: "error",
       body: JSON.stringify({ appSessionId: id }),
-      signal: AbortSignal.timeout(5000),
+      // Camera + SDK pipeline startup is slower than a health check (observed
+      // several seconds on macOS with SmartSpectra 3.4.0).
+      signal: AbortSignal.timeout(30000),
     });
     if (!response.ok)
       throw new Error("Presage bridge could not start a camera session");
@@ -131,13 +133,13 @@ export class PresageSource implements MeasurementSource {
                 .join("\n");
               if (!data) continue;
               const event = BridgeEventSchema.parse(JSON.parse(data));
+              const raw = block
+                .split("\n")
+                .find((l) => l.startsWith("id:"))
+                ?.slice(3)
+                .trim();
+              const sequence = Number(raw);
               if (event.type === "reading") {
-                const raw = block
-                  .split("\n")
-                  .find((l) => l.startsWith("id:"))
-                  ?.slice(3)
-                  .trim();
-                const sequence = Number(raw);
                 if (
                   raw === undefined ||
                   !Number.isSafeInteger(sequence) ||
@@ -148,7 +150,15 @@ export class PresageSource implements MeasurementSource {
                 if (sequence <= this.cursor) continue;
                 this.cursor = sequence;
                 this.emit({ ...event, sequence });
-              } else this.emit(event);
+              } else {
+                // Event IDs are shared across event types: advance the cursor on
+                // status/error events too so a reconnect does not replay them.
+                if (raw !== undefined && Number.isSafeInteger(sequence)) {
+                  if (sequence <= this.cursor) continue;
+                  this.cursor = sequence;
+                }
+                this.emit(event);
+              }
               failures = 0;
             }
           }
