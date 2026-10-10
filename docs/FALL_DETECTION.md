@@ -1,6 +1,6 @@
 # Possible-person-down feature proposal
 
-Status: researched proposal; no detector, ingestion endpoint, or incident UI has been implemented in SiteGuard. Keep sponsor integration work separate.
+Status: a standalone, loopback-only detector prototype exists in `integrations/fall-detection` (see its README and INTEGRATION.md). No ingestion endpoint, contract, migration, or incident UI has been implemented in the SiteGuard app. Keep sponsor integration work separate.
 
 ## Reference implementation findings
 

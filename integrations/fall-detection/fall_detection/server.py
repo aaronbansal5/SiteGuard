@@ -29,8 +29,9 @@ class Runtime:
         with self.lock:
             observations = list(observations)
             events = self.detector.update(observations, timestamp)
+            threshold = self.detector.ratio_threshold
             self.tracks = [{'trackId': item.track_id, 'bbox': item.bbox,
-                            'horizontal': (item.bbox[3]-item.bbox[1]) / (item.bbox[2]-item.bbox[0]) < 2/3}
+                            'horizontal': (item.bbox[3]-item.bbox[1]) / (item.bbox[2]-item.bbox[0]) < threshold}
                            for item in observations if item.bbox[2] > item.bbox[0]]
             self.frame_size = frame_size
             for event in events:
@@ -42,7 +43,7 @@ class Runtime:
         with self.lock:
             return {'source': self.source, 'status': self.status, 'message': self.message,
                     'tracks': self.tracks, 'frameSize': self.frame_size,
-                    'incidents': self.store.list('incidents')}
+                    'incidents': self.store.review_queue()}
 
     def synthetic(self):
         self.status = 'running'
@@ -76,7 +77,8 @@ class Runtime:
             while not self.stop.is_set():
                 ok, frame = capture.read()
                 if not ok:
-                    self.status, self.message, self.tracks = 'stopped', 'Input ended or capture interrupted; incidents stay open.', []
+                    with self.lock:
+                        self.status, self.message, self.tracks = 'stopped', 'Input ended or capture interrupted; incidents stay open.', []
                     break
                 results = model.track(frame, persist=True, classes=[0], conf=0.5,
                                       tracker='bytetrack.yaml', verbose=False)
@@ -97,7 +99,8 @@ class Runtime:
                 if self.source == 'recorded_fixture':
                     self.stop.wait(1 / fps)
         except Exception as error:
-            self.status, self.message, self.tracks = 'unavailable', str(error), []
+            with self.lock:
+                self.status, self.message, self.tracks = 'unavailable', str(error), []
         finally:
             with self.lock:
                 self.preview_jpeg = None
@@ -116,6 +119,9 @@ def handler(runtime):
             self.send_header('Content-Type', content_type)
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
+            # Stop other sites embedding the loopback camera preview or state.
+            self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
+            self.send_header('Referrer-Policy', 'no-referrer')
             self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
             self.end_headers()
             self.wfile.write(data)
@@ -125,7 +131,11 @@ def handler(runtime):
             expected = '127.0.0.1:' + str(self.server.server_port)
             host = self.headers.get('Host', '')
             origin = self.headers.get('Origin')
-            return host == expected and (origin is None or origin == 'http://' + expected)
+            # Browsers omit Origin on cross-site <img>/navigation GETs; Fetch
+            # Metadata lets us refuse those too. Non-browser clients send none.
+            fetch_site = self.headers.get('Sec-Fetch-Site')
+            return (host == expected and (origin is None or origin == 'http://' + expected)
+                    and fetch_site in (None, 'same-origin', 'none'))
 
         def do_GET(self):
             if not self.allowed():

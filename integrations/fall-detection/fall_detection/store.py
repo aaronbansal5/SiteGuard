@@ -38,6 +38,21 @@ class Store:
             return [json.loads(row[0]) for row in self.db.execute(
                 'SELECT payload FROM ' + table + ' ORDER BY rowid DESC LIMIT ?', (limit,))]
 
+    def review_queue(self, limit=100):
+        """All unresolved incidents plus the newest closed ones, newest first.
+
+        A plain newest-N listing would silently hide an older open incident
+        once enough newer ones arrived; unresolved work must stay visible.
+        """
+        with self.lock:
+            rows = self.db.execute(
+                'SELECT rowid, payload FROM incidents WHERE rowid IN ('
+                ' SELECT rowid FROM incidents'
+                " WHERE json_extract(payload, '$.status') IN ('open', 'acknowledged')"
+                ' UNION SELECT rowid FROM (SELECT rowid FROM incidents ORDER BY rowid DESC LIMIT ?))'
+                ' ORDER BY rowid DESC', (limit,)).fetchall()
+            return [json.loads(row[1]) for row in rows]
+
     def action(self, incident_id, action, note):
         if action not in ('acknowledge', 'resolve', 'false_alarm'):
             raise ValueError('Invalid action')

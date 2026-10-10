@@ -85,6 +85,19 @@ class StoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 restored.action(incident_id, 'acknowledge', '')
 
+    def test_review_queue_keeps_older_unresolved_incidents_visible(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / 'test.sqlite')
+            ids = [store.record({'trackId': str(n), 'durationSeconds': 1.5,
+                                 'evidence': {'heightWidthRatio': .3}}, 'synthetic', 'run', n,
+                                'cam', 'zone')['eventId'] for n in range(1, 6)]
+            for incident_id in ids[1:]:
+                store.action(incident_id, 'false_alarm', 'Synthetic test')
+            queue = store.review_queue(limit=2)
+            self.assertEqual([item['id'] for item in queue], [ids[4], ids[3], ids[0]])
+            self.assertEqual(queue[-1]['status'], 'open')
+            store.db.close()
+
 
 if __name__ == '__main__':
     unittest.main()
