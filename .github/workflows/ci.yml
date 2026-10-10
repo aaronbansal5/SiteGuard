@@ -32,7 +32,15 @@ jobs:
           code=$?
           cat verify.log
           test "$code" -ne 0 && grep -q "origin:         deterministic" verify.log
-      - run: npx playwright install --with-deps chromium
+      # Install the browser build that matches the pinned @playwright/test
+      # (1.64.0) from the lockfile, never a globally installed Playwright.
+      - name: Playwright CLI matches pinned @playwright/test
+        run: |
+          expected="Version $(node -p "require('@playwright/test/package.json').version")"
+          actual="$(npx --no-install playwright --version)"
+          echo "pinned: $expected / cli: $actual"
+          test "$actual" = "$expected"
+      - run: npx --no-install playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -73,3 +81,82 @@ jobs:
           SMOKE_URL=http://127.0.0.1:3001 node scripts/deployment-smoke.mjs
       - if: always()
         run: docker logs siteguard || true
+
+  presage-bridge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/presage-bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: integrations/presage-bridge/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+
+  fall-detection:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/fall-detection
+    steps:
+      - uses: actions/checkout@v4
+      # README states Python 3.9+; the synthetic tests use only the standard
+      # library, so no camera dependencies (ultralytics/opencv) are installed.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python --version
+      - run: python -m unittest discover -s tests -v
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: siteguard_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: ci-only-password
+      DATABASE_URL: postgres://postgres:ci-only-password@127.0.0.1:5432/siteguard_ci
+      POSTGRES_TEST_DATABASE_URL: postgres://postgres:ci-only-password@127.0.0.1:5432/siteguard_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Prepare databases (extension enabled by the administrator role)
+        run: |
+          psql -d siteguard_ci -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS timescaledb"
+          psql -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE siteguard_test"
+          psql -d siteguard_ci -Atc "SELECT extversion FROM pg_extension WHERE extname='timescaledb'"
+      - name: Migrate twice (idempotent)
+        run: |
+          npm run db:migrate:postgres
+          npm run db:migrate:postgres
+      - run: npm run db:enable-timescale
+      - name: Verifier sees schema and hypertable (TLS is NO on the plain CI service)
+        run: |
+          npm run verify:tiger > verify.log 2>&1 || true
+          cat verify.log
+          grep -q "vital_readings hypertable: yes" verify.log
+          grep -q "self_reports" verify.log
+          grep -Eq "TLS: +NO" verify.log
+      - run: npm run test:postgres
