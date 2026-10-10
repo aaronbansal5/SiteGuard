@@ -178,7 +178,9 @@ export class PresageSdkAdapter implements SdkAdapter {
       enableTelemetry: false,
     });
     this.open_ = true;
-    let lastUs = 0;
+    let lastKey = 0;
+    let lastStatus = "";
+    const debug = this.env.PRESAGE_DEBUG === "1";
     let closed = false;
 
     // Started = first of: processingStatus kRunning, first validation feedback,
@@ -203,6 +205,13 @@ export class PresageSdkAdapter implements SdkAdapter {
     }) as never);
     sdk.on("validationStatus", ((code: number, _ts: number, hint: string) => {
       settle(); // the pipeline is running once it reports input feedback
+      // The SDK reports validation on every frame; forward only changes.
+      const next =
+        code === m.ValidationCode.kOk
+          ? "measuring|"
+          : `positioning|${hint || ""}`;
+      if (next === lastStatus) return;
+      lastStatus = next;
       if (code === m.ValidationCode.kOk) handlers.onStatus("measuring", null);
       else handlers.onStatus("positioning", hint || null);
     }) as never);
@@ -210,7 +219,7 @@ export class PresageSdkAdapter implements SdkAdapter {
       settle(new Error(`${errorName(code)}: ${message}`));
       handlers.onError(errorName(code), message, retryable);
     }) as never);
-    sdk.on("metrics", ((buf: Buffer) => {
+    sdk.on("metrics", ((buf: Buffer, packetUs: number) => {
       settle();
       if (closed) return;
       let decoded: unknown;
@@ -227,12 +236,22 @@ export class PresageSdkAdapter implements SdkAdapter {
       };
       const p = latest(d.cardio?.pulseRate);
       const b = latest(d.breathing?.rate);
-      const us = Math.max(p ? (tsUs(p) ?? 0) : 0, b ? (tsUs(b) ?? 0) : 0);
-      if (!us || us <= lastUs) return; // nothing new in this packet
-      lastUs = us;
-      // Vendor timestamps are wall-clock µs; convert to the bridge's monotonic clock.
-      const monotonicMs =
-        this.clock.monotonicMs() + (us / 1000 - this.clock.wallMs());
+      if (debug)
+        console.error(
+          `[presage-sdk] packet ts=${packetUs} pulse=${JSON.stringify(p)} breathing=${JSON.stringify(b)}`,
+        );
+      if (!p && !b) return; // no rate in this packet
+      const sampleUs = Math.max(p ? (tsUs(p) ?? 0) : 0, b ? (tsUs(b) ?? 0) : 0);
+      // Identity for de-duplication: the sample timestamp when the SDK sets
+      // one, otherwise the packet timestamp from the 'metrics' event.
+      const key = sampleUs || (Number.isFinite(packetUs) ? packetUs : 0);
+      if (!key || key <= lastKey) return; // nothing new in this packet
+      lastKey = key;
+      // Sample timestamps are wall-clock epoch µs (vendor data-types docs);
+      // convert to the bridge monotonic clock. Without one, use receipt time.
+      const monotonicMs = sampleUs
+        ? this.clock.monotonicMs() + (sampleUs / 1000 - this.clock.wallMs())
+        : this.clock.monotonicMs();
       handlers.onSample({
         monotonicMs,
         pulse: observation(p),
