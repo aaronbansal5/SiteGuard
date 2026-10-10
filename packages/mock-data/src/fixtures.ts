@@ -6,6 +6,7 @@ import type {
   Session,
   ReadingEnvelope,
   Assignment,
+  SelfReport,
 } from "@siteguard/contracts";
 import { mockReading } from "./readings.js";
 export function fixtureId(n: number) {
@@ -74,8 +75,58 @@ export function fixtures(now = Date.now()) {
       for (let s = 0; s < 60; s++)
         readings.push({ sessionId: id, envelope: mockReading(start, s, h) });
     }
+  // Older, clearly synthetic history so the worker-only personal recovery
+  // baseline (docs/RECOVERY_MODEL.md) has enough same-source sessions to
+  // render. A different workload/temperature context keeps these out of the
+  // contextual comparison above. Settling speed varies deterministically.
+  const rates = [0.8, 1.15, 0.9, 1.25, 0.75, 1.1, 0.95, 1.2];
+  const selfReports: SelfReport[] = [];
+  for (let i = 0; i < workers.length; i++)
+    for (let k = 0; k < rates.length; k++) {
+      const h = 5 + k;
+      const rate = Math.round((rates[k] + ((i % 3) - 1) * 0.03) * 100) / 100;
+      const start = new Date(now - h * 86400000 - i * 60000).toISOString();
+      const id = fixtureId(5000 + i * 20 + k);
+      sessions.push({
+        id,
+        workerId: workers[i].id,
+        breakId: breaks[i].id,
+        source: "mock",
+        status: "completed",
+        startedAt: start,
+        endedAt: new Date(Date.parse(start) + 60000).toISOString(),
+        context: { workload: "moderate", temperatureC: 18 },
+        consentVersion: "v1",
+        shareWithSupervisor: false,
+        interruption: null,
+      });
+      for (let s = 0; s < 60; s++)
+        readings.push({
+          sessionId: id,
+          envelope: mockReading(start, s, h, rate),
+        });
+      // Synthetic self-reports (labeled origin "synthetic"): a made-up
+      // demonstration relationship, not evidence about real workers.
+      selfReports.push({
+        sessionId: id,
+        workerId: workers[i].id,
+        tiredness: Math.min(5, Math.max(1, Math.round(3 - (rate - 1) * 6))),
+        origin: "synthetic",
+        createdAt: new Date(Date.parse(start) + 61000).toISOString(),
+      });
+    }
+  for (const x of sessions)
+    if (x.context.workload === "heavy")
+      selfReports.push({
+        sessionId: x.id,
+        workerId: x.workerId,
+        tiredness: 3,
+        origin: "synthetic",
+        createdAt: new Date(Date.parse(x.endedAt!) + 1000).toISOString(),
+      });
   return {
     workers,
+    selfReports,
     breaks,
     tasks,
     availability,

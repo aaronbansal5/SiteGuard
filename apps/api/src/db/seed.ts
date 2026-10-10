@@ -15,6 +15,7 @@ export async function seed(r: Repository, reset = false) {
         );
       if (sessions.some((s) => s.status === "active"))
         fail(409, "SESSION_ACTIVE", "Stop active sessions before reset");
+      await tx.driver.query("DELETE FROM self_reports");
       await tx.driver.query("DELETE FROM reading_receipts");
       await tx.driver.query("DELETE FROM vital_readings");
       await tx.clear("symptom_reports");
@@ -39,6 +40,7 @@ export async function seed(r: Repository, reset = false) {
     for (const x of f.availability) await tx.put("worker_availability", x);
     for (const x of f.sessions) await tx.put("sessions", x);
     for (const x of f.readings) await tx.insertReading(x.sessionId, x.envelope);
+    for (const x of f.selfReports) await tx.putSelfReport(x);
     const p = planSchedule(await tx.schedule());
     for (const x of p.assignments) await tx.put("task_assignments", x);
   });

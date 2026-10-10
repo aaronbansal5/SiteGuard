@@ -14,6 +14,8 @@ import {
   ExplainSchema,
   EmptySchema,
   HistoryQuerySchema,
+  SelfReportInputSchema,
+  PersonalTrendQuerySchema,
   Id,
   type Session,
   type RestRequest,
@@ -32,6 +34,7 @@ import {
 } from "./domain/scheduling.js";
 import { audit } from "./domain/requests.js";
 import { Explainer, sessionFacts } from "./insights/explain.js";
+import { personalInsights, personalTrend } from "./domain/personal.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
   app: FastifyInstance,
@@ -261,6 +264,46 @@ export async function registerRoutes(
   app.get("/api/sessions/:id/summary", async (req) => {
     const s = await access(req, id(req));
     return { summary: await sessionSummary(r, s.id) };
+  });
+  // Worker-only experimental personal insights (docs/RECOVERY_MODEL.md).
+  // worker() rejects supervisors outright, regardless of sharing consent.
+  const ownSession = async (req: FastifyRequest) => {
+    const workerId = worker(req),
+      s = await r.get("sessions", id(req));
+    if (!s) fail(404, "NOT_FOUND", "Session not found");
+    if (s.workerId !== workerId)
+      fail(403, "FORBIDDEN", "This session belongs to another worker");
+    return s;
+  };
+  app.get("/api/sessions/:id/personal-insights", async (req) => {
+    const s = await ownSession(req);
+    return { insights: await personalInsights(r, s.id) };
+  });
+  app.post("/api/sessions/:id/self-report", async (req) => {
+    const b = SelfReportInputSchema.parse(req.body);
+    const s = await ownSession(req);
+    if (s.status !== "completed")
+      fail(409, "SESSION_ACTIVE", "Complete the check-in before rating it");
+    if (b.tiredness === null) {
+      await r.deleteSelfReport(s.id);
+      return { selfReport: null };
+    }
+    const selfReport = {
+      sessionId: s.id,
+      workerId: s.workerId,
+      tiredness: b.tiredness,
+      origin: "worker" as const,
+      createdAt: new Date().toISOString(),
+    };
+    await r.putSelfReport(selfReport);
+    return { selfReport };
+  });
+  app.get("/api/workers/:id/personal-trend", async (req) => {
+    const workerId = worker(req);
+    if (workerId !== id(req))
+      fail(403, "FORBIDDEN", "Personal insights are private");
+    const q = PersonalTrendQuerySchema.parse(req.query);
+    return { trend: await personalTrend(r, workerId, q.source) };
   });
   app.get("/api/sessions/:id/events", async (req, reply) => {
     const s = await access(req, id(req));

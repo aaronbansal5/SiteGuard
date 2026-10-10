@@ -44,10 +44,12 @@ it.skipIf(!databaseUrl)(
         await repo.driver.query("SELECT current_schema() AS schema"),
       ).toEqual([{ schema }]);
       expect(await repo.list("workers")).toHaveLength(6);
-      expect(await repo.list("sessions")).toHaveLength(24);
+      expect(await repo.list("sessions")).toHaveLength(72);
       expect(
-        await repo.driver.query("SELECT version FROM schema_migrations"),
-      ).toEqual([{ version: "001_initial" }]);
+        await repo.driver.query(
+          "SELECT version FROM schema_migrations ORDER BY version",
+        ),
+      ).toEqual([{ version: "001_initial" }, { version: "003_self_reports" }]);
 
       const s = await populatedSession(repo);
       expect(await repo.ingest(s.id, [mockReading(s.startedAt, 0)])).toEqual({
