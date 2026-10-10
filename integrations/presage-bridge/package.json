@@ -11,6 +11,7 @@
     "start": "tsx --env-file-if-exists=.env src/cli.ts",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:hardware": "tsx --env-file-if-exists=.env scripts/smoke.ts --hardware",
+    "inspect:metrics": "tsx --env-file-if-exists=.env scripts/inspect-metrics.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
