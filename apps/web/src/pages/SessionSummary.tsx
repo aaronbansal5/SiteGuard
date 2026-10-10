@@ -19,6 +19,7 @@ import {
 } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
 import { VitalChart } from "../components/VitalChart";
+import { PersonalInsightsPanel } from "../components/PersonalInsights";
 import { useIdentity } from "../App";
 export function SessionSummary() {
   const { id } = useParams(),
@@ -145,6 +146,12 @@ export function SessionSummary() {
               ))}
             </div>
           </section>
+          {identity?.role === "worker" && identity.workerId === s.workerId && (
+            <PersonalInsightsPanel
+              sessionId={s.id}
+              completed={s.status === "completed"}
+            />
+          )}
           {identity?.role === "worker" && (
             <section className="card">
               <div className="card-header">

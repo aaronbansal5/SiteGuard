@@ -1908,3 +1908,81 @@ textarea::placeholder {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+/* Worker-only experimental personal insights (docs/RECOVERY_MODEL.md). */
+.card.personal .card-header p {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.experimental-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: #705710;
+}
+.personal-block h3 {
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+.personal-block p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 6px;
+}
+.card.personal > p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.rating {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 10px 0;
+}
+.rating label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid #dce5dc;
+  border-radius: 6px;
+  background: #f8faf7;
+  cursor: pointer;
+}
+.rating label.selected {
+  border-color: #1d6657;
+  background: #edf6f2;
+}
+.rating label:focus-within {
+  outline: 2px solid #1d6657;
+  outline-offset: 2px;
+}
+.rating input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.rating strong {
+  font-size: 16px;
+}
+.rating small {
+  font-size: 10px;
+}
+.source-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
