@@ -28,6 +28,8 @@ SQLite snapshots are tested for WAL capture, restored integrity, foreign keys, i
 
 ## Before real workforce deployment
 
+See docs/SECURITY_REVIEW.md for the 2026-10-10 security review: findings, fixes, residual risks and open items.
+
 - Replace public role selection with genuine authentication and accountable authorization. Add revocation/account management; a signed demo cookie is not identity verification.
 - Establish consent withdrawal, retention/deletion, backup handling, and privacy policies for actual personnel data. Hosted mode currently rejects Presage sessions.
 - Validate PostgreSQL behavioral tests and Tiger Data migrations against a dedicated environment, and rehearse provider backup restoration.
