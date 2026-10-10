@@ -5,29 +5,38 @@ Developer 4 (Integration/QA, Hitayu) owns final rehearsal, integration and prese
 ## Pre-flight (10 minutes before)
 
 1. `npm ci`, `npm run build`, `npm run test:production` (all must pass on the demo laptop).
-2. Stop any running API. `npm run demo:reset`, then `npm run dev`. Fictional breaks are seeded relative to startup: worker W-01's protected break starts two minutes before reset and lasts 15 minutes, so reset no earlier than about 10 minutes before presenting.
-3. Open `http://127.0.0.1:5173` in two browser windows: one worker, one supervisor (separate profile or private window so the role cookies differ).
-4. Check `/api/health`: `database` and `insightsMode` must match what you intend to claim. `insightsMode: "configured"` means credentials are present, not that Gemini works.
+2. `npm run verify:all` (reads `.env`). It checks Tiger Data (`verify:tiger`), Gemini (`verify:gemini`) and the Presage bridge health and prints a `PASS`/`FAIL`/`SKIP` summary. A `SKIP` means the variable for that check is not set, so the check did not run. Claim only the integrations marked `PASS`.
+3. Stop any running API. `npm run demo:reset`, then either:
+   - `npm run dev` for the synthetic-only path, or
+   - `npm run dev:live` to start the Presage bridge, API and web together (only when you intend to show Presage).
+
+   Fictional breaks are seeded relative to startup: worker W-01's protected break starts two minutes before reset and lasts 15 minutes, so reset no earlier than about 10 minutes before presenting.
+
+4. Open `http://127.0.0.1:5173` in two browser windows: one worker, one supervisor (separate profile or private window so the role cookies differ).
+5. Supervisor window: check the **Integrations** panel. It shows the database (local SQLite, or PostgreSQL with TimescaleDB version and whether readings are in a hypertable), explanations (deterministic only / configured, and the origin of the last explanation) and the Presage camera bridge status. "Configured" means credentials are present, not that Gemini works. `/api/health` shows the same `database` and `insightsMode`.
 
 ## Core path (synthetic, always available)
 
 1. Landing page: introduce the fictional workforce and the source labels.
-2. Supervisor window, "Open safety operations": six workers, protected 15-minute break intervals, two staffed tasks.
+2. Supervisor window, "Open safety operations": six workers, protected 15-minute break intervals, two staffed tasks, and the Integrations panel.
 3. Worker window, W-01, "Start voluntary check-in": read collection/limitations, tick "I understand the limitations", leave sharing off or explicitly opt in. Choose the synthetic source.
 4. "Begin check-in": one-second pulse/breathing charts with the "Synthetic demo" and "No camera required" badges. Point out the invalid segment and gap at 20 to 24 seconds. Wait 60 seconds, then "Finish check-in".
 5. Summary: initial/final window medians and the comparison with four matching synthetic prior sessions. No recovery, clearance or safety claim.
-6. "Request additional rest", 5 minutes. Supervisor: "Approve rest", confirm; approved rest is placed after the current protected break.
-7. "Preview coverage proposal", "Commit coverage proposal": "Coverage updated. Protected breaks preserved." Show the deterministic factual explanation (show Gemini wording only if live Gemini is verified).
-8. Worker: "Report a symptom", send. Supervisor sees "Human assistance requested". Acknowledge it, then preview/commit again: the assistance remains unresolved and the worker stays unassigned. Resolution needs an explicit human note.
+6. Summary, worker-only **"Compared with your own usual"** (experimental): pulse and breathing change compared with this worker's own past synthetic sessions, and **"How tired do you feel?"**, an optional 1–5 rating that can be removed. The demo history and its ratings are synthetic seed data. The supervisor never sees this panel, the rating or the trend.
+7. Worker history: **"Your recent sessions"** shows the personal trend for one source at a time (synthetic demo sessions or Presage sessions, never mixed).
+8. "Request additional rest", 5 minutes. Supervisor: "Approve rest", confirm; approved rest is placed after the current protected break (the API rejects rest that overlaps it).
+9. "Preview coverage proposal", "Commit coverage proposal": "Coverage updated. Protected breaks preserved." Show the deterministic factual explanation (show Gemini wording only if live Gemini is verified).
+10. Worker: "Report a symptom", send. Supervisor sees "Human assistance requested". Acknowledge it, then preview/commit again: the assistance remains unresolved and the worker stays unassigned. Resolution needs an explicit human note.
 
-The browser test `tests/integration/demo.spec.ts` runs exactly this path at real cadence; `tests/integration/api-journey.spec.ts` checks the same journey at API level.
+The browser test `tests/integration/demo.spec.ts` runs the main path at real cadence. `tests/integration/api-journey.spec.ts` checks the same journey at API level, and `tests/integration/personal-insights.spec.ts` covers the worker-only panels and confirms the supervisor cannot see them.
 
 ## Optional segments (only once verified; see READINESS_REPORT.md)
 
-- Real Presage: start the bridge on the same laptop, set `PRESAGE_BRIDGE_TOKEN`/`PRESAGE_BRIDGE_URL`, restart the API and begin a separate Presage check-in. The badge reads "Presage measurement" and there is no synthetic history comparison. If the bridge fails, the session shows the failure; stop it and begin a separate synthetic session. Never relabel.
-- Tiger Data: only if `/api/health` reports `database: "postgres"` against the Tiger service and `npm run test:postgres` passed against the test service.
-- Gemini: only if `npm run verify:gemini` (deploy branch) or the session explanation returns `origin: "gemini"` on the demo network.
-- Hosted URL: only fictional data; real measurements are refused in hosted mode by design.
+- **Real Presage** (partially verified: start/stop/reconnect observed on Mohit's Mac with SmartSpectra SDK 3.4.0, steady readings not yet confirmed). Show only if steady readings have appeared in an app Presage check-in on the demo laptop that day. Run `npm run dev:live` with `PRESAGE_BRIDGE_TOKEN`/`PRESAGE_BRIDGE_URL` and the SDK key in the bridge environment, then begin a separate Presage check-in. The badge reads "Presage measurement" and there is no synthetic history comparison. If the bridge fails, the session shows the failure; stop it and begin a separate synthetic session. Never relabel.
+- **Tiger Data** (verified on Tiger Cloud: PostgreSQL 18.6, TLS 1.3, TimescaleDB 2.30.2, `verify:tiger` PASS). On the day, `/api/health` must report `database: "postgres"` and the Integrations panel must show "Readings stored in a hypertable".
+- **Gemini** (live check pending after the 12 s deadline fix). Show only if `npm run verify:gemini` or a session explanation returns `origin: "gemini"` on the demo network. The Integrations panel then shows that the last explanation came from Gemini fact selection.
+- **Fall detection** (standalone, synthetic only). `cd integrations/fall-detection && python3 -m fall_detection.server`, then open `http://127.0.0.1:4322`. Click sustained horizontal, wait at least 1.5 seconds, then review, acknowledge and resolve the incident with a note. It is not connected to the main app. Do **not** use live camera mode: it has known false positives and its consent notice is still being fixed. Call it an experimental heuristic, not verified fall detection.
+- **Hosted URL**: not deployed yet. Skip it. Once deployed, it will show only fictional data, and real measurements are refused in hosted mode by design.
 
 ## Fallbacks
 
@@ -35,5 +44,6 @@ The browser test `tests/integration/demo.spec.ts` runs exactly this path at real
 - Break expired: supervisor reset (local demo only) or stop the API and `npm run demo:reset`.
 - Reset refused: an active session exists (finish it) or a real Presage session is stored (reset refuses to delete real measurements).
 - Stale proposal: preview again; never force an old proposal.
+- Personal panel says not enough data: that is expected for a source with too little own history. Say so and move on.
 
 Show accurate integration status, not prize or clinical-validation claims.
