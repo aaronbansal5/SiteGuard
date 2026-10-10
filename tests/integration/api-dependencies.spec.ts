@@ -14,6 +14,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixtureId } from "@siteguard/mock-data";
+import { GEMINI_TIMEOUT_MS } from "../../apps/api/src/insights/explain.js";
 import {
   boot,
   close,
@@ -357,7 +358,7 @@ test.describe("Gemini failures fall back to deterministic facts", () => {
     });
   }
 
-  test("hung Gemini call times out to deterministic facts within ~5 s", async () => {
+  test("hung Gemini call times out to deterministic facts within the adapter deadline", async () => {
     respond = () => new Promise<Response>(() => {});
     const h = await boot({
       geminiKey: "fixture-key-not-real",
@@ -366,7 +367,7 @@ test.describe("Gemini failures fall back to deterministic facts", () => {
     try {
       const { res, elapsed } = await explainCompletedSession(h);
       expect(res.body.origin).toBe("deterministic");
-      expect(elapsed).toBeLessThan(8000);
+      expect(elapsed).toBeLessThan(GEMINI_TIMEOUT_MS + 3000);
     } finally {
       await close(h);
     }
