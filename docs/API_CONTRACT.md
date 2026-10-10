@@ -5,6 +5,7 @@ Same-origin JSON /api. UTC ISO timestamps, UUID IDs, minutes and Celsius. Author
 ## Models
 
 Worker(id,displayName,skills). Session(id,workerId,breakId,source,status,startedAt,endedAt,context,consentVersion,shareWithSupervisor,interruption). Reading envelope(sequence,reading). Reading(timestamp,heartRateBpm|null,respiratoryRateBrpm|null,quality,source). Break(id,workerId,startsAt,endsAt,kind,policyLabel,revision,requestId|null). Assignment(id,taskId,workerId,startsAt,endsAt). Request(id,workerId,sessionId|null,kind,requestedMinutes|null,status,createdAt,restStartsAt|null,restEndsAt|null,revision,note|null). Symptom(id,workerId,sessionId|null,codes,note|null,createdAt,assistanceRequestId).
+SelfReport(sessionId,workerId,tiredness:1..5,origin:worker|synthetic,createdAt). PersonalInsights(sessionId,source,experimental:true,synthetic,pulse,breathing,tiredness,selfReport|null,limitations); pulse/breathing={baseline:Baseline(status,reason|null,priorCount,requiredCount,current|null,usualMedian|null,usualMad|null,robustZ|null,classification:within_usual|settled_less|settled_more|null),trend:Trend(status,reason|null,count,requiredCount,slopePerSession|null,direction:steady|settling_more|settling_less|null)}; tiredness=TirednessEstimate(status,reason:current_session_unavailable|not_enough_labeled_sessions|ratings_do_not_vary|estimate_not_reliable|null,labeledCount,requiredCount,looMae|null,maeBound,estimate|null,rangeLow|null,rangeHigh|null,includesSyntheticReports). PersonalTrend(source,experimental:true,synthetic,pulse:Trend,breathing:Trend,limitations). Models, constants and limits: docs/RECOVERY_MODEL.md.
 MetricSummary(status,initialMedian|null,finalMedian|null,delta|null,initialCount,finalCount). Comparison(status,count,historicalMedianDelta|null). Summary(sessionId,source,context,durationSeconds,pulse,breathing,pulseComparison,breathingComparison,limitations).
 
 ## Endpoints
@@ -21,11 +22,14 @@ GET /sessions/:id/readings → {readings}.
 POST /sessions/:id/complete {} → {session,summary}; idempotent, stops source first.
 GET /sessions/:id/summary → {summary}.
 GET /workers/:id/history?limit=20&before=cursor → {sessions:[Session & {summary}],nextCursor}; worker-only history.
+GET /sessions/:id/personal-insights → {insights:PersonalInsights}. Owning worker only; supervisors 403 even with sharing consent. Experimental, same-source own history only; explicit insufficient_data states.
+POST /sessions/:id/self-report {tiredness:1..5|null} → {selfReport:SelfReport|null}. Owning worker only, completed session only (409 otherwise); null removes. Voluntary; never used for scheduling, approvals or supervisor views.
+GET /workers/:id/personal-trend?source=mock|presage → {trend:PersonalTrend}. Worker self only; source required (400 otherwise).
 POST /symptom-reports {sessionId:null|UUID,codes:nonempty array,note:null|string} → 201 {report,request}. Atomic report/assistance linkage, no session required.
 POST /rest-requests {sessionId:null|UUID,kind,requestedMinutes:null|integer} → 201 {request}. Additional rest 1..120; assistance null. Input bounds are not medical recommendations.
 GET /rest-requests → own worker requests or supervisor list.
 PATCH /rest-requests/:id {action:acknowledge|approve|resolve|decline,revision,note,restStartsAt?,restEndsAt?} → {request,scheduleRevision}. Supervisor. Assistance acknowledge/resolve only. Approval creates rest >=requested minutes; no protected changes. Explicit note required. Acknowledgment retains block. Audit every action; stale revisions 409.
-GET /supervisor/overview → {workers,breaks,requests,assignments,tasks,availability,symptomReports,sharedSessionIds,coverageGaps,scheduleRevision}. No physiological histories.
+GET /supervisor/overview → {workers,breaks,requests,assignments,tasks,availability,symptomReports,sharedSessionIds,coverageGaps,scheduleRevision}. No physiological histories, personal insights or self-reports.
 GET /breaks → {breaks,scheduleRevision}; workers see own.
 PATCH /breaks/:id {startsAt,endsAt,revision} → {break,scheduleRevision}. Supervisor, additional only, duration cannot shrink below approved duration; protected 409.
 POST /schedule/preview {} → {baseRevision,assignments,coverageGaps}.
