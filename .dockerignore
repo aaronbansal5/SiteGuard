@@ -9,3 +9,5 @@ node_modules
 test-results
 playwright-report
 integrations/presage-bridge
+# Standalone Python detector; not part of the app image
+integrations/fall-detection

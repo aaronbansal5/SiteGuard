@@ -1,0 +1,5 @@
+# Optional camera environment only; base synthetic demo uses Python standard library.
+ultralytics==8.3.221
+opencv-python==4.11.0.86
+
+lap==0.5.13

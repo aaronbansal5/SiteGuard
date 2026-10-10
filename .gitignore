@@ -9,3 +9,8 @@ playwright-report/
 test-results/
 coverage/
 .DS_Store
+# Python environments and caches (integrations/fall-detection)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -160,6 +160,20 @@ for a real check-in. `npm start` cannot select it.
   - Neither the bridge nor SiteGuard stores frames or footage. If SiteGuard were distributed with telemetry enabled, that collection would need to be disclosed to users per Presage's privacy policy.
 - **Tests:** `test/presage-sdk-adapter.test.ts` exercises the adapter against a fake module with the same names and shapes as the 3.4.0 type declarations.
 
+## Debug: `npm run inspect:metrics` (opt-in, needs the real SDK)
+
+Runs the real SDK on a video file (`--file clip.mp4`, via `useFile`) or the
+default camera (`--camera`) and prints **which** metric fields each packet
+populates, with sample counts, `stable` counts and the latest `confidence`,
+plus a summary of when each field first appeared and first became stable. It
+never prints or writes metric values, frames or footage, and it runs with
+telemetry off. It needs `SMARTSPECTRA_API_KEY` and network access, and every
+run uses subscription quota. `--strict` requests only the Strict codes,
+because SDK 3.4.0 rejects sessions that mix strict and standard metrics. Other
+flags: `--all`, `--max-seconds N`, `--interframe-ms N`, `--verbose`. The
+bridge server never uses it. See `docs/PRESAGE_OPPORTUNITIES.md` §6. It has
+not been run against a real session (no key in CI or dev sandboxes).
+
 ## What remains (needs the demo laptop, camera and API key)
 
 1. **Observed camera session:** on the demo Mac, with `SMARTSPECTRA_API_KEY` and `PRESAGE_BRIDGE_TOKEN` set, run `npm run smoke:hardware`, then a check-in in the app with Presage selected. Record start/stop/reconnect results here.
