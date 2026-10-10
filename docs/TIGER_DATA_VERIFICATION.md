@@ -59,3 +59,19 @@ Reviewed with no change needed: all values use `$n` parameters (table and column
    ```
 6. Verify persistence: create a check-in or a rest request, stop the API, start it again, and confirm the data is still there. Then run `npm run smoke`.
 7. Record the extension version, test output and any TLS error in this file. Until then, Tiger Cloud stays unverified.
+
+## Tiger Cloud verification (2026-10-10)
+
+Run by Mohit from his Mac against the team's Tiger Cloud service (credentials in local `.env` only):
+
+| Check                         | Result                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `npm run db:migrate:postgres` | `Migration complete: postgres` (run twice, idempotent)                                                                    |
+| `npm run db:enable-timescale` | `TimescaleDB version 2.30.2`, complete                                                                                    |
+| `npm run verify:tiger`        | PostgreSQL 18.6, TLS yes (TLSv1.3), TimescaleDB 2.30.2, all app tables present, `vital_readings` hypertable yes, **PASS** |
+
+Notes:
+
+- `pg` warns that `sslmode=require` is currently treated as `verify-full`. Certificate verification succeeded with Node's default CA store. Setting `sslmode=verify-full` explicitly in `DATABASE_URL` keeps this behaviour after pg v9 and silences the warning.
+- `npm run test:postgres` against Tiger has not been run: it needs a separate disposable database in `POSTGRES_TEST_DATABASE_URL`, never the main service.
+- Restart persistence on Tiger itself is not yet observed (it was verified on local PostgreSQL).
