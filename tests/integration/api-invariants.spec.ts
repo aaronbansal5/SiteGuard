@@ -284,7 +284,7 @@ test.describe("protected and required breaks", () => {
   // approval "creates separate additional rest"; an interval that coincides
   // with the protected break adds no rest at all. The UI places rest after the
   // protected break, but the API does not enforce it.
-  test.fixme("approved additional rest must not be absorbed inside the protected break", async () => {
+  test("approved additional rest must not be absorbed inside the protected break", async () => {
     const worker = client(h, await loginAs(h, "worker"));
     const sup = client(h, await loginAs(h, "supervisor"));
     const req = (
