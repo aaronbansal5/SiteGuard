@@ -4,8 +4,9 @@ import { DEFAULT_PORT, LOOPBACK_HOST } from "./contract.js";
 import { PresageBridge } from "./server.js";
 
 /**
- * Production entry point. Always uses the real-SDK adapter, which currently
- * reports itself unavailable (UNVERIFIED). The fixture adapter is intentionally
+ * Production entry point. Always uses the real SmartSpectra 3.4.0 adapter,
+ * which reports itself unavailable without an API key, a loadable SDK and a
+ * camera. The fixture adapter is intentionally
  * not selectable here so fixture data can never reach the app labelled as a
  * real Presage measurement.
  */
