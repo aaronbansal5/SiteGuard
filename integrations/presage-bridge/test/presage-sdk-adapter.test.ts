@@ -131,6 +131,8 @@ describe("PresageSdkAdapter (fake SDK)", () => {
     expect(f.calls).toEqual(["useCamera", "start"]);
 
     f.handlers.validationStatus(1, 0, "Face not found");
+    f.handlers.validationStatus(1, 0, "Face not found"); // per-frame repeat: collapsed
+    f.handlers.validationStatus(0, 0, "");
     f.handlers.validationStatus(0, 0, "");
     const t = (1_700_000_000_000 + 500) * 1000; // µs, 500 ms after wall "now"
     f.handlers.metrics(
@@ -180,6 +182,35 @@ describe("PresageSdkAdapter (fake SDK)", () => {
       },
     );
     expect(statuses).toEqual(["positioning"]);
+    await cap.close();
+  });
+
+  test("samples without a vendor timestamp use the packet timestamp to de-duplicate and receipt time", async () => {
+    const f = fakeModule();
+    const samples: AdapterSample[] = [];
+    const cap = await new PresageSdkAdapter(clock, env, async () => f.mod).open(
+      {
+        onSample: (s) => samples.push(s),
+        onStatus() {},
+        onError() {},
+      },
+    );
+    f.handlers.metrics(packet({ value: 70, stable: false }, null), 10);
+    f.handlers.metrics(packet({ value: 70, stable: false }, null), 10); // same packet ts
+    f.handlers.metrics(packet({ value: 71, stable: true }, null), 20);
+    f.handlers.metrics(packet(null, null), 30); // no rates
+    expect(samples).toEqual([
+      {
+        monotonicMs: 1_000,
+        pulse: { value: 70, status: "invalid" },
+        breathing: null,
+      },
+      {
+        monotonicMs: 1_000,
+        pulse: { value: 71, status: "valid" },
+        breathing: null,
+      },
+    ]);
     await cap.close();
   });
 });
