@@ -25,8 +25,14 @@ function metric(
       Date.parse(e.reading.timestamp) >= start &&
       Date.parse(e.reading.timestamp) <= end,
   );
+  // Initial window starts at this metric's first valid reading, not at session
+  // start: real Presage needs a per-metric warm-up (pulse ~12 s, breathing
+  // ~30-45 s) before readings are valid. Mock streams are valid from t=0, so
+  // their windows are unchanged. Data-sufficiency rule, not a clinical one.
+  const times = valid.map((e) => Date.parse(e.reading.timestamp));
+  const first = times.length ? Math.min(...times) : start;
   const initial = valid.filter(
-      (e) => Date.parse(e.reading.timestamp) < start + 15000,
+      (e) => Date.parse(e.reading.timestamp) < first + 15000,
     ),
     final = valid.filter((e) => Date.parse(e.reading.timestamp) > end - 15000);
   const enough = (a: ReadingEnvelope[]) =>
@@ -35,8 +41,8 @@ function metric(
       Math.min(...a.map((e) => Date.parse(e.reading.timestamp))) >=
       5000;
   const available =
-    end - start >= 45000 &&
-    end - 15000 >= start + 15000 &&
+    end - first >= 45000 &&
+    end - 15000 >= first + 15000 &&
     enough(initial) &&
     enough(final);
   const a = available ? median(initial.map((e) => e.reading[key]!)) : null,

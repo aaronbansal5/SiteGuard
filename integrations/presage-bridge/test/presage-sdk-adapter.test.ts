@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
+  GENERIC_GUIDANCE,
+  PINNED_VALIDATION_CODES,
   PresageSdkAdapter,
+  VALIDATION_GUIDANCE,
+  WARM_UP_MESSAGE,
+  guidanceFor,
   statusFromStable,
   type SmartSpectraModule,
 } from "../src/adapters/presage-sdk.js";
@@ -18,6 +23,7 @@ function fakeModule(
     cameras?: number;
     failStart?: boolean;
     noRunningEvent?: boolean;
+    validationCodes?: SmartSpectraModule["ValidationCode"];
   } = {},
 ) {
   const calls: string[] = [];
@@ -64,7 +70,7 @@ function fakeModule(
       FakeSdk as unknown as SmartSpectraModule["SmartSpectraSDK"],
     MetricType: { PULSE_RATE: 15, BREATHING_RATE: 2 },
     ProcessingStatus: { kRunning: 3, kError: 5 },
-    ValidationCode: { kOk: 0 },
+    ValidationCode: opts.validationCodes ?? { kOk: 0 },
     SmartSpectraErrorCode: {
       kOk: 0,
       kAuthenticationFailed: 2,
@@ -145,8 +151,8 @@ describe("PresageSdkAdapter (fake SDK)", () => {
     f.handlers.error(7, "camera unplugged", true);
 
     expect(statuses).toEqual([
-      ["positioning", "Face not found"],
-      ["measuring", null],
+      ["positioning", VALIDATION_GUIDANCE.kNoFaceFound],
+      ["measuring", WARM_UP_MESSAGE],
     ]);
     expect(samples).toEqual([
       {
@@ -212,5 +218,88 @@ describe("PresageSdkAdapter (fake SDK)", () => {
       },
     ]);
     await cap.close();
+  });
+
+  test("every SDK 3.4.0 ValidationCode maps to fixed SiteGuard guidance", async () => {
+    const vendor = await import("@smartspectra/node-sdk")
+      .then(
+        (v) =>
+          (v as { ValidationCode?: Record<string, number> }).ValidationCode,
+      )
+      .catch(() => undefined);
+    // The pinned table must match the shipped declarations (checked against the
+    // native module when it loads on this platform).
+    if (vendor) expect(vendor).toEqual(PINNED_VALIDATION_CODES);
+    const names = Object.keys(PINNED_VALIDATION_CODES).filter(
+      (n) => n !== "kOk",
+    );
+    expect(Object.keys(VALIDATION_GUIDANCE).sort()).toEqual([...names].sort());
+    for (const name of names) {
+      const code =
+        PINNED_VALIDATION_CODES[name as keyof typeof PINNED_VALIDATION_CODES];
+      const text = guidanceFor(code);
+      expect(text).toBe(
+        VALIDATION_GUIDANCE[name as keyof typeof VALIDATION_GUIDANCE],
+      );
+      expect(text.length).toBeLessThanOrEqual(60);
+      expect(text).not.toMatch(
+        /heart|pulse|breath|health|medical|safe|diagnos|recover/i,
+      );
+    }
+    expect(guidanceFor(5)).toBe("Move somewhere brighter");
+    expect(guidanceFor(12)).toBe("Hold still for a moment");
+    expect(guidanceFor(99)).toBe(GENERIC_GUIDANCE);
+    expect(guidanceFor(-1)).toBe(GENERIC_GUIDANCE);
+    expect(GENERIC_GUIDANCE).toBe("Adjust position so your face is centered");
+  });
+
+  test("positioning uses SiteGuard guidance, never the vendor hint; warm-up message is sent once", async () => {
+    const f = fakeModule({
+      validationCodes: { ...PINNED_VALIDATION_CODES, kSomethingNew: 42 },
+    });
+    const statuses: [string, string | null][] = [];
+    const cap = await new PresageSdkAdapter(clock, env, async () => f.mod).open(
+      {
+        onSample() {},
+        onStatus: (s, m) => statuses.push([s, m]),
+        onError() {},
+      },
+    );
+    const v = f.handlers.validationStatus;
+    v(5, 0, "VENDOR: too dark");
+    v(5, 0, "VENDOR: too dark, again"); // same guidance: collapsed
+    v(0, 0, "");
+    v(12, 0, "VENDOR: motion");
+    v(0, 0, "");
+    v(42, 0, "VENDOR: new code"); // unknown to SiteGuard
+    v(77, 0, "VENDOR: unnamed code"); // unknown to the module too
+    v(3, 0, "VENDOR: not centred"); // same text as generic: collapsed
+    v(0, 0, "");
+    expect(statuses).toEqual([
+      ["positioning", "Move somewhere brighter"],
+      ["measuring", WARM_UP_MESSAGE],
+      ["positioning", "Hold still for a moment"],
+      ["measuring", null],
+      ["positioning", GENERIC_GUIDANCE],
+      ["measuring", null],
+    ]);
+    expect(JSON.stringify(statuses)).not.toMatch(/VENDOR/);
+    await cap.close();
+  });
+
+  test("the warm-up message is per capture: a new open announces it again", async () => {
+    const f = fakeModule();
+    const a = new PresageSdkAdapter(clock, env, async () => f.mod);
+    for (let i = 0; i < 2; i++) {
+      const statuses: (string | null)[] = [];
+      const cap = await a.open({
+        onSample() {},
+        onStatus: (_s, m) => statuses.push(m),
+        onError() {},
+      });
+      f.handlers.validationStatus(0, 0, "");
+      expect(statuses).toEqual([WARM_UP_MESSAGE]);
+      await cap.close();
+    }
   });
 });

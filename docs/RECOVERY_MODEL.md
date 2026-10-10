@@ -13,7 +13,7 @@ Implementation: `apps/api/src/domain/personal-math.ts` (statistics), `apps/api/s
 
 ## Features (per session)
 
-Reuses the existing summary rules in `docs/PROJECT_SPEC.md` (Analytics): only `quality=valid`, non-null readings; initial window = first 15 s, final window = last 15 s; duration ≥ 45 s; ≥ 5 readings spanning ≥ 5 s per window; medians; `delta = final − initial`.
+Reuses the existing summary rules in `docs/PROJECT_SPEC.md` (Analytics): only `quality=valid`, non-null readings; initial window = 15 s from that metric's first valid reading (equal to the first 15 s for mock), final window = last 15 s; duration ≥ 45 s from the first valid reading; ≥ 5 readings spanning ≥ 5 s per window; medians; `delta = final − initial`.
 
 - `pulse` = pulse delta (bpm), or unavailable.
 - `breathing` = breathing-rate delta (brpm), or unavailable.

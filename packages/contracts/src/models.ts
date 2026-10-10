@@ -2,6 +2,13 @@ import { z } from "zod";
 export const Id = z.uuid();
 export const ISO = z.iso.datetime();
 export const SourceSchema = z.enum(["mock", "presage"]);
+// Recommended check-in length per source (a data-sufficiency guide, not a
+// clinical rest time). Real Presage needs ~30-45 s breathing warm-up before the
+// 15 s initial window can begin; synthetic mock has no warm-up.
+export const RECOMMENDED_CHECK_IN_SECONDS = {
+  mock: 60,
+  presage: 90,
+} as const satisfies Record<z.infer<typeof SourceSchema>, number>;
 export const ContextSchema = z.strictObject({
   workload: z.enum(["light", "moderate", "heavy"]).nullable(),
   temperatureC: z.number().finite().nullable(),

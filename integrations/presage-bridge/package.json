@@ -2,7 +2,7 @@
   "name": "@siteguard/presage-bridge",
   "private": true,
   "version": "0.1.0",
-  "description": "Loopback-only Presage bridge implementing docs/PRESAGE_CONTRACT.md v1. Real SDK wiring is NOT implemented (UNVERIFIED).",
+  "description": "Loopback-only Presage bridge implementing docs/PRESAGE_CONTRACT.md v1 with a real SmartSpectra SDK 3.4.0 adapter (hardware run partially verified).",
   "type": "module",
   "engines": {
     "node": ">=24.7"

@@ -109,3 +109,91 @@ describe("descriptive analytics", () => {
     ).toBe(0);
   });
 });
+describe("warm-up-aware initial windows (real Presage)", () => {
+  const startedAt = "2026-10-10T15:00:00.000Z";
+  const session = (seconds: number) => ({
+    ...s,
+    source: "presage" as const,
+    startedAt,
+    endedAt: new Date(Date.parse(startedAt) + seconds * 1000).toISOString(),
+  });
+  // One reading per second; validity/nulls decided per second and metric.
+  const stream = (seconds: number, pulseFrom: number, breathingFrom: number) =>
+    Array.from({ length: seconds + 1 }, (_, n) => {
+      const e = mockReading(startedAt, n);
+      return {
+        ...e,
+        reading: {
+          ...e.reading,
+          source: "presage" as const,
+          quality:
+            n < Math.min(pulseFrom, breathingFrom)
+              ? ("invalid" as const)
+              : ("valid" as const),
+          heartRateBpm: n < pulseFrom ? null : 100 - n * 0.1,
+          respiratoryRateBrpm: n < breathingFrom ? null : 20 - n * 0.05,
+        },
+      };
+    });
+  it("starts the initial window at the first valid reading after 30 s of warm-up", () => {
+    const v = summarize(session(90), stream(90, 30, 30));
+    for (const m of [v.pulse, v.breathing]) {
+      expect(m.status).toBe("available");
+      expect(m.initialCount).toBe(15); // seconds 30..44
+      expect(m.finalCount).toBe(15); // seconds 76..90
+    }
+    expect(v.pulse.initialMedian).toBeCloseTo(100 - 37 * 0.1);
+    expect(v.breathing.initialMedian).toBeCloseTo(20 - 37 * 0.05);
+  });
+  it("uses a separate initial window per metric when pulse warms up earlier", () => {
+    const v = summarize(session(90), stream(90, 12, 40));
+    expect(v.pulse.status).toBe("available");
+    expect(v.breathing.status).toBe("available");
+    expect(v.pulse.initialMedian).toBeCloseTo(100 - 19 * 0.1); // 12..26
+    expect(v.breathing.initialMedian).toBeCloseTo(20 - 47 * 0.05); // 40..54
+    expect(v.pulse.initialCount).toBe(15);
+    expect(v.breathing.initialCount).toBe(15);
+  });
+  it("returns insufficient_data when too little valid data follows warm-up", () => {
+    // Breathing first valid at 40 s of a 60 s session: only 20 s remain,
+    // under the 45 s duration rule measured from the first valid reading.
+    const v = summarize(session(60), stream(60, 12, 40));
+    expect(v.pulse.status).toBe("available");
+    expect(v.breathing.status).toBe("insufficient_data");
+    expect(v.breathing.delta).toBeNull();
+    // Nothing valid at all.
+    const none = stream(90, 999, 999);
+    const w = summarize(session(90), none);
+    expect(w.pulse.status).toBe("insufficient_data");
+    expect(w.breathing.status).toBe("insufficient_data");
+    expect(w.pulse.initialCount).toBe(0);
+    // Exactly at the boundary: 45 s from first valid reading is enough,
+    // 44 s is not.
+    expect(summarize(session(75), stream(75, 30, 30)).pulse.status).toBe(
+      "available",
+    );
+    expect(summarize(session(74), stream(74, 30, 30)).pulse.status).toBe(
+      "insufficient_data",
+    );
+  });
+  it("anchors on the first valid reading even when it is isolated", () => {
+    // A single valid reading before the warm-up gap anchors the window there;
+    // the initial window then lacks five readings and the metric is
+    // insufficient rather than silently shifted.
+    const r = stream(90, 30, 30).map((e) =>
+      e.sequence === 5
+        ? {
+            ...e,
+            reading: {
+              ...e.reading,
+              quality: "valid" as const,
+              heartRateBpm: 120,
+            },
+          }
+        : e,
+    );
+    const v = summarize(session(90), r);
+    expect(v.pulse.status).toBe("insufficient_data");
+    expect(v.pulse.initialCount).toBe(1);
+  });
+});

@@ -5,6 +5,7 @@ import { useIdentity } from "../App";
 import { ChooseWorker } from "./WorkerHome";
 import { api, useResource, useAction } from "../lib/api";
 import type { Session } from "@siteguard/contracts";
+import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { PageHeading, ErrorNotice, HelpActions } from "../components/ui";
 export function CheckIn() {
   const { identity } = useIdentity(),
@@ -112,6 +113,12 @@ export function CheckIn() {
               </option>
             </select>
           </label>
+          <p className="fine-print">
+            Recommended check-in: {RECOMMENDED_CHECK_IN_SECONDS[source]} seconds
+            {source === "presage"
+              ? ", including camera warm-up before readings count."
+              : "."}
+          </p>
           <div className="form-grid">
             <label>
               Recent workload
