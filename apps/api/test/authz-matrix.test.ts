@@ -186,6 +186,20 @@ const cases: Case[] = [
     expected: ownerOnly(200),
   },
   {
+    // Use the unshared session so later "shared" rows keep their sharing.
+    route: "PATCH /api/sessions/:id/sharing",
+    name: "withdraw sharing",
+    url: `/api/sessions/${UNSHARED}/sharing`,
+    payload: { shareWithSupervisor: false },
+    expected: ownerOnly(200),
+  },
+  {
+    route: "GET /api/workers/:id/supervisor-view",
+    name: "what supervisors can see",
+    url: `/api/workers/${A}/supervisor-view`,
+    expected: ownerOnly(200),
+  },
+  {
     route: "GET /api/workers/:id/personal-trend",
     name: "personal trend",
     url: `/api/workers/${A}/personal-trend?source=mock`,
