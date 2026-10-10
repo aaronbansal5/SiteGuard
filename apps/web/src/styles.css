@@ -1986,3 +1986,63 @@ textarea::placeholder {
   gap: 8px;
   font-size: 11px;
 }
+
+/* Worker mirror of the supervisor workspace (SupervisorMirror.tsx). */
+.mirror-columns {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+}
+.mirror-columns h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.mirror-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mirror-list li {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid #eff2eb;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.mirror-list li span {
+  color: var(--muted);
+}
+.mirror-list.never li {
+  display: block;
+  color: var(--muted);
+}
+.shared-session {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  border: 1px solid #e0e7de;
+  border-radius: 8px;
+}
+.shared-session > div {
+  display: grid;
+  flex: 1 1 12rem;
+}
+@media (max-width: 850px) {
+  .mirror-columns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 420px) {
+  .mirror-list li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
