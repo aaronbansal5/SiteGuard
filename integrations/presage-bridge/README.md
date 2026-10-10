@@ -48,6 +48,15 @@ PRESAGE_BRIDGE_TOKEN=<same value as the app's .env> npm start
 Both smoke modes bind `127.0.0.1` on an ephemeral port with a random token,
 so they never collide with a bridge on 4311.
 
+## App identity (Presage portal)
+
+Bundle ID: `com.siteguard.adaptivebreak.presagebridge`
+
+Register exactly this value when creating the Presage SDK key. Any native host app
+built for the SDK (for example a macOS/iOS app in Xcode: Target → General →
+Identity → Bundle Identifier) must use the identical string, or the key may be
+rejected. It is also recorded in `package.json` under `presage.bundleId`.
+
 ## Environment
 
 | Variable               | Required | Meaning                                                                                                                       |
