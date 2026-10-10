@@ -26,7 +26,8 @@
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,json,css,html}\" \"packages/**/*.{ts,json}\" \"scripts/*.{ts,mjs}\" \"tests/**/*.ts\" \"*.{json,ts}\" \"docs/*.md\" AGENTS.md README.md",
     "db:backup": "node --env-file-if-exists=.env scripts/backup.mjs",
     "test:backup": "node scripts/backup-check.mjs",
-    "verify:gemini": "node --env-file-if-exists=.env scripts/verify-gemini.mjs"
+    "verify:gemini": "node --env-file-if-exists=.env scripts/verify-gemini.mjs",
+    "verify:tiger": "tsx --env-file-if-exists=.env apps/api/src/db/verify.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
