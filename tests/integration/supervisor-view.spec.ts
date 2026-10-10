@@ -19,6 +19,13 @@ test("worker sees what safety operations can see and stops sharing a check-in", 
     true,
   );
 
+  // Reset revokes existing sessions; authenticate against the reseeded demo.
+  expect(
+    (
+      await supervisor.post("/api/demo/login", { data: { role: "supervisor" } })
+    ).ok(),
+  ).toBe(true);
+
   // A shared, completed synthetic check-in during W-01's protected break,
   // linked to an assistance request via a symptom report.
   await page.request.post("/api/demo/login", {
