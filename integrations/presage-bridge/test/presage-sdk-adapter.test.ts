@@ -13,7 +13,13 @@ const clock: Clock = {
 const env = { SMARTSPECTRA_API_KEY: "test-key-not-real" };
 
 /** Fake of the vendor module: same names/shapes as @smartspectra/node-sdk 3.4.0's .d.ts. */
-function fakeModule(opts: { cameras?: number; failStart?: boolean } = {}) {
+function fakeModule(
+  opts: {
+    cameras?: number;
+    failStart?: boolean;
+    noRunningEvent?: boolean;
+  } = {},
+) {
   const calls: string[] = [];
   let ctorOptions: unknown;
   const handlers: Record<string, (...a: unknown[]) => void> = {};
@@ -41,7 +47,9 @@ function fakeModule(opts: { cameras?: number; failStart?: boolean } = {}) {
       queueMicrotask(() =>
         opts.failStart
           ? handlers.error?.(2, "bad key", false)
-          : handlers.processingStatus?.(3),
+          : opts.noRunningEvent
+            ? handlers.validationStatus?.(1, 0, "Face not found")
+            : handlers.processingStatus?.(3),
       );
     }
     async stopAsync() {
@@ -159,5 +167,19 @@ describe("PresageSdkAdapter (fake SDK)", () => {
       a.open({ onSample() {}, onStatus() {}, onError() {} }),
     ).rejects.toThrow(/kAuthenticationFailed: bad key/);
     expect(f.calls).toEqual(["useCamera", "start", "stopAsync", "destroy"]);
+  });
+
+  test("start settles on first SDK feedback even without a kRunning event (observed on macOS)", async () => {
+    const f = fakeModule({ noRunningEvent: true });
+    const statuses: string[] = [];
+    const cap = await new PresageSdkAdapter(clock, env, async () => f.mod).open(
+      {
+        onSample() {},
+        onStatus: (s) => statuses.push(s),
+        onError() {},
+      },
+    );
+    expect(statuses).toEqual(["positioning"]);
+    await cap.close();
   });
 });

@@ -129,7 +129,12 @@ try {
     method: "POST",
     body: JSON.stringify({ appSessionId }),
   });
-  check(started.status === 201, `start -> 201 (got ${started.status})`);
+  if (started.status !== 201) {
+    const body = await started.text();
+    check(false, `start -> 201 (got ${started.status}: ${body.slice(0, 300)})`);
+    throw new Error("start failed; see bridge error above");
+  }
+  check(true, "start -> 201");
   sessionId = BridgeSessionSchema.parse(await started.json()).bridgeSessionId;
   const again = await call("/v1/sessions", {
     method: "POST",
