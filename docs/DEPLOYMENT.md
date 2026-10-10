@@ -36,7 +36,7 @@ Run everything from the repository root on your own machine.
 2. **Verify Gemini locally (optional; skip it to deploy with deterministic explanations).** Put the key and model in `.env`. `.env` is gitignored and excluded from Docker builds:
    ```
    GEMINI_API_KEY=<your key from https://aistudio.google.com/apikey>
-   GEMINI_MODEL=<a model id your key can use, e.g. gemini-2.5-flash>
+   GEMINI_MODEL=<a model id your key can use, e.g. gemini-3.8-flash; gemini-2.5-flash is retired for new keys>
    ```
    Then run `npm run verify:gemini`. It sends fictional synthetic facts through the app's real server-side adapter and prints whether the key is set (never its value), the model, `origin`, latency and the rendered observations. It exits 0 only when `origin` is `gemini`. If it fails, the last line gives the fallback reason (missing variable, HTTP error such as 400/403/404/429, timeout, or output rejected by validation). Fix that before you set the secrets on Fly.
 3. **Create a Fly account and install the CLI.** Sign up at https://fly.io/app/sign-up (Fly may ask for a payment card even for small apps). Install flyctl: `brew install flyctl` on macOS, or `curl -L https://fly.io/install.sh | sh` on Linux/macOS, or `pwsh -Command "iwr https://fly.io/install.ps1 -useb | iex"` on Windows. Then run:
