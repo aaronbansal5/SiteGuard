@@ -57,7 +57,13 @@ export class Repository {
     await this.driver.exec(
       "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
     );
-    for (const version of ["001_initial", "003_self_reports", "003_auth", "004_safety", "005_mobile"]) {
+    for (const version of [
+      "001_initial",
+      "003_self_reports",
+      "003_auth",
+      "004_safety",
+      "005_mobile",
+    ]) {
       await this.transaction(async (r) => {
         const applied = await r.driver.query(
           "SELECT version FROM schema_migrations WHERE version=$1",

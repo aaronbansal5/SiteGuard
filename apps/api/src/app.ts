@@ -138,7 +138,8 @@ export async function createApp(
       if (
         c.authMode === "oidc"
           ? origin.origin !== c.appOrigin
-          : origin.host !== req.headers.host || origin.protocol !== `${c.hosted ? "https" : req.protocol}:`
+          : origin.host !== req.headers.host ||
+            origin.protocol !== `${c.hosted ? "https" : req.protocol}:`
       )
         return reply.code(403).send({
           error: {
