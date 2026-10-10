@@ -27,7 +27,9 @@
     "db:backup": "node --env-file-if-exists=.env scripts/backup.mjs",
     "test:backup": "node scripts/backup-check.mjs",
     "verify:gemini": "node --env-file-if-exists=.env scripts/verify-gemini.mjs",
-    "verify:tiger": "tsx --env-file-if-exists=.env apps/api/src/db/verify.ts"
+    "verify:tiger": "tsx --env-file-if-exists=.env apps/api/src/db/verify.ts",
+    "verify:all": "node --env-file-if-exists=.env scripts/verify-all.mjs",
+    "dev:live": "concurrently -n bridge,api,web \"npm run start --prefix integrations/presage-bridge\" \"tsx watch --env-file-if-exists=.env apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\""
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

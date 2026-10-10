@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import {
+  BridgeHealthSchema,
   LoginSchema,
   StartSessionSchema,
   IngestSchema,
@@ -77,6 +78,62 @@ export async function registerRoutes(
       },
       insightsMode:
         c.geminiKey && c.geminiModel ? "configured" : "deterministic",
+    };
+  });
+  // Supervisor-only integration status. Never returns secrets or URLs.
+  app.get("/api/integrations", async (req) => {
+    supervisor(req);
+    const database: {
+      kind: string;
+      timescaleVersion: string | null;
+      hypertable: boolean;
+    } = { kind: r.driver.kind, timescaleVersion: null, hypertable: false };
+    if (r.driver.kind === "postgres") {
+      try {
+        const ext = (await r.driver.query(
+          "SELECT extversion FROM pg_extension WHERE extname='timescaledb'",
+        )) as { extversion: string }[];
+        database.timescaleVersion = ext[0]?.extversion ?? null;
+        if (database.timescaleVersion) {
+          const h = (await r.driver.query(
+            "SELECT count(*)::int AS n FROM timescaledb_information.hypertables WHERE hypertable_name='vital_readings'",
+          )) as { n: number }[];
+          database.hypertable = Number(h[0]?.n) === 1;
+        }
+      } catch {
+        // Status is best-effort; health of the core DB is reported by /api/health.
+      }
+    }
+    let bridge: { status: string; reason: string | null } = {
+      status: c.hosted ? "disabled_hosted" : "not_configured",
+      reason: null,
+    };
+    if (!c.hosted && c.bridgeToken) {
+      try {
+        const res = await fetch(new URL("/v1/health", c.bridgeUrl), {
+          headers: { Authorization: `Bearer ${c.bridgeToken}` },
+          redirect: "error",
+          signal: AbortSignal.timeout(2000),
+        });
+        const h = BridgeHealthSchema.parse(await res.json());
+        bridge = { status: h.status, reason: h.reason };
+      } catch {
+        bridge = { status: "unreachable", reason: "Bridge is not running" };
+      }
+    }
+    return {
+      database,
+      insights: {
+        mode: c.geminiKey && c.geminiModel ? "configured" : "deterministic",
+        model: c.geminiKey ? (c.geminiModel ?? null) : null,
+        lastOrigin: explainer.lastOrigin ?? null,
+        lastAt: explainer.lastAt ?? null,
+        lastFallbackReason:
+          explainer.lastOrigin === "deterministic"
+            ? (explainer.lastFallbackReason ?? null)
+            : null,
+      },
+      presage: bridge,
     };
   });
   app.get("/api/workers", async (req) => {
