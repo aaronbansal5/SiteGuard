@@ -33,15 +33,15 @@ GET /supervisor/overview → {workers,breaks,requests,assignments,tasks,availabi
 GET /breaks → {breaks,scheduleRevision}; workers see own.
 PATCH /breaks/:id {startsAt,endsAt,revision} → {break,scheduleRevision}. Supervisor, additional only, duration cannot shrink below approved duration; protected 409.
 POST /schedule/preview {} → {baseRevision,assignments,coverageGaps}.
-POST /schedule/commit {baseRevision,assignments} → {scheduleRevision,assignments,coverageGaps,auditEventId}; transactional constraints; gaps explicit.
+POST /schedule/commit {baseRevision,assignments(max500)} → {scheduleRevision,assignments,coverageGaps,auditEventId}; transactional constraints; gaps explicit.
 POST /insights/explain {kind:session,sessionId} or {kind:schedule,auditEventId} → {origin:gemini|deterministic,observations,limitations}. Server fetches facts; no raw vitals/names/symptom notes/footage sent.
 POST /demo/reset {} → {reset:true}; supervisor local demo only, disabled hosted/non-demo.
 
 ## Errors and sample
 
-{error:{code,message,fieldErrors?,requestId}}. 400 validation,401 identity,403 access,404 missing,409 state/constraints/revision,503 dependency; 429 bounded login/write/stream quotas. No secrets/internals.
+{error:{code,message,fieldErrors?,requestId}}. 400 validation (including malformed/empty JSON),401 identity,403 access,404 missing,409 state/constraints/revision,503 dependency; 413 PAYLOAD_TOO_LARGE (body >1 MiB),415 UNSUPPORTED_MEDIA_TYPE (non-JSON body),429 bounded login/write/stream quotas. No secrets/internals.
 Example reading: {"timestamp":"2026-10-10T15:00:01.000Z","heartRateBpm":104,"respiratoryRateBrpm":21,"quality":"valid","source":"mock"}. Demo protected break15min, session60sec, additional rest5min: fictional fixtures, not safety guidance.
 
 ## Resource limits
 
-Demo login:30 requests/minute/IP; other writes:120/minute/IP. SSE:6 streams/identity,12/worker,64/process; quotas release on close. Heartbeats revalidate signed identity expiry every5seconds without stopping the underlying measurement source. Native-source transport status is configured/unverified until a successful bridge check-in. Limits are process-local; production ingress/shared quotas require separate deployment validation.
+Demo login:30 requests/minute/IP; other writes:120/minute/IP (IPv6 counted per /64; client address from CLIENT_IP_HEADER only when configured behind a proxy). SSE:6 streams/identity,12/worker,64/process; quotas release on close. Heartbeats revalidate signed identity expiry every5seconds without stopping the underlying measurement source. Native-source transport status is configured/unverified until a successful bridge check-in. Limits are process-local; production ingress/shared quotas require separate deployment validation.

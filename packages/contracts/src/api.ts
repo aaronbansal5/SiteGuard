@@ -58,9 +58,13 @@ export const BreakUpdateSchema = z.strictObject({
   endsAt: ISO,
   revision: z.number().int().nonnegative(),
 });
+// Validation and coverage-gap computation are super-linear in the number of
+// assignments and run on the event loop for every overview poll afterwards.
+// The planner's own proposals for the demo roster are far smaller.
+export const MAX_COMMIT_ASSIGNMENTS = 500;
 export const CommitSchema = z.strictObject({
   baseRevision: z.number().int().nonnegative(),
-  assignments: z.array(AssignmentSchema).max(5000),
+  assignments: z.array(AssignmentSchema).max(MAX_COMMIT_ASSIGNMENTS),
 });
 export const ExplainSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("session"), sessionId: Id }),

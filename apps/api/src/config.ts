@@ -15,6 +15,11 @@ export interface Config {
   geminiModel?: string;
   webDist: string;
   mockIntervalMs: number;
+  /**
+   * Header set authoritatively by the reverse proxy with the client address
+   * (Fly.io: fly-client-ip). Unset: rate limits use the socket address.
+   */
+  clientIpHeader?: string;
 }
 export function loadConfig(overrides: Partial<Config> = {}): Config {
   const hosted = process.env.HOSTED === "true";
@@ -34,6 +39,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     geminiModel: process.env.GEMINI_MODEL?.trim() || undefined,
     webDist: resolve("apps/web/dist"),
     mockIntervalMs: 1000,
+    clientIpHeader:
+      process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || undefined,
     ...overrides,
   };
   if (
@@ -48,6 +55,12 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     throw new Error("PORT must be valid");
   if (c.measurementToken.length < 16)
     throw new Error("MEASUREMENT_TOKEN must have at least 16 characters");
+  if (
+    c.clientIpHeader !== undefined &&
+    (!/^[a-z0-9-]{1,64}$/.test(c.clientIpHeader) ||
+      ["host", "cookie", "authorization"].includes(c.clientIpHeader))
+  )
+    throw new Error("CLIENT_IP_HEADER must be a single header name");
   if (!Number.isFinite(c.mockIntervalMs) || c.mockIntervalMs <= 0)
     throw new Error("Mock interval must be positive");
   const bridge = new URL(c.bridgeUrl);

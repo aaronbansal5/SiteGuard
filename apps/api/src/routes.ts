@@ -633,6 +633,24 @@ export async function registerRoutes(
           "REST_MINIMUM",
           "Approved rest duration cannot shrink or move into the past",
         );
+      // Same invariant as approval: additional rest stays separate from the
+      // worker's protected break, including after it is moved.
+      const start = Date.parse(b.startsAt),
+        end = Date.parse(b.endsAt);
+      if (
+        (await tx.list("breaks")).some(
+          (x) =>
+            x.workerId === br.workerId &&
+            x.kind === "protected" &&
+            start < Date.parse(x.endsAt) &&
+            end > Date.parse(x.startsAt),
+        )
+      )
+        fail(
+          409,
+          "REST_OVERLAPS_PROTECTED",
+          "Additional rest must be separate from the worker's protected break",
+        );
       const before = { ...br };
       br.startsAt = b.startsAt;
       br.endsAt = b.endsAt;
