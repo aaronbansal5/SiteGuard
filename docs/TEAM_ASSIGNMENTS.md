@@ -2,12 +2,12 @@
 
 Base branch: `feature/siteguard-adaptivebreak`. Everyone branches from it and reads `AGENTS.md` before starting. Ownership stays separate; each person works on their own feature branch and merges back through Gravit's review.
 
-| Person | Role | Branch | Area owned |
-|---|---|---|---|
-| Gravit | Tiger Data owner + main app owner | `feature/tiger-data` | Database provisioning/verification; approves app-file and contract changes; reviews merges |
-| Aaron | Gemini + deployment owner | `feature/deploy-gemini` | Gemini config, `deploy/`, `.github/workflows`, deployment/runbook docs, hosting account |
-| Mohit | Presage owner | `feature/presage-bridge` | `integrations/presage-bridge` |
-| Hitayu | Integration / QA owner | `feature/integration-qa` | `tests/integration`, demo rehearsal, presentation script |
+| Person | Role                              | Branch                   | Area owned                                                                                 |
+| ------ | --------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------ |
+| Gravit | Tiger Data owner + main app owner | `feature/tiger-data`     | Database provisioning/verification; approves app-file and contract changes; reviews merges |
+| Aaron  | Gemini + deployment owner         | `feature/deploy-gemini`  | Gemini config, `deploy/`, `.github/workflows`, deployment/runbook docs, hosting account    |
+| Mohit  | Presage owner                     | `feature/presage-bridge` | `integrations/presage-bridge`                                                              |
+| Hitayu | Integration / QA owner            | `feature/integration-qa` | `tests/integration`, demo rehearsal, presentation script                                   |
 
 ## Accounts and access
 
