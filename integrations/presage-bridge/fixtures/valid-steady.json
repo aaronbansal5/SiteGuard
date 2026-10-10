@@ -1,0 +1,260 @@
+{
+  "fixtureFormat": 1,
+  "name": "valid-steady",
+  "provenance": "SYNTHETIC: hand-authored in the bridge's normalized AdapterSample form. Not recorded from the Presage SDK or a camera; contains no vendor field names. For tests/smoke only.",
+  "description": "20 one-second samples, both metrics explicitly valid. Expect one valid reading per sample.",
+  "events": [
+    {
+      "atMs": 0,
+      "type": "status",
+      "state": "positioning",
+      "message": "Fixture: hold still facing the camera."
+    },
+    {
+      "atMs": 500,
+      "type": "status",
+      "state": "measuring",
+      "message": null
+    },
+    {
+      "atMs": 1000,
+      "type": "sample",
+      "pulse": {
+        "value": 98,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 18,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 2000,
+      "type": "sample",
+      "pulse": {
+        "value": 97.6,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17.9,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 3000,
+      "type": "sample",
+      "pulse": {
+        "value": 97.2,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17.7,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 4000,
+      "type": "sample",
+      "pulse": {
+        "value": 96.8,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17.6,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 5000,
+      "type": "sample",
+      "pulse": {
+        "value": 96.4,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17.4,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 6000,
+      "type": "sample",
+      "pulse": {
+        "value": 96,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17.3,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 7000,
+      "type": "sample",
+      "pulse": {
+        "value": 95.6,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17.1,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 8000,
+      "type": "sample",
+      "pulse": {
+        "value": 95.2,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 17,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 9000,
+      "type": "sample",
+      "pulse": {
+        "value": 94.8,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.8,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 10000,
+      "type": "sample",
+      "pulse": {
+        "value": 94.4,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.7,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 11000,
+      "type": "sample",
+      "pulse": {
+        "value": 94,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.5,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 12000,
+      "type": "sample",
+      "pulse": {
+        "value": 93.6,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.4,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 13000,
+      "type": "sample",
+      "pulse": {
+        "value": 93.2,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.2,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 14000,
+      "type": "sample",
+      "pulse": {
+        "value": 92.8,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 16.1,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 15000,
+      "type": "sample",
+      "pulse": {
+        "value": 92.4,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.9,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 16000,
+      "type": "sample",
+      "pulse": {
+        "value": 92,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.8,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 17000,
+      "type": "sample",
+      "pulse": {
+        "value": 91.6,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.6,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 18000,
+      "type": "sample",
+      "pulse": {
+        "value": 91.2,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.5,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 19000,
+      "type": "sample",
+      "pulse": {
+        "value": 90.8,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.3,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 20000,
+      "type": "sample",
+      "pulse": {
+        "value": 90.4,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": 15.2,
+        "status": "valid"
+      }
+    }
+  ]
+}
