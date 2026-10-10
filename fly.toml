@@ -1,0 +1,51 @@
+# Fly.io config for the SiteGuard AdaptiveBreak hackathon DEMO (fictional data only).
+# Status: UNVERIFIED on a live Fly account. See docs/DEPLOYMENT.md for exact steps.
+# Secrets (COOKIE_SECRET, MEASUREMENT_TOKEN, GEMINI_API_KEY, GEMINI_MODEL) are set with
+# `fly secrets set`; never put them in this file, in build args, or in the image.
+
+app = "siteguard-adaptivebreak-demo" # change to a globally unique name before first deploy
+primary_region = "ewr"
+kill_signal = "SIGTERM"
+kill_timeout = "15s"
+
+[build]
+  dockerfile = "deploy/Dockerfile"
+
+[env]
+  HOST = "0.0.0.0"
+  PORT = "3001"
+  NODE_ENV = "production"
+  HOSTED = "true"
+  DEMO_MODE = "true"
+  SQLITE_PATH = "/data/siteguard.sqlite"
+
+# Persistent SQLite storage. One volume => exactly one machine can run the app,
+# which matches the app's single-process requirement.
+[[mounts]]
+  source = "siteguard_data"
+  destination = "/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # Active sessions and SSE streams live in the single process; do not auto-stop it.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
