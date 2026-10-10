@@ -153,7 +153,11 @@ for a real check-in. `npm start` cannot select it.
 - **Timing:** vendor `timestamp` is microseconds since the Unix epoch. It is converted to the bridge monotonic clock once per sample, then to UTC through the session anchor. Packets with no new timestamp are ignored.
 - **Status:** `validationStatus` `kOk` → `measuring`; any other code → `positioning` with the vendor's hint text.
 - **Errors:** vendor `error` events are forwarded as `SmartSpectraErrorCode` names (for example `kAuthenticationFailed`, `kInputUnavailable`) with the vendor's `retryable` flag. A start-time error rejects `open()` and releases the SDK.
-- **Privacy:** per vendor docs, all metric computation runs on-device; the network is used only to validate the API key/subscription. The adapter sets `enableTelemetry: false` (the vendor default is on). No frames are stored by the bridge or SiteGuard.
+- **Privacy and network use** (vendor docs, [SDK Telemetry & Privacy](https://smartspectra.presagetech.com/docs/telemetry-and-privacy)):
+  - All metric computation runs on-device. The SDK contacts Presage to validate the API key/subscription.
+  - The SDK's optional telemetry is one aggregate summary per session (SDK build, runtime/device model, session outcome, performance and validation counts, timestamp). It never includes frames, metric values, file paths, free text, or user/device identifiers.
+  - Telemetry defaults **on**; this adapter sets `enableTelemetry: false`, so no telemetry session is started and nothing is transmitted for it.
+  - Neither the bridge nor SiteGuard stores frames or footage. If SiteGuard were distributed with telemetry enabled, that collection would need to be disclosed to users per Presage's privacy policy.
 - **Tests:** `test/presage-sdk-adapter.test.ts` exercises the adapter against a fake module with the same names and shapes as the 3.4.0 type declarations.
 
 ## What remains (needs the demo laptop, camera and API key)
