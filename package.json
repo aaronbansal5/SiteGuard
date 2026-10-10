@@ -20,16 +20,18 @@
     "db:enable-timescale": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts timescale",
     "demo:reset": "tsx --env-file-if-exists=.env scripts/demo-reset.ts",
     "test:e2e": "playwright test",
-    "test:postgres": "vitest run apps/api/test/postgres.test.ts",
+    "test:postgres": "vitest run apps/api/test/postgres.test.ts apps/api/test/postgres-driver.test.ts",
     "smoke": "node scripts/smoke.mjs",
     "test:production": "node scripts/production-check.mjs",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,json,css,html}\" \"packages/**/*.{ts,json}\" \"scripts/*.{ts,mjs}\" \"tests/**/*.ts\" \"*.{json,ts}\" \"docs/*.md\" AGENTS.md README.md",
     "db:backup": "node --env-file-if-exists=.env scripts/backup.mjs",
-    "test:backup": "node scripts/backup-check.mjs"
+    "test:backup": "node scripts/backup-check.mjs",
+    "verify:gemini": "node --env-file-if-exists=.env scripts/verify-gemini.mjs",
+    "verify:tiger": "tsx --env-file-if-exists=.env apps/api/src/db/verify.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "^1.58.0",
+    "@playwright/test": "1.64.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
     "@types/react": "^19.0.0",

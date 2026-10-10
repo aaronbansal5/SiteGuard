@@ -219,7 +219,10 @@ describe("API and transactional invariants", () => {
       },
     });
     const request = result.json().request;
-    const start = new Date(Date.now() + 1000).toISOString(),
+    const ownProtected = before.find((b) => b.workerId === request.workerId)!;
+    const start = new Date(
+        Math.max(Date.now() + 1000, Date.parse(ownProtected.endsAt)),
+      ).toISOString(),
       end = new Date(Date.parse(start) + 300000).toISOString();
     const approved = await app.inject({
       method: "PATCH",

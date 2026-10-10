@@ -463,6 +463,21 @@ export async function registerRoutes(
             "REST_INTERVAL",
             "Provide a current/future interval at least as long as requested rest",
           );
+        const start = Date.parse(b.restStartsAt);
+        const end = Date.parse(b.restEndsAt);
+        const overlapsProtected = (await tx.list("breaks")).some(
+          (x) =>
+            x.workerId === request.workerId &&
+            x.kind === "protected" &&
+            start < Date.parse(x.endsAt) &&
+            end > Date.parse(x.startsAt),
+        );
+        if (overlapsProtected)
+          fail(
+            409,
+            "REST_OVERLAPS_PROTECTED",
+            "Additional rest must be separate from the worker's protected break",
+          );
         request.restStartsAt = b.restStartsAt;
         request.restEndsAt = b.restEndsAt;
         await tx.put("breaks", {

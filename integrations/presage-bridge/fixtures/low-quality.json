@@ -1,0 +1,92 @@
+{
+  "fixtureFormat": 1,
+  "name": "low-quality",
+  "provenance": "SYNTHETIC: hand-authored in the bridge's normalized AdapterSample form. Not recorded from the Presage SDK or a camera; contains no vendor field names. For tests/smoke only.",
+  "description": "Explicit invalid/unknown statuses, including plausible numbers marked invalid (must stay invalid), valid status with no number (becomes unknown), and non-positive numbers (nulled).",
+  "events": [
+    {
+      "atMs": 0,
+      "type": "status",
+      "state": "positioning",
+      "message": "Fixture: low light."
+    },
+    {
+      "atMs": 500,
+      "type": "status",
+      "state": "measuring",
+      "message": null
+    },
+    {
+      "atMs": 1000,
+      "type": "sample",
+      "pulse": {
+        "value": 88,
+        "status": "invalid"
+      },
+      "breathing": {
+        "value": 16,
+        "status": "invalid"
+      }
+    },
+    {
+      "atMs": 2000,
+      "type": "sample",
+      "pulse": {
+        "value": 87,
+        "status": "unknown"
+      },
+      "breathing": {
+        "value": 16,
+        "status": "unknown"
+      }
+    },
+    {
+      "atMs": 3000,
+      "type": "sample",
+      "pulse": {
+        "value": null,
+        "status": "valid"
+      },
+      "breathing": {
+        "value": null,
+        "status": "valid"
+      }
+    },
+    {
+      "atMs": 4000,
+      "type": "sample",
+      "pulse": {
+        "value": -5,
+        "status": "invalid"
+      },
+      "breathing": {
+        "value": 0,
+        "status": "invalid"
+      }
+    },
+    {
+      "atMs": 5000,
+      "type": "sample",
+      "pulse": {
+        "value": 250,
+        "status": "invalid"
+      },
+      "breathing": {
+        "value": 70,
+        "status": "invalid"
+      }
+    },
+    {
+      "atMs": 6000,
+      "type": "sample",
+      "pulse": {
+        "value": 86,
+        "status": "unknown"
+      },
+      "breathing": {
+        "value": null,
+        "status": "unknown"
+      }
+    }
+  ]
+}
