@@ -14,7 +14,7 @@ export function CheckIn() {
     a = useAction();
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
-    [source, setSource] = useState<"mock" | "presage">("mock"),
+    [selectedSource, setSource] = useState<"mock" | "presage" | null>(null),
     [workload, setWorkload] = useState("heavy"),
     [temp, setTemp] = useState("26");
   const health = useResource<{
@@ -22,6 +22,9 @@ export function CheckIn() {
     measurementSources: { mock: boolean; presage: boolean };
   }>("/health");
   const localTest = health.data?.checkInTestMode === true;
+  const source =
+    selectedSource ??
+    (localTest && health.data?.measurementSources.presage ? "presage" : "mock");
   if (identity?.role !== "worker") return <ChooseWorker />;
   return (
     <>
@@ -187,10 +190,19 @@ export function CheckIn() {
           <button
             className="button primary full"
             disabled={
-              (!localTest && !consent) || a.busy || !search.get("breakId")
+              health.loading ||
+              (!localTest && !consent) ||
+              a.busy ||
+              !search.get("breakId")
             }
           >
-            {a.busy ? "Starting…" : "Begin check-in"}
+            {a.busy
+              ? "Starting…"
+              : localTest
+                ? source === "presage"
+                  ? "Begin camera check-in"
+                  : "Begin synthetic check-in"
+                : "Begin check-in"}
             <ArrowRight size={17} />
           </button>
           <Link className="button ghost full" to="/worker">

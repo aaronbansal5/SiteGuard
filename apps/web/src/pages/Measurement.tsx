@@ -99,6 +99,37 @@ export function Measurement() {
                 : "Camera capture is managed by the local Presage bridge."}
             </span>
           </div>
+          {s.source === "mock" && (
+            <div className="notice demo">
+              <p>
+                This session uses synthetic values. Your camera is not running.
+              </p>
+              <button
+                className="button secondary full"
+                disabled={a.busy}
+                onClick={() =>
+                  void a.run(async () => {
+                    await api(`/sessions/${s.id}/complete`, {});
+                    const result = await api<{ session: Session }>(
+                      "/sessions",
+                      {
+                        breakId: s.breakId,
+                        source: "presage",
+                        consentVersion: s.consentVersion,
+                        shareWithSupervisor: s.shareWithSupervisor,
+                        context: s.context,
+                      },
+                    );
+                    navigate(`/sessions/${result.session.id}/measure`);
+                  })
+                }
+              >
+                {a.busy
+                  ? "Starting camera…"
+                  : "End synthetic session and start camera check-in"}
+              </button>
+            </div>
+          )}
           <div className="connection">
             <span className={`dot ${stream.error ? "amber" : ""}`} />
             {stream.status}

@@ -550,7 +550,9 @@ function MobileConsent({
     [share, setShare] = useState(false),
     [workload, setWorkload] = useState(""),
     [temp, setTemp] = useState("");
-  const [source, setSource] = useState<"mock" | "presage">("mock");
+  const [source, setSource] = useState<"mock" | "presage">(
+    localTest && presageAvailable ? "presage" : "mock",
+  );
   const a = useAction();
   return (
     <form
@@ -675,7 +677,13 @@ function MobileConsent({
           className="button primary mobile-big"
           disabled={(!localTest && !consent) || !canMeasure || a.busy}
         >
-          {a.busy ? "Starting…" : "Begin check-in"}
+          {a.busy
+            ? "Starting…"
+            : localTest
+              ? source === "presage"
+                ? "Begin camera check-in"
+                : "Begin synthetic check-in"
+              : "Begin check-in"}
           <ArrowRight size={18} />
         </button>
         <button
