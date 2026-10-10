@@ -38,7 +38,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
   };
   if (
     c.hosted &&
-    (!process.env.COOKIE_SECRET || !process.env.MEASUREMENT_TOKEN)
+    (!(process.env.COOKIE_SECRET || overrides.cookieSecret) ||
+      !(process.env.MEASUREMENT_TOKEN || overrides.measurementToken))
   )
     throw new Error("Hosted mode requires COOKIE_SECRET and MEASUREMENT_TOKEN");
   if (c.cookieSecret.length < 32)
