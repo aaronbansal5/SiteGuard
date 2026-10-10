@@ -1,3 +1,4 @@
+import { CameraPreview } from "../components/CameraPreview";
 import { startOrResumeCheckIn } from "../lib/checkin";
 // Phone layout for voluntary recurring check-ins (docs/MOBILE_APP.md).
 //
@@ -762,6 +763,7 @@ function MobileMeasuring({
         <SourceBadge source={s.source} />
       </div>
       <h1>Sit comfortably and rest.</h1>
+      {s.source === "presage" && <CameraPreview sessionId={s.id} />}
       <div className="mobile-countdown">
         <span>Elapsed</span>
         <strong data-testid="checkin-elapsed">

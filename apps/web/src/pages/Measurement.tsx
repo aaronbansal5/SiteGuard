@@ -1,3 +1,4 @@
+import { CameraPreview } from "../components/CameraPreview";
 import { startOrResumeCheckIn } from "../lib/checkin";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
@@ -84,22 +85,26 @@ export function Measurement() {
             </span>
             <span className="badge">{quality || "Waiting"}</span>
           </div>
-          <div className="camera-frame">
-            <div className="scan-corners" />
-            <div className="head-outline">
-              <ScanLine size={68} strokeWidth={1} />
+          {s.source === "presage" ? (
+            <CameraPreview sessionId={s.id} />
+          ) : (
+            <div className="camera-frame">
+              <div className="scan-corners" />
+              <div className="head-outline">
+                <ScanLine size={68} strokeWidth={1} />
+              </div>
+              <strong>
+                {s.source === "mock"
+                  ? "No camera required"
+                  : "Face the bridge camera"}
+              </strong>
+              <span>
+                {s.source === "mock"
+                  ? "A deterministic stream demonstrates the flow."
+                  : "Camera capture is managed by the local Presage bridge."}
+              </span>
             </div>
-            <strong>
-              {s.source === "mock"
-                ? "No camera required"
-                : "Face the bridge camera"}
-            </strong>
-            <span>
-              {s.source === "mock"
-                ? "A deterministic stream demonstrates the flow."
-                : "Camera capture is managed by the local Presage bridge."}
-            </span>
-          </div>
+          )}
           {s.source === "mock" && (
             <div className="notice demo">
               <p>

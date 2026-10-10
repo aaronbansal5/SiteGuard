@@ -64,6 +64,12 @@ const sessionBody = {
 };
 const cases: Case[] = [
   {
+    route: "GET /api/sessions/:id/preview",
+    name: "synthetic sessions have no camera preview",
+    url: `/api/sessions/${UNSHARED}/preview`,
+    expected: { anonymous: 401, workerA: 403, workerB: 403, supervisor: 403 },
+  },
+  {
     route: "GET /api/health",
     name: "health",
     url: "/api/health",

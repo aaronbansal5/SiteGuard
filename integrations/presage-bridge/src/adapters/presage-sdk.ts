@@ -1,3 +1,4 @@
+import { encodePreview } from "../preview.js";
 import type {
   AdapterCapture,
   AdapterHandlers,
@@ -255,6 +256,35 @@ export class PresageSdkAdapter implements SdkAdapter {
     let lastKey = 0;
     let lastStatus = "";
     let closed = false;
+    let previewPending = false;
+    let lastPreviewAt = -Infinity;
+    sdk.on("videoOutput", ((
+      buf: Buffer,
+      width: number,
+      height: number,
+      stride: number,
+      format: number,
+    ) => {
+      if (
+        closed ||
+        !handlers.onPreview ||
+        previewPending ||
+        this.clock.monotonicMs() - lastPreviewAt < 250
+      )
+        return;
+      lastPreviewAt = this.clock.monotonicMs();
+      previewPending = true;
+      void encodePreview(buf, width, height, stride, format)
+        .then((jpeg) => {
+          if (!closed && jpeg) handlers.onPreview?.(jpeg);
+        })
+        .catch(() => {
+          /* Preview failures never invent or discard physiological readings. */
+        })
+        .finally(() => {
+          previewPending = false;
+        });
+    }) as never);
 
     // Started = first of: processingStatus kRunning, first validation feedback,
     // first metrics packet, or processingStatus property polled as kRunning.

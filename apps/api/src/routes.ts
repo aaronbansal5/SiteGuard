@@ -251,6 +251,36 @@ export async function registerRoutes(
   app.get("/api/sessions/:id", async (req) => ({
     session: await access(req, id(req)),
   }));
+  app.get("/api/sessions/:id/preview", async (req, reply) => {
+    worker(req);
+    const session = await access(req, id(req), true);
+    reply.header("Cache-Control", "no-store");
+    if (c.hosted || session.source !== "presage")
+      fail(
+        403,
+        "PREVIEW_LOCAL_ONLY",
+        "Camera preview is only available for your local Presage session",
+      );
+    if (session.status !== "active") return reply.code(204).send();
+    try {
+      const response = await fetch(
+        new URL(`/v1/previews/${session.id}`, c.bridgeUrl),
+        {
+          headers: { Authorization: `Bearer ${c.bridgeToken || ""}` },
+          redirect: "error",
+          signal: AbortSignal.timeout(2000),
+        },
+      );
+      if (response.status === 204) return reply.code(204).send();
+      if (!response.ok || response.headers.get("content-type") !== "image/jpeg")
+        return reply.code(503).send();
+      const frame = Buffer.from(await response.arrayBuffer());
+      if (frame.length > 1_000_000) return reply.code(503).send();
+      return reply.type("image/jpeg").send(frame);
+    } catch {
+      return reply.code(503).send();
+    }
+  });
   app.get("/api/sessions/:id/readings", async (req) => {
     const s = await access(req, id(req));
     return { readings: await r.readings(s.id) };

@@ -23,3 +23,9 @@ Never substitute mock into Presage session. Start failure leaves app session sto
 
 Mock source uses same control/events; backend seeded one-second readings, explicit invalid/null segments, source=mock. No camera permission required. Preview, if added, cannot imply it generates synthetic readings.
 Presage key stays in bridge; no footage through app. Developer 2 documents SDK version, OS, camera, permissions, output/validity mapping, privacy/telemetry and tested start/stop/reconnect. Deliver fixtures and standalone smoke command. Native SDK work is intentionally not implemented by Developer 1.
+
+## Optional local positioning preview
+
+`GET /v1/previews/:appSessionId` uses the same bridge token and loopback/origin restrictions. It returns the latest in-memory JPEG (`image/jpeg`, `Cache-Control: no-store`) or 204 when no fresh frame is available. Preview frames come from the SDK videoOutput callback on the existing capture; no second camera is opened. Frames older than two seconds are unavailable; stop clears the frame. Frames are not persisted, replayed, included in reading events, or sent to Gemini. Packed RGB/BGR/RGBA/BGRA frames are supported; unsupported formats do not affect vitals.
+
+The local app proxies `/api/sessions/:id/preview` for the owning worker only. Supervisors, other workers, synthetic sessions and hosted deployments cannot view the preview. The frontend displays a mirrored frame and positioning guide. The guide does not confirm validity.

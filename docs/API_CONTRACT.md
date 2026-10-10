@@ -52,3 +52,7 @@ Demo login:30 requests/minute/IP; other writes:120/minute/IP (IPv6 counted per /
 ## Local check-in testing
 
 With `CHECK_IN_TEST_MODE=true`, `DEMO_MODE=true`, and `HOSTED=false`, `/health` reports `checkInTestMode:true`. Local test clients omit the consent form and submit `consentVersion:"local-test"`, which is preserved in the session record rather than recording v1 consent. An owned break is still required, but its active-time check is bypassed without editing the break. Normal mode rejects local-test sessions; hosted deployments never enable this bypass. Start/finish remain explicit and sharing remains opt-in.
+
+## Local camera preview
+
+`GET /sessions/:id/preview`: worker owner only, active local Presage sessions only. Returns in-memory JPEG with no-store headers, 204 while waiting or after completion, and 503 if the bridge is unavailable. No images are persisted. The preview uses the existing native capture; it does not open browser camera capture.
