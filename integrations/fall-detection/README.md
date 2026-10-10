@@ -1,6 +1,15 @@
 # Standalone SiteGuard possible-person-down demo
 
-Independent of the React/Fastify app, Presage, Tiger Data and Gemini. Python 3.9+; the synthetic demo needs no packages, keys or camera. This implements the reference project's YOLO person detection + persistent tracking + horizontal bounding-box-duration approach. It is an experimental heuristic, not verified fall detection or an emergency monitoring service.
+Independent of the React/Fastify app, Presage, Tiger Data and Gemini. The synthetic demo needs no packages, keys or camera. This implements the reference project's YOLO person detection + persistent tracking + horizontal bounding-box-duration approach, with extra filters described below. It is an experimental heuristic, not verified fall detection or an emergency monitoring service.
+
+## Supported Python
+
+| Part                                 | Supported versions | Verified for this change                                                                                                                                 |
+| ------------------------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Synthetic demo + unit tests (stdlib) | CPython 3.9–3.13   | `python -m unittest discover -s tests` passed on 3.9.25, 3.11, 3.12 and 3.13.16                                                                          |
+| Camera / recorded video (`.venv`)    | CPython 3.9–3.13   | Runtime and `pytest` on 3.13.16 (Linux x86_64, CPU). `requirements-camera.txt` resolves to binary wheels on 3.9–3.13; 3.9–3.12 camera runtime not re-run |
+
+`requirements-camera.txt` holds compatible ranges. Exact pins per interpreter: `requirements-camera.py39.lock.txt` (Python 3.9 only; numpy 2.0.2 has no 3.13 wheels) and `requirements-camera.py313.lock.txt` (Python 3.13, the verified venv).
 
 ## Run now
 
@@ -12,7 +21,7 @@ python3 -m unittest discover -s tests -v
 python3 -m fall_detection.server
 ```
 
-Open **http://127.0.0.1:4322**. Click sustained horizontal, wait at least 1.5 seconds, and review the resulting incident. Acknowledge it, then resolve with a note. Click upright and try brief bend: it should not generate a new alert. Camera missing clears observed boxes but never resolves incidents. Repeat episodes have a ten-second detector cooldown. Metadata persists in `.data/incidents.sqlite`; stop the server before deleting that database to reset.
+Open **http://127.0.0.1:4322**. Click standing upright, then horizontal pose, wait at least 1.5 seconds, and review the resulting incident. Acknowledge it, then resolve with a note. Click upright and try brief bend: it should not generate a new alert. Camera missing clears observed boxes but never resolves incidents. A repeat in the same spot is suppressed while that incident is open or acknowledged, and for 60 seconds after the last alert there (see repeat suppression). Metadata persists in `.data/incidents.sqlite`; stop the server before deleting that database to reset.
 
 ## Camera / local video
 
@@ -21,13 +30,17 @@ Use a separate environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-camera.txt
+# Optional, smaller CPU-only torch (Linux/Windows; macOS wheels are already CPU/MPS):
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements-camera.txt   # or the lock file for your Python
 python -m fall_detection.server --source camera --camera 0
 ```
 
-Grant Terminal/Python camera access in macOS settings. First camera run downloads YOLOv8n weights into ignored `.data`. Dependencies/model downloads require internet; inference runs locally. Camera mode shows a live preview through the loopback-only dashboard alongside tracking boxes. Only the latest JPEG is kept in memory; images/video are never recorded. Synthetic mode has no camera access. Use a separate camera from Presage, or stop Presage capture first.
+**The camera does not start at launch.** The dashboard shows a monitoring notice and a consent checkbox; the camera and inference start only after the operator ticks it and clicks **Start camera** (`POST /api/camera/start` with `{"consent": true}`). While capture runs, a persistent red **Camera active** bar stays at the top of the page with a **Stop camera** button (`POST /api/camera/stop`). Stopping releases the device and clears the in-memory preview; starting again requires consent again. Synthetic mode has no camera and is unaffected.
 
-For a consented local video fixture:
+Grant Terminal/Python camera access in macOS settings. First camera run downloads YOLOv8n weights into ignored `.data`. Dependencies/model downloads require internet; inference runs locally. While the camera is active the dashboard shows a live preview through the loopback-only server alongside tracking boxes. Only the latest JPEG is kept in memory; images/video are never recorded. Use a separate camera from Presage, or stop Presage capture first.
+
+For a consented local video fixture (also waits for Start camera):
 
 ```bash
 python -m fall_detection.server --source recorded_fixture --video /absolute/path/clip.mp4
@@ -35,13 +48,36 @@ python -m fall_detection.server --source recorded_fixture --video /absolute/path
 
 No synthetic fallback occurs on model/camera failure. Inspect the explicit unavailable status. Recorded fixtures are labeled separately and use video-frame cadence for duration. A live camera with inference gaps above 0.5 seconds resets candidate duration; this may miss incidents on slow hardware. Do not perform a dangerous staged fall to test it. Use fixture clips or harmless tabletop/synthetic tests instead.
 
+## Detector rules (`bbox-aspect-v1` defaults)
+
+A track raises a possible-person-down observation only when all of these hold:
+
+1. Box is valid, detector confidence ≥ 0.5, and it does **not touch the frame edge** (2% margin of width/height). People cut off by the frame often look wide.
+2. Box area is between **0.2% and 35%** of the frame. Tiny boxes are too noisy; close-ups (for example a person filling the frame) are ignored.
+3. The **same track** was seen **upright** (height/width ≥ 1.2) within the previous **5 seconds** before the horizontal phase began.
+4. The box then stays **horizontal** (height/width < 2/3) for **1.5 seconds** with no gap over 0.5 seconds. Ratios between 2/3 and 1.2 reset the candidate.
+
+Repeat suppression: a new observation is dropped (counted as `suppressedRepeats` in `/api/state`) when its normalized region overlaps (IoU ≥ 0.3 or centroid within 10% of the frame) either an open/acknowledged incident for the same camera, or any alert region from the last 60 seconds (the 60 seconds restart while the suppressed person is still there). This stops tracker ID flicker on one still person creating a stream of incidents. The per-track 10-second cooldown also remains.
+
+Known trade-offs: someone lying down at the frame edge, very close to the camera, or whose track ID changes during the transition is missed; a second real person going down in the same spot while an incident is open is folded into that incident. Check the open incident's scene in either case.
+
+With the ultralytics sample `zidane.jpg` (box ratio 0.515, touching the bottom edge, 56% of the frame), the previous rule raised an incident from a 5-second still clip; with these rules it does not.
+
+## Retention and personal data
+
+At startup and then every 24 hours the server deletes **closed** (resolved / false-alarm) incidents older than `--retention-days` (default **30**, measured from closure), together with their event and action rows. Open and acknowledged incidents are never pruned. Free-text notes can contain names or other personal details; they are kept in `.data/incidents.sqlite` until pruned, so avoid unnecessary personal details and delete the database when the demo ends.
+
+## Licensing: Ultralytics is AGPL-3.0
+
+The optional camera path uses **Ultralytics (YOLOv8 code and the `yolov8n.pt` weights), licensed under AGPL-3.0** unless you hold an Ultralytics Enterprise License. AGPL-3.0 requires that if you distribute this software, or run a modified version that others use over a network, you make the complete corresponding source of the combined work available under AGPL-3.0. Local hackathon use is fine; before distributing it, offering it as a hosted service, or bundling it into SiteGuard, obtain legal review or an enterprise license. The synthetic demo and the detector state machine do not import Ultralytics. Weights are not committed to this repository.
+
 ## What matches the reference
 
 Reference: https://github.com/rajvratzoom/siteops-final, commit `1ec38502226d6af7073e32644a5363a0738425b4`, particularly `src/fall_detection.py` and `src/main.py`. Method: detect person boxes, retain track IDs, calculate height/width < 1/1.5, and require 1.5 seconds of continuous horizontal observations. Camera tracking uses Ultralytics YOLOv8n and ByteTrack. These parameters are demo defaults, not clinical or operational thresholds.
 
-Original implementation here, without copied reference source. Unlike the reference, first alerts work with timestamps near zero, observation gaps reset candidate timing, repeated episodes work after cooldown, and incidents require explicit human closure. No hardcoded fall confidence, no “recovered” claim when tracking disappears, no facial identity, no media recording, and no sponsor credentials.
+Original implementation here, without copied reference source. Unlike the reference, first alerts work with timestamps near zero, observation gaps reset candidate timing, repeated episodes work after cooldown, edge/close-up boxes are ignored, an upright-to-horizontal transition is required, and incidents require explicit human closure. No hardcoded fall confidence, no “recovered” claim when tracking disappears, no facial identity, no media recording, and no sponsor credentials.
 
-The base synthetic workflow and tests are verified separately from optional camera hardware. Camera/model installation, inference accuracy and real-world suitability require their own verification. Check Ultralytics/model licensing before distributing or deploying that optional dependency.
+The base synthetic workflow and tests are verified separately from optional camera hardware. Camera/model installation, inference accuracy and real-world suitability require their own verification.
 
 ## Claude integration handoff
 

@@ -4,8 +4,10 @@ The detector is self-contained. Do not merge its SQLite file into SiteGuard, add
 
 ## Current local interface
 
-- `GET /api/state`: source, detector status/message, anonymous boxes/frame dimensions, last 100 incidents.
-- `GET /api/preview`: latest in-memory JPEG for local camera/video preview; 503 before a frame is available. No recording. Do not expose publicly.
+- `GET /api/state`: source, detector status/message, `cameraActive`, `consentAt`, `consentText`, `suppressedRepeats`, anonymous boxes (with rule state) and frame dimensions, all unresolved plus the newest 100 incidents.
+- `GET /api/preview`: latest in-memory JPEG while the camera is active; 503 otherwise. No recording. Do not expose publicly.
+- `POST /api/camera/start`: `{consent:true}` exactly; camera/recorded_fixture only (409 in synthetic). Capture and inference never start at launch. Idempotent while running.
+- `POST /api/camera/stop`: `{}`; stops capture, releases the device and clears the preview. Incidents stay open.
 - `GET /api/events`: last 1000 durable observation events, newest first. This is a local inspection/export endpoint, not a reliable replay cursor.
 - `POST /api/demo`: `{scenario:"upright"|"horizontal"|"bend"|"missing"}`; synthetic only.
 - `POST /api/incidents/:id`: `{action:"acknowledge"|"resolve"|"false_alarm",note:string}`. Closing requires a note. Acknowledging leaves the incident open. Closed incidents cannot be reopened through this endpoint.
@@ -28,11 +30,11 @@ Example emitted event:
   "source": "synthetic",
   "method": "bbox-aspect-v1",
   "durationSeconds": 1.5,
-  "evidence": { "heightWidthRatio": 0.3 }
+  "evidence": { "heightWidthRatio": 0.3, "region": [0.25, 0.42, 0.47, 0.56] }
 }
 ```
 
-`source` is synthetic/camera/recorded_fixture and never changes during a run. Run ID changes on restart. UTC observedAt is emission time; duration comes from monotonic camera timing or recorded-video cadence. Detector confidence is object detection confidence and is not exported as a fall probability. Track IDs may be reused and cannot identify workers.
+`source` is synthetic/camera/recorded_fixture and never changes during a run. Run ID changes on restart. UTC observedAt is emission time; duration comes from monotonic camera timing or recorded-video cadence. Detector confidence is object detection confidence and is not exported as a fall probability. Track IDs may be reused and cannot identify workers. `evidence.region` is the box normalized to 0–1 frame coordinates (no pixels or media), used to suppress repeats in the same spot. Incidents gain `closedAt` on resolve or false alarm; the local store prunes closed incidents and their events/actions after `--retention-days` (default 30).
 
 ## Work still required to integrate
 

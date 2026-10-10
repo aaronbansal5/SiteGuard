@@ -2,11 +2,19 @@ import json
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+CLOSED = ('resolved', 'false_alarm')
+UNRESOLVED = ('open', 'acknowledged')
+
+
+def utc_iso(moment):
+    # Fixed millisecond precision keeps ISO strings lexicographically ordered.
+    return moment.astimezone(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
 
 
 def utc_now():
-    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    return utc_iso(datetime.now(timezone.utc))
 
 
 class Store:
@@ -69,8 +77,48 @@ class Store:
                 raise ValueError('Incident is already closed')
             incident.update(status={'acknowledge': 'acknowledged', 'resolve': 'resolved',
                                     'false_alarm': 'false_alarm'}[action], note=note.strip() or None)
+            if incident['status'] in CLOSED:
+                incident['closedAt'] = utc_now()
             self.db.execute('UPDATE incidents SET payload=? WHERE id=?', (json.dumps(incident), incident_id))
             audit = {'incidentId': incident_id, 'action': action, 'note': note,
                      'createdAt': utc_now()}
             self.db.execute('INSERT INTO actions VALUES (?,?)', (str(uuid.uuid4()), json.dumps(audit)))
             return incident
+
+    def unresolved_regions(self, camera_id):
+        """Normalized regions of open/acknowledged incidents for one camera."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT json_extract(payload, '$.evidence.region') FROM incidents"
+                " WHERE json_extract(payload, '$.status') IN (?, ?)"
+                " AND json_extract(payload, '$.cameraId') = ?", UNRESOLVED + (camera_id,)).fetchall()
+        return [json.loads(row[0]) for row in rows if row[0]]
+
+    def prune(self, retention_days, now=None):
+        """Delete CLOSED incidents (plus their events/actions) older than the window.
+
+        Open and acknowledged incidents, and their events/actions, are never
+        pruned regardless of age. Returns counts of deleted rows.
+        """
+        if not isinstance(retention_days, int) or retention_days < 1:
+            raise ValueError('Retention must be a whole number of days >= 1')
+        cutoff = utc_iso((now or datetime.now(timezone.utc)) - timedelta(days=retention_days))
+        closed_at = "COALESCE(json_extract(payload, '$.closedAt'), json_extract(payload, '$.observedAt'))"
+        with self.lock, self.db:
+            ids = [row[0] for row in self.db.execute(
+                'SELECT id FROM incidents WHERE json_extract(payload, \'$.status\') IN (?, ?)'
+                ' AND ' + closed_at + ' < ?', CLOSED + (cutoff,))]
+            counts = {'incidents': 0, 'events': 0, 'actions': 0}
+            for incident_id in ids:
+                counts['incidents'] += self.db.execute('DELETE FROM incidents WHERE id=?', (incident_id,)).rowcount
+                counts['events'] += self.db.execute('DELETE FROM events WHERE id=?', (incident_id,)).rowcount
+                counts['actions'] += self.db.execute(
+                    "DELETE FROM actions WHERE json_extract(payload, '$.incidentId')=?", (incident_id,)).rowcount
+            # Orphans (no incident row) past the window.
+            counts['events'] += self.db.execute(
+                "DELETE FROM events WHERE id NOT IN (SELECT id FROM incidents)"
+                " AND json_extract(payload, '$.observedAt') < ?", (cutoff,)).rowcount
+            counts['actions'] += self.db.execute(
+                "DELETE FROM actions WHERE json_extract(payload, '$.incidentId') NOT IN (SELECT id FROM incidents)"
+                " AND json_extract(payload, '$.createdAt') < ?", (cutoff,)).rowcount
+        return counts
