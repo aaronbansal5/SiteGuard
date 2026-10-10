@@ -1,10 +1,10 @@
+import { startOrResumeCheckIn } from "../lib/checkin";
 import { useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { ShieldCheck, ArrowRight, LockKeyhole } from "lucide-react";
 import { useIdentity } from "../App";
 import { ChooseWorker } from "./WorkerHome";
-import { api, useResource, useAction } from "../lib/api";
-import type { Session } from "@siteguard/contracts";
+import { useResource, useAction } from "../lib/api";
 import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { PageHeading, ErrorNotice, HelpActions } from "../components/ui";
 export function CheckIn() {
@@ -15,7 +15,9 @@ export function CheckIn() {
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
     [selectedSource, setSource] = useState<"mock" | "presage" | null>(null),
-    [workload, setWorkload] = useState("heavy"),
+    [workload, setWorkload] = useState<"" | "light" | "moderate" | "heavy">(
+      "heavy",
+    ),
     [temp, setTemp] = useState("26");
   const health = useResource<{
     checkInTestMode?: boolean;
@@ -87,8 +89,8 @@ export function CheckIn() {
             e.preventDefault();
             if ((!localTest && !consent) || a.busy) return;
             void a.run(async () => {
-              const result = await api<{ session: Session }>("/sessions", {
-                breakId: search.get("breakId"),
+              const result = await startOrResumeCheckIn(identity.workerId, {
+                breakId: search.get("breakId")!,
                 source,
                 consentVersion: localTest ? "local-test" : "v1",
                 shareWithSupervisor: share,
@@ -137,7 +139,7 @@ export function CheckIn() {
               Recent workload
               <select
                 value={workload}
-                onChange={(e) => setWorkload(e.target.value)}
+                onChange={(e) => setWorkload(e.target.value as typeof workload)}
               >
                 <option value="">Not recorded</option>
                 <option value="light">Light</option>

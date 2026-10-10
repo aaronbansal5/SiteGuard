@@ -1,3 +1,4 @@
+import { startOrResumeCheckIn } from "../lib/checkin";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
@@ -109,17 +110,13 @@ export function Measurement() {
                 disabled={a.busy}
                 onClick={() =>
                   void a.run(async () => {
-                    await api(`/sessions/${s.id}/complete`, {});
-                    const result = await api<{ session: Session }>(
-                      "/sessions",
-                      {
-                        breakId: s.breakId,
-                        source: "presage",
-                        consentVersion: s.consentVersion,
-                        shareWithSupervisor: s.shareWithSupervisor,
-                        context: s.context,
-                      },
-                    );
+                    const result = await startOrResumeCheckIn(s.workerId, {
+                      breakId: s.breakId,
+                      source: "presage",
+                      consentVersion: s.consentVersion,
+                      shareWithSupervisor: s.shareWithSupervisor,
+                      context: s.context,
+                    });
                     navigate(`/sessions/${result.session.id}/measure`);
                   })
                 }

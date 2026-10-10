@@ -1,3 +1,4 @@
+import { startOrResumeCheckIn } from "../lib/checkin";
 // Phone layout for voluntary recurring check-ins (docs/MOBILE_APP.md).
 //
 // Invariants kept here:
@@ -266,6 +267,7 @@ function MobileWorker({ workerId }: { workerId: string }) {
       )}
       {stage.kind === "consent" && (
         <MobileConsent
+          workerId={workerId}
           localTest={localTest}
           presageAvailable={Boolean(health.data?.measurementSources.presage)}
           breakId={checkInBreak?.id ?? null}
@@ -529,6 +531,7 @@ function NotificationOptIn() {
 }
 
 function MobileConsent({
+  workerId,
   localTest,
   presageAvailable,
   breakId,
@@ -537,6 +540,7 @@ function MobileConsent({
   onCancel,
   onStarted,
 }: {
+  workerId: string;
   localTest: boolean;
   presageAvailable: boolean;
   breakId: string | null;
@@ -548,7 +552,7 @@ function MobileConsent({
   // Fresh state on every visit: consent is never remembered.
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
-    [workload, setWorkload] = useState(""),
+    [workload, setWorkload] = useState<"" | "light" | "moderate" | "heavy">(""),
     [temp, setTemp] = useState("");
   const [source, setSource] = useState<"mock" | "presage">(
     localTest && presageAvailable ? "presage" : "mock",
@@ -561,7 +565,7 @@ function MobileConsent({
         e.preventDefault();
         if ((!localTest && !consent) || !breakId || a.busy) return;
         void a.run(async () => {
-          const result = await api<{ session: Session }>("/sessions", {
+          const result = await startOrResumeCheckIn(workerId, {
             breakId,
             source,
             consentVersion: localTest ? "local-test" : "v1",
@@ -630,7 +634,7 @@ function MobileConsent({
           Recent workload
           <select
             value={workload}
-            onChange={(e) => setWorkload(e.target.value)}
+            onChange={(e) => setWorkload(e.target.value as typeof workload)}
           >
             <option value="">Not recorded</option>
             <option value="light">Light</option>
