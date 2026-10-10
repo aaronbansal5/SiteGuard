@@ -16,6 +16,7 @@ import {
   SafetyNote,
 } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
+import { SupervisorMirror } from "../components/SupervisorMirror";
 export function WorkerHome() {
   const { identity } = useIdentity();
   if (identity?.role !== "worker") return <ChooseWorker />;
@@ -198,6 +199,10 @@ function Worker({ workerId }: { workerId: string }) {
           ))}
         </section>
       )}
+      <SupervisorMirror
+        workerId={workerId}
+        onChanged={() => void history.refresh()}
+      />
       <SafetyNote />
     </>
   );
