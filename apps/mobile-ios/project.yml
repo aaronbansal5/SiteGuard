@@ -1,0 +1,54 @@
+# XcodeGen spec (https://github.com/yonaskolb/XcodeGen). Generates the
+# gitignored SiteGuardCheckIn.xcodeproj; see README.md.
+name: SiteGuardCheckIn
+options:
+  bundleIdPrefix: com.siteguard.adaptivebreak
+  deploymentTarget:
+    iOS: "17.0"
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  SmartSpectra:
+    # Package URL and "Exact Version" pinning per
+    # https://smartspectra.presagetech.com/docs/swift/option-1-api-key.md
+    # Confirm the newest released tag before pinning.
+    url: https://github.com/Presage-Security/SmartSpectra-Swift/
+    exactVersion: 3.4.0
+targets:
+  SiteGuardCheckIn:
+    type: application
+    platform: iOS
+    sources:
+      - SiteGuardCheckIn
+    dependencies:
+      - package: SmartSpectra
+        product: SmartSpectra
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.siteguard.adaptivebreak.presagebridge
+        INFOPLIST_FILE: SiteGuardCheckIn/Info.plist
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+  SiteGuardCheckInTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: SiteGuardCheckInTests
+        excludes:
+          - Fixtures/**
+    dependencies:
+      - target: SiteGuardCheckIn
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  SiteGuardCheckIn:
+    build:
+      targets:
+        SiteGuardCheckIn: all
+        SiteGuardCheckInTests: [test]
+    test:
+      targets:
+        - SiteGuardCheckInTests

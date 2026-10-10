@@ -24,6 +24,7 @@ import {
   ArrowUpRight,
   PanelLeft,
   LockKeyhole,
+  Smartphone,
 } from "lucide-react";
 import type { Identity } from "@siteguard/contracts";
 import { api } from "./lib/api";
@@ -51,6 +52,9 @@ const SessionSummary = lazy(() =>
 );
 const HistoryPage = lazy(() =>
   import("./pages/History").then((module) => ({ default: module.HistoryPage })),
+);
+const MobileApp = lazy(() =>
+  import("./pages/Mobile").then((module) => ({ default: module.MobileApp })),
 );
 const Supervisor = lazy(() =>
   import("./pages/Supervisor").then((module) => ({
@@ -86,6 +90,21 @@ function Shell() {
     await api("/demo/login", a);
     setIdentity(a);
   };
+  // Phone check-in layout: same identity and APIs, no workspace chrome.
+  if (
+    location.pathname === "/mobile" ||
+    location.pathname.startsWith("/mobile/")
+  )
+    return (
+      <AuthContext.Provider value={{ identity, login }}>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
+        <Suspense fallback={<Loading />}>
+          <MobileApp />
+        </Suspense>
+      </AuthContext.Provider>
+    );
   return (
     <AuthContext.Provider value={{ identity, login }}>
       <a className="skip-link" href="#main">
@@ -120,6 +139,10 @@ function Shell() {
           <NavLink to="/supervisor">
             <Users size={18} />
             Safety operations
+          </NavLink>
+          <NavLink to="/mobile">
+            <Smartphone size={18} />
+            Phone check-in
           </NavLink>
         </nav>
         <div className="sidebar-bottom">
