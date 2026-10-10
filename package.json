@@ -1,0 +1,44 @@
+{
+  "name": "siteguard-adaptivebreak",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "dev": "concurrently -k \"tsx watch --env-file-if-exists=.env apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "npm run typecheck && npm run build -w @siteguard/web && npm run build -w @siteguard/api",
+    "start": "node --env-file-if-exists=.env apps/api/dist/server.js",
+    "db:migrate": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts",
+    "db:migrate:postgres": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts postgres",
+    "db:enable-timescale": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts timescale",
+    "demo:reset": "tsx --env-file-if-exists=.env scripts/demo-reset.ts",
+    "test:e2e": "playwright test",
+    "test:postgres": "vitest run apps/api/test/postgres.test.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "test:production": "node scripts/production-check.mjs",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,json,css,html}\" \"packages/**/*.{ts,json}\" \"scripts/*.{ts,mjs}\" \"tests/**/*.ts\" \"*.{json,ts}\" \"docs/*.md\" AGENTS.md README.md",
+    "db:backup": "node --env-file-if-exists=.env scripts/backup.mjs",
+    "test:backup": "node scripts/backup-check.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.2.0",
+    "esbuild": "^0.25.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}
