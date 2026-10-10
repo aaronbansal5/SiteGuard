@@ -53,7 +53,9 @@ export class PresageSource implements MeasurementSource {
       headers: this.headers(),
       redirect: "error",
       body: JSON.stringify({ appSessionId: id }),
-      signal: AbortSignal.timeout(5000),
+      // Camera + SDK pipeline startup is slower than a health check (observed
+      // several seconds on macOS with SmartSpectra 3.4.0).
+      signal: AbortSignal.timeout(30000),
     });
     if (!response.ok)
       throw new Error("Presage bridge could not start a camera session");

@@ -39,7 +39,7 @@ import type {
  */
 
 const SDK_PACKAGE = "@smartspectra/node-sdk";
-const START_TIMEOUT_MS = 20_000;
+const START_TIMEOUT_MS = 45_000;
 
 /** Minimal structural view of the vendor module that this adapter uses. */
 export interface SmartSpectraModule {
@@ -181,9 +181,19 @@ export class PresageSdkAdapter implements SdkAdapter {
     let lastUs = 0;
     let closed = false;
 
+    // Started = first of: processingStatus kRunning, first validation feedback,
+    // first metrics packet, or processingStatus property polled as kRunning.
+    // (Observed on macOS: the camera and pipeline run without a
+    // processingStatus kRunning event reaching the callback.)
+    let settled = false;
     let settle!: (err?: Error) => void;
     const started = new Promise<void>((resolve, reject) => {
-      settle = (err) => (err ? reject(err) : resolve());
+      settle = (err) => {
+        if (settled) return;
+        settled = true;
+        if (err) reject(err);
+        else resolve();
+      };
     });
 
     sdk.on("processingStatus", ((status: number) => {
@@ -192,6 +202,7 @@ export class PresageSdkAdapter implements SdkAdapter {
         settle(new Error("SmartSpectra entered error state while starting"));
     }) as never);
     sdk.on("validationStatus", ((code: number, _ts: number, hint: string) => {
+      settle(); // the pipeline is running once it reports input feedback
       if (code === m.ValidationCode.kOk) handlers.onStatus("measuring", null);
       else handlers.onStatus("positioning", hint || null);
     }) as never);
@@ -200,6 +211,7 @@ export class PresageSdkAdapter implements SdkAdapter {
       handlers.onError(errorName(code), message, retryable);
     }) as never);
     sdk.on("metrics", ((buf: Buffer) => {
+      settle();
       if (closed) return;
       let decoded: unknown;
       try {
@@ -242,11 +254,16 @@ export class PresageSdkAdapter implements SdkAdapter {
     try {
       sdk.useCamera(m.CameraSelection.default);
       sdk.start();
+      const poll = setInterval(() => {
+        const st = (sdk as { processingStatus?: number }).processingStatus;
+        if (st === m.ProcessingStatus.kRunning) settle();
+      }, 250);
+      poll.unref();
       await Promise.race([
-        started,
+        started.finally(() => clearInterval(poll)),
         new Promise<never>((_, reject) =>
           setTimeout(
-            () => reject(new Error("SmartSpectra did not start within 20 s")),
+            () => reject(new Error("SmartSpectra did not start within 45 s")),
             START_TIMEOUT_MS,
           ).unref(),
         ),
