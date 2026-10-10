@@ -69,7 +69,7 @@ function storage() {
 
 export function MobileApp() {
   const { identity } = useIdentity();
-  const [choosing, setChoosing] = useState(false);
+  const choosing = false;
   return (
     <div className="mobile-app">
       <header className="mobile-header">
@@ -82,13 +82,9 @@ export function MobileApp() {
           </span>
         </Link>
         {identity?.role === "worker" && !choosing && (
-          <button
-            type="button"
-            className="button ghost mobile-switch"
-            onClick={() => setChoosing(true)}
-          >
-            Switch worker
-          </button>
+          <Link to="/worker" className="button ghost mobile-switch">
+            Worker portal
+          </Link>
         )}
       </header>
       <div className="mobile-demo-strip">
@@ -96,7 +92,7 @@ export function MobileApp() {
       </div>
       <main id="main" className="mobile-main">
         {identity?.role !== "worker" || choosing ? (
-          <ChooseMobileWorker onChosen={() => setChoosing(false)} />
+          <p>Sign in with your worker account to continue.</p>
         ) : (
           <MobileWorker key={identity.workerId} workerId={identity.workerId} />
         )}

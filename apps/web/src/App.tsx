@@ -195,7 +195,24 @@ function Shell() {
           Skip to content
         </a>
         <Suspense fallback={<Loading />}>
-          <Protected role="worker"><MobileApp /></Protected>
+          <ErrorNotice message={error} />
+          {loading ? (
+            <Loading />
+          ) : !config ? (
+            <section className="card">
+              <h1>Sign-in service unavailable</h1>
+              <button
+                className="button primary"
+                onClick={() => setRetry((v) => v + 1)}
+              >
+                Retry sign-in check
+              </button>
+            </section>
+          ) : (
+            <Protected role="worker">
+              <MobileApp />
+            </Protected>
+          )}
         </Suspense>
       </AuthContext.Provider>
     );
@@ -231,7 +248,10 @@ function Shell() {
               <NavLink to="/history">
                 <History size={18} /> Session history
               </NavLink>
-            <NavLink to="/mobile"><Smartphone size={18} />Phone check-in</NavLink>
+              <NavLink to="/mobile">
+                <Smartphone size={18} />
+                Phone check-in
+              </NavLink>
             </>
           )}
           {identity?.role === "supervisor" && (
