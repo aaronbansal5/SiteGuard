@@ -1,5 +1,10 @@
 name: Application checks
 on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   application:
     runs-on: ubuntu-latest
@@ -9,12 +14,24 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+      - run: node --version && npm --version
+      # npm ci fails if package-lock.json is out of sync with package.json.
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
       - run: npm run test:production
       - run: npm run test:backup
+      - name: Gemini verifier reports deterministic fallback without a key
+        env:
+          GEMINI_API_KEY: ""
+          GEMINI_MODEL: ""
+        run: |
+          set +e
+          npm run verify:gemini > verify.log 2>&1
+          code=$?
+          cat verify.log
+          test "$code" -ne 0 && grep -q "origin:         deterministic" verify.log
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
@@ -22,3 +39,37 @@ jobs:
         with:
           name: browser-failures
           path: test-results/
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: docker build -f deploy/Dockerfile -t siteguard:ci .
+      - name: Run container with a root-owned persistent volume (like Fly/Render)
+        run: |
+          sudo mkdir -p /srv/siteguard-data
+          sudo chown 0:0 /srv/siteguard-data
+          docker run -d --name siteguard -p 3001:3001 \
+            -v /srv/siteguard-data:/data \
+            -e COOKIE_SECRET="ci-only-cookie-secret-$(openssl rand -hex 24)" \
+            -e MEASUREMENT_TOKEN="ci-only-token-$(openssl rand -hex 16)" \
+            siteguard:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3001/api/health && break
+            sleep 2
+          done
+      - run: SMOKE_URL=http://127.0.0.1:3001 node scripts/deployment-smoke.mjs
+      - name: Data survives a container restart and server runs unprivileged
+        run: |
+          docker exec siteguard sh -c 'test -s /data/siteguard.sqlite && grep -E "^Uid:[[:space:]]+1000[[:space:]]" /proc/1/status'
+          docker restart siteguard
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3001/api/health && break
+            sleep 2
+          done
+          SMOKE_URL=http://127.0.0.1:3001 node scripts/deployment-smoke.mjs
+      - if: always()
+        run: docker logs siteguard || true
