@@ -8,9 +8,9 @@
     "node": ">=24.7"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx src/cli.ts",
+    "start": "node --import tsx src/cli.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "smoke:hardware": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx scripts/smoke.ts --hardware",
+    "smoke:hardware": "node --import tsx scripts/smoke.ts --hardware",
     "inspect:metrics": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx scripts/inspect-metrics.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

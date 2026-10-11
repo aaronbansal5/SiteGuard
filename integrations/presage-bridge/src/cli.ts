@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
 import { systemClock } from "./adapter.js";
 import { PresageSdkAdapter } from "./adapters/presage-sdk.js";
 import { DEFAULT_PORT, LOOPBACK_HOST } from "./contract.js";
 import { PresageBridge } from "./server.js";
+
+if (existsSync("../../.env")) process.loadEnvFile("../../.env");
 
 /**
  * Production entry point. Always uses the real SmartSpectra 3.4.0 adapter,

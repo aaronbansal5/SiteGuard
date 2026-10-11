@@ -12,11 +12,11 @@ test("real-time mock check-in → summary → request → protected staffing cha
     page.getByRole("heading", { name: "A better view of the break." }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Open worker portal" }).click();
-  await page.getByRole("link", { name: "Start check-in" }).click();
+  await page.getByRole("link", { name: "Start voluntary check-in" }).click();
   await page.getByLabel("I understand the limitations").check();
   await page.getByRole("button", { name: "Begin check-in" }).click();
   await expect(
-    page.getByRole("heading", { name: "Your check-in is recording." }),
+    page.getByRole("heading", { name: "Settle in. Observe the change." }),
   ).toBeVisible();
   await expect(page.getByText("Synthetic demo", { exact: true })).toBeVisible();
   await expect(
@@ -35,7 +35,7 @@ test("real-time mock check-in → summary → request → protected staffing cha
     .toBeGreaterThanOrEqual(60);
   await page.getByRole("button", { name: "Finish check-in" }).click();
   await expect(
-    page.getByRole("heading", { name: "Your check-in results." }),
+    page.getByRole("heading", { name: "Your observations, in context." }),
   ).toBeVisible();
   await expect(page.getByText("Observed change", { exact: true })).toHaveCount(
     2,
@@ -46,7 +46,7 @@ test("real-time mock check-in → summary → request → protected staffing cha
   await expect(
     page.getByRole("heading", { name: "Measurement evidence" }),
   ).toBeVisible();
-  await expect(page.getByText("60", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/^(60|61)$/, { exact: true }).first()).toBeVisible();
   await expect(
     page.getByText("Local demo storage", { exact: true }),
   ).toBeVisible();

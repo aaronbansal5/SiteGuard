@@ -44,7 +44,9 @@ test("consent screen meets automated WCAG AA checks", async ({ page }) => {
     data: { role: "worker", workerId: fixtureId(1) },
   });
   await page.goto(`/check-in?breakId=${fixtureId(101)}`);
-  await page.getByRole("heading", { name: "Ready to check in?" }).waitFor();
+  await page
+    .getByRole("heading", { name: "A check-in on your terms." })
+    .waitFor();
   await scan(page);
 });
 test("summary and charts meet automated WCAG AA checks", async ({ page }) => {
@@ -52,8 +54,7 @@ test("summary and charts meet automated WCAG AA checks", async ({ page }) => {
     data: { role: "worker", workerId: fixtureId(1) },
   });
   await page.goto(`/sessions/${fixtureId(1001)}`);
-  await page.getByRole("heading", { name: "Your check-in results." }).waitFor();
-  await page.getByText("View charts and history", { exact: true }).click();
+  await page.getByRole("heading", { name: "Your observations, in context." }).waitFor();
   await page
     .getByRole("heading", { name: "Compared with your own usual" })
     .waitFor();

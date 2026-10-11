@@ -5,11 +5,11 @@ test("consent can be skipped and assistance requested without measurements", asy
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Open worker portal" }).click();
-  await page.getByRole("link", { name: "Start check-in" }).click();
+  await page.getByRole("link", { name: "Start voluntary check-in" }).click();
   await expect(
     page.getByRole("button", { name: "Begin check-in" }),
   ).toBeDisabled();
-  await page.getByRole("link", { name: "Back to worker home" }).click();
+  await page.getByRole("link", { name: "Skip measurement" }).click();
   await page
     .getByRole("button", { name: "Request assistance", exact: true })
     .click();

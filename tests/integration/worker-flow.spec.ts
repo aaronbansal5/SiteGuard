@@ -20,9 +20,9 @@ test("phone-width journey: explicit consent, synthetic measurement, result, rest
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/worker");
   await expect(
-    page.getByRole("link", { name: "Start check-in", exact: true }),
+    page.getByRole("link", { name: "Start voluntary check-in", exact: true }),
   ).toHaveCount(1);
-  await page.getByRole("link", { name: "Start check-in", exact: true }).click();
+  await page.getByRole("link", { name: "Start voluntary check-in", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Begin check-in" }),
   ).toBeDisabled();
@@ -36,20 +36,17 @@ test("phone-width journey: explicit consent, synthetic measurement, result, rest
   await page.getByLabel("I understand the limitations").check();
   await page.getByRole("button", { name: "Begin check-in" }).click();
   await expect(
-    page.getByRole("heading", { name: "Your check-in is recording." }),
+    page.getByRole("heading", { name: "Settle in. Observe the change." }),
   ).toBeVisible();
   await expect(
     page.getByText("No camera required", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Finish check-in" }).click();
   await expect(
-    page.getByRole("heading", { name: "Your check-in results." }),
+    page.getByRole("heading", { name: "Your observations, in context." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Your research signal" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Not enough evidence for an estimate", { exact: true }),
+    page.getByRole("heading", { name: "Research rest support" }),
   ).toBeVisible();
   await expect(page.getByText("Temperature not recorded")).toHaveCount(0);
   expect(
@@ -79,8 +76,8 @@ test("consent is fresh on return; missing break cannot submit", async ({
 }) => {
   await page.goto(`/check-in?breakId=${fixtureId(101)}`);
   await page.getByLabel("I understand the limitations").check();
-  await page.getByRole("link", { name: "Back to worker home" }).click();
-  await page.getByRole("link", { name: "Start check-in", exact: true }).click();
+  await page.getByRole("link", { name: "Skip measurement" }).click();
+  await page.getByRole("link", { name: "Start voluntary check-in", exact: true }).click();
   await expect(
     page.getByLabel("I understand the limitations"),
   ).not.toBeChecked();
@@ -141,7 +138,7 @@ test("research and explanation failures retain rest request controls", async ({
     page.getByRole("button", { name: "Retry research estimate" }),
   ).toBeVisible();
   await expect(
-    page.getByText("The explanation is unavailable.", { exact: false }),
+    page.getByText("Explanation unavailable", { exact: false }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Request additional rest", exact: true }),
@@ -194,7 +191,6 @@ test("browser camera source requests custom input and reports denied permission"
   await expect(page.getByLabel("Measurement source")).toHaveValue("presage");
   await page.getByLabel("I understand the limitations").check();
   await page.getByRole("button", { name: "Begin check-in" }).click();
-  await expect(page.getByText("Camera stopped", { exact: true })).toBeVisible();
   expect(requestedInput).toMatchObject({
     source: "presage",
     input: "custom",

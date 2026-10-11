@@ -10,11 +10,11 @@
     "node": ">=24.7"
   },
   "scripts": {
-    "dev": "concurrently -k \"tsx watch --env-file-if-exists=.env apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\"",
+    "dev": "concurrently -k \"tsx watch apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc --noEmit -p tsconfig.build.json && npm run build -w @siteguard/web && npm run build -w @siteguard/api",
-    "start": "node --env-file-if-exists=.env apps/api/dist/server.js",
+    "start": "node apps/api/dist/server.js",
     "db:migrate": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts",
     "db:migrate:postgres": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts postgres",
     "db:enable-timescale": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts timescale",
@@ -30,7 +30,7 @@
     "verify:gemini": "node --env-file-if-exists=.env scripts/verify-gemini.mjs",
     "verify:tiger": "tsx --env-file-if-exists=.env apps/api/src/db/verify.ts",
     "verify:all": "node --env-file-if-exists=.env scripts/verify-all.mjs",
-    "dev:live": "concurrently -n bridge,api,web \"npm run start --prefix integrations/presage-bridge\" \"tsx watch --env-file-if-exists=.env apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\"",
+    "dev:live": "concurrently -n bridge,api,web \"npm run start --prefix integrations/presage-bridge\" \"tsx watch apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\"",
     "auth:bootstrap": "tsx --env-file-if-exists=.env scripts/auth-bootstrap.ts",
     "auth:disable": "tsx --env-file-if-exists=.env scripts/auth-disable.ts",
     "fall:camera": "node --env-file-if-exists=.env scripts/fall-camera.mjs"

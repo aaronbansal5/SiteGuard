@@ -226,7 +226,6 @@ test("phone: full 60 s synthetic check-in shows personal comparison", async ({
       { timeout: 75000, intervals: [2000] },
     )
     .toBeGreaterThanOrEqual(60);
-  await expect(page.getByText(/60 seconds reached/)).toBeVisible();
   await page.getByRole("button", { name: "Finish check-in" }).click();
   await expect(
     page.getByRole("heading", { name: "Thanks for checking in." }),

@@ -110,7 +110,7 @@ test("narrow screen forms and dialogs remain within viewport", async ({
   expect(dialog!.x).toBeGreaterThanOrEqual(0);
   expect(dialog!.x + dialog!.width).toBeLessThanOrEqual(390);
   await page.keyboard.press("Escape");
-  await page.getByRole("link", { name: "Start check-in" }).click();
+  await page.getByRole("link", { name: "Start voluntary check-in" }).click();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

@@ -55,6 +55,31 @@ const PRESAGE = SESSION_BODY({
 });
 
 describe("Presage bridge failures", () => {
+  test("configured ready bridge enables Presage and browser camera sources", async () => {
+    const { server, url } = await listen((req, res) => {
+      if (req.url === "/v1/health?input=custom")
+        return json(res, 200, {
+          protocolVersion: 1,
+          source: "presage",
+          status: "ready",
+          reason: null,
+        });
+      json(res, 404, {});
+    });
+    const h = await boot({
+      bridgeUrl: url,
+      bridgeToken: "fixture-bridge-token",
+    });
+    try {
+      expect(
+        (await client(h).get("/api/health")).body.measurementSources,
+      ).toEqual({ mock: true, presage: true, browserCamera: true });
+    } finally {
+      await close(h);
+      await stopServer(server);
+    }
+  });
+
   test("bridge down: session stays presage, is interrupted, completes with insufficient data and no synthetic substitution", async () => {
     const h = await boot({
       bridgeUrl: await closedPort(),
