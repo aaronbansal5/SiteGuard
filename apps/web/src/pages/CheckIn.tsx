@@ -80,7 +80,7 @@ export function CheckIn() {
             <div className="consent-point">
               <span>01</span>
               <div>
-                <h3>Only normalized observations</h3>
+                <h3>What we record</h3>
                 <p>
                   We record timestamped pulse, breathing rate, source, and
                   quality. SiteGuard does not store camera images or video.
@@ -90,7 +90,7 @@ export function CheckIn() {
             <div className="consent-point">
               <span>02</span>
               <div>
-                <h3>No identification, no clearance</h3>
+                <h3>What readings can tell you</h3>
                 <p>
                   No facial identification. Measurements cannot establish
                   recovery or whether you are fit to return to work.
@@ -183,7 +183,7 @@ export function CheckIn() {
               checked={share}
               onChange={(e) => setShare(e.target.checked)}
             />
-            <span>Share this session's summary with safety operations</span>
+            <span>Share this check-in with my manager</span>
           </label>
           {!localTest && (
             <label className="checkbox consent-check">

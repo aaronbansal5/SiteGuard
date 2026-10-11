@@ -161,6 +161,76 @@ describe("Supabase account auth", () => {
     expect(failure.statusCode).toBe(401);
     expect(failure.body).not.toContain("Secret provider details");
   });
+  it.each([
+    ["email_address_not_authorized", 422, 503, "AUTH_EMAIL_CONFIGURATION"],
+    ["signup_disabled", 422, 503, "SIGNUP_DISABLED"],
+    ["over_email_send_rate_limit", 429, 429, "SIGNUP_RATE_LIMITED"],
+    ["weak_password", 422, 400, "WEAK_PASSWORD"],
+    ["unexpected_failure", 500, 503, "AUTH_UNAVAILABLE"],
+  ])(
+    "reports signup provider failure %s without leaking credentials",
+    async (code, status, expectedStatus, expectedCode) => {
+      const { app, repo } = await setup();
+      provider.signUp.mockResolvedValue({
+        data: { session: null },
+        error: { code, status, message: "Private provider payload" },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/password/signup",
+        headers,
+        payload: {
+          email: "another-worker@gmail.com",
+          password: "fixture-password",
+          displayName: "Worker",
+        },
+      });
+      expect(response.statusCode).toBe(expectedStatus);
+      expect(response.json().error.code).toBe(expectedCode);
+      expect(response.body).not.toContain("Private provider payload");
+      expect(
+        await repo.driver.query("SELECT id FROM auth_accounts"),
+      ).toHaveLength(0);
+    },
+  );
+  it("allows signup with any email and creates separate worker profiles after verification", async () => {
+    const { app, repo } = await setup();
+    for (const [index, address] of [
+      "worker-one@gmail.com",
+      "worker-two@outlook.com",
+    ].entries()) {
+      const id = `00000000-0000-4000-8000-00000000000${index + 1}`;
+      provider.signUp.mockResolvedValue({
+        data: { session: { access_token: "verified-jwt" } },
+        error: null,
+      });
+      provider.getUser.mockResolvedValue({
+        data: { user: user(address, id) },
+        error: null,
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/password/signup",
+        headers,
+        payload: {
+          email: address,
+          password: "fixture-password",
+          displayName: "Worker",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().identity.role).toBe("worker");
+      expect(provider.signUp).toHaveBeenLastCalledWith(
+        expect.objectContaining({ email: address }),
+      );
+    }
+    const accounts = await repo.driver.query(
+      "SELECT role,worker_id FROM auth_accounts",
+    );
+    expect(accounts).toHaveLength(2);
+    expect(new Set(accounts.map((account) => account.worker_id)).size).toBe(2);
+    expect(accounts.every((account) => account.role === "worker")).toBe(true);
+  });
   it("rejects role fields and missing origin; confirmation signup cannot log in early", async () => {
     const { app, repo } = await setup();
     expect(

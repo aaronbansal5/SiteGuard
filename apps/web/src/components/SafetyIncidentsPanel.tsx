@@ -1,3 +1,4 @@
+import { IncidentScrollArea } from "./IncidentScrollArea";
 import { useState } from "react";
 import type { Worker } from "@siteguard/contracts";
 import { api, useAction, useResource, time } from "../lib/api";
@@ -51,57 +52,61 @@ export function SafetyIncidentsPanel() {
       ) : !resource.data?.incidents.length ? (
         <p>No camera incidents recorded.</p>
       ) : (
-        resource.data.incidents.map((incident) => (
-          <article className="notice" key={incident.id}>
-            <div>
-              <strong>
-                {incident.zoneId} · {incident.cameraId}
-              </strong>
-              <p>
-                {time(incident.observedAt)} · Track {incident.trackId} ·{" "}
-                {incident.durationSeconds.toFixed(1)} seconds · Source:{" "}
-                {incident.source}
-              </p>
-              <p>
-                Status: {incident.status.replaceAll("_", " ")}{" "}
-                {incident.workerId &&
-                  `· Worker: ${workers.data?.workers.find((w) => w.id === incident.workerId)?.displayName || incident.workerId}`}
-              </p>
-              {!["resolved", "false_alarm"].includes(incident.status) && (
-                <div className="button-row">
-                  {incident.status === "open" && (
-                    <button
-                      className="button secondary"
-                      onClick={() => choose(incident, "acknowledge")}
-                    >
-                      Acknowledge incident
-                    </button>
+        <IncidentScrollArea>
+          {[...resource.data.incidents]
+            .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))
+            .map((incident) => (
+              <article className="notice" key={incident.id}>
+                <div>
+                  <strong>
+                    {incident.zoneId} · {incident.cameraId}
+                  </strong>
+                  <p>
+                    {time(incident.observedAt)} · Track {incident.trackId} ·{" "}
+                    {incident.durationSeconds.toFixed(1)} seconds · Source:{" "}
+                    {incident.source}
+                  </p>
+                  <p>
+                    Status: {incident.status.replaceAll("_", " ")}{" "}
+                    {incident.workerId &&
+                      `· Worker: ${workers.data?.workers.find((w) => w.id === incident.workerId)?.displayName || incident.workerId}`}
+                  </p>
+                  {!["resolved", "false_alarm"].includes(incident.status) && (
+                    <div className="button-row">
+                      {incident.status === "open" && (
+                        <button
+                          className="button secondary"
+                          onClick={() => choose(incident, "acknowledge")}
+                        >
+                          Acknowledge incident
+                        </button>
+                      )}
+                      {!incident.workerId && (
+                        <button
+                          className="button secondary"
+                          onClick={() => choose(incident, "associate")}
+                        >
+                          Associate worker
+                        </button>
+                      )}
+                      <button
+                        className="button secondary"
+                        onClick={() => choose(incident, "resolve")}
+                      >
+                        Resolve incident
+                      </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => choose(incident, "false_alarm")}
+                      >
+                        Mark false alarm
+                      </button>
+                    </div>
                   )}
-                  {!incident.workerId && (
-                    <button
-                      className="button secondary"
-                      onClick={() => choose(incident, "associate")}
-                    >
-                      Associate worker
-                    </button>
-                  )}
-                  <button
-                    className="button secondary"
-                    onClick={() => choose(incident, "resolve")}
-                  >
-                    Resolve incident
-                  </button>
-                  <button
-                    className="button secondary"
-                    onClick={() => choose(incident, "false_alarm")}
-                  >
-                    Mark false alarm
-                  </button>
                 </div>
-              )}
-            </div>
-          </article>
-        ))
+              </article>
+            ))}
+        </IncidentScrollArea>
       )}
       {selected && (
         <Modal

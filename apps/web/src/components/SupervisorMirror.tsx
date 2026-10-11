@@ -1,8 +1,8 @@
+import { IncidentScrollArea } from "./IncidentScrollArea";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import {
-  SUPERVISOR_NEVER_SEES,
   type SupervisorView,
   type SharedSessionRef,
 } from "@siteguard/contracts";
@@ -48,13 +48,10 @@ export function SupervisorMirror({
     >
       <div className="card-header">
         <div>
-          <h2 id="supervisor-mirror-title">What safety operations can see</h2>
-          <p>
-            Built from the same records the supervisor workspace receives, so
-            you can check it yourself.
-          </p>
+          <h2 id="supervisor-mirror-title">Shared with your manager</h2>
+          <p>Your check-ins are private unless you choose to share them.</p>
         </div>
-        {v && <span className="badge">Checked {time(v.generatedAt)}</span>}
+        {v && <span className="badge">{v.sharedSessions.length} shared</span>}
       </div>
       <ErrorNotice message={resource.error || (confirm ? "" : a.error)} />
       {done && (
@@ -66,108 +63,78 @@ export function SupervisorMirror({
       {!v ? (
         resource.loading && <Loading />
       ) : (
-        <div className="mirror-columns">
-          <div>
-            <h3>
-              <Eye size={16} /> Visible to safety operations
-            </h3>
-            <ul className="mirror-list">
-              <li>
-                <strong>Breaks</strong>
-                <span>
-                  {v.breaks.length
-                    ? v.breaks
-                        .map(
-                          (b) =>
-                            `${b.kind === "protected" ? "Protected" : "Additional"} ${time(b.startsAt)}–${time(b.endsAt)}`,
-                        )
-                        .join(" · ")
-                    : "None scheduled"}
-                </span>
-              </li>
-              <li>
-                <strong>Task assignments</strong>
-                <span>
-                  {v.assignments.length
-                    ? `${v.assignments.length} interval${v.assignments.length === 1 ? "" : "s"}: ${v.tasks.map((t) => t.label).join(", ")}`
-                    : "None right now"}
-                </span>
-              </li>
-              <li>
-                <strong>Your requests</strong>
-                <span>
-                  {v.requests.length
-                    ? `${v.requests.length} total, ${open!.length} open. Supervisors see the kind, status and their notes.`
-                    : "None"}
-                </span>
-              </li>
-              <li>
-                <strong>Symptom reports</strong>
-                <span>
-                  {v.symptomReports.length
-                    ? v.symptomReports
-                        .map(
-                          (s) =>
-                            `${s.codes.map((c) => SYMPTOM_LABELS[c] ?? c).join(", ")}${s.note ? ` (your note: "${s.note}")` : ""}`,
-                        )
-                        .join(" · ")
-                    : "None"}
-                </span>
-              </li>
-              <li>
-                <strong>Shared check-ins</strong>
-                {v.sharedSessions.length ? (
-                  <span>
-                    The summary of pulse and breathing changes for{" "}
-                    {v.sharedSessions.length === 1
-                      ? "this check-in"
-                      : "these check-ins"}
-                    :
-                  </span>
-                ) : (
-                  <span>None. Your check-in observations stay with you.</span>
-                )}
-              </li>
-            </ul>
-            {v.sharedSessions.map((s) => (
-              <div className="shared-session" key={s.id}>
-                <div>
-                  <Link className="text-link" to={`/sessions/${s.id}`}>
-                    {date(s.startedAt)} · {time(s.startedAt)}{" "}
-                    <ArrowRight size={13} />
-                  </Link>
-                  <small>
-                    {s.status === "active" ? "In progress · " : ""}
-                    {s.linkedToRequest
-                      ? "Linked from one of your requests"
-                      : "Openable by safety operations"}
-                  </small>
-                </div>
-                <SourceBadge source={s.source} />
-                <button
-                  className="button small-button secondary"
-                  disabled={a.busy}
-                  onClick={() => {
-                    setDone("");
-                    a.setError("");
-                    setConfirm(s);
-                  }}
-                >
-                  <EyeOff size={14} /> Stop sharing
-                </button>
-              </div>
-            ))}
-          </div>
-          <div>
-            <h3>
-              <EyeOff size={16} /> Never sent to safety operations
-            </h3>
-            <ul className="mirror-list never">
-              {SUPERVISOR_NEVER_SEES.map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
-          </div>
+        <div>
+          {v.sharedSessions.length ? (
+            <IncidentScrollArea label="Shared check-ins, scroll for more">
+              {[...v.sharedSessions]
+                .sort(
+                  (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt),
+                )
+                .map((s) => (
+                  <div className="shared-session" key={s.id}>
+                    <div>
+                      <Link className="text-link" to={`/sessions/${s.id}`}>
+                        {date(s.startedAt)} · {time(s.startedAt)}{" "}
+                        <ArrowRight size={13} />
+                      </Link>
+                      <small>
+                        {s.status === "active" ? "In progress · " : ""}
+                        {s.linkedToRequest
+                          ? "Shared with a request"
+                          : "Manager can view this check-in"}
+                      </small>
+                    </div>
+                    <SourceBadge source={s.source} />
+                    <button
+                      className="button small-button secondary"
+                      disabled={a.busy}
+                      onClick={() => {
+                        setDone("");
+                        a.setError("");
+                        setConfirm(s);
+                      }}
+                    >
+                      <EyeOff size={14} />
+                      Stop sharing
+                    </button>
+                  </div>
+                ))}
+            </IncidentScrollArea>
+          ) : (
+            <p className="muted">
+              No check-ins shared. Your readings are private.
+            </p>
+          )}
+          <p className="sharing-private-note">
+            <EyeOff size={15} />
+            Unshared readings and personal trends stay private. Check-in images
+            and video are not stored.
+          </p>
+          <details className="sharing-details">
+            <summary>
+              <Eye size={15} />
+              What else can my manager see?
+            </summary>
+            <p>
+              Your break times, work assignments, and requests for rest or help.
+            </p>
+            <p>
+              {v.breaks.length} scheduled{" "}
+              {v.breaks.length === 1 ? "break" : "breaks"} · {open?.length || 0}{" "}
+              open requests
+            </p>
+            {v.symptomReports.length > 0 && (
+              <p>
+                Symptoms you reported:{" "}
+                {v.symptomReports
+                  .map((s) =>
+                    s.codes.map((c) => SYMPTOM_LABELS[c] || c).join(", "),
+                  )
+                  .join(" · ")}
+                . Your submitted notes are also shared.
+              </p>
+            )}
+          </details>
         </div>
       )}
       {confirm && (
@@ -176,11 +143,10 @@ export function SupervisorMirror({
           onClose={() => setConfirm(undefined)}
         >
           <p className="muted">
-            Safety operations will no longer be able to open the observations
-            from {date(confirm.startedAt)} · {time(confirm.startedAt)}. Your
-            requests, symptom reports and protected breaks stay exactly as they
-            are, and any open assistance request stays open. You cannot turn
-            sharing back on for this check-in.
+            Your manager will lose access to the readings from{" "}
+            {date(confirm.startedAt)} · {time(confirm.startedAt)}. Your requests
+            and breaks stay unchanged, and any open assistance request stays
+            open. You cannot share this check-in again.
           </p>
           <ErrorNotice message={a.error} />
           <button
@@ -195,7 +161,7 @@ export function SupervisorMirror({
                 );
                 setConfirm(undefined);
                 setDone(
-                  "Sharing stopped. Safety operations can no longer open that check-in.",
+                  "Sharing stopped. Your manager can no longer view this check-in.",
                 );
                 await resource.refresh();
                 onChanged?.();

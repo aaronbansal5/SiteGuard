@@ -740,11 +740,11 @@ function MobileConsent({
             )}
           </li>
           <li>
-            <strong>Only normalized observations.</strong> Timestamped pulse,
-            breathing rate, source and quality. No images or video are stored.
+            <strong>What we record.</strong> Timestamped pulse, breathing rate,
+            source and quality. No images or video are stored.
           </li>
           <li>
-            <strong>No identification, no clearance.</strong> Readings cannot
+            <strong>Readings are not medical clearance.</strong> Readings cannot
             show that you have recovered or are fit to return to work.
           </li>
           <li>

@@ -34,7 +34,7 @@ test("manager navigation does not expose worker measurement actions", async ({
   await page.request.post("/api/demo/login", { data: { role: "supervisor" } });
   await page.goto("/supervisor");
   await expect(
-    page.getByRole("button", { name: "Preview coverage proposal" }),
+    page.getByRole("heading", { name: "Protected break schedule" }),
   ).toBeVisible();
   await expect(
     page.getByRole("navigation").getByRole("link", { name: "Worker portal" }),

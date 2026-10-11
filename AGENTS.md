@@ -20,6 +20,17 @@ Measurement quality and symptoms are independent. No diagnosis, medical clearanc
 No application storage of camera footage; no browser sponsor API secrets.
 Use parameterized SQL and Zod validation at external boundaries. Never silently change database or measurement source after failure.
 
+## Frontend design
+
+For frontend design work, read and apply the installed Anthropic frontend-design
+skill at `/Users/gravitbali/.codex/skills/frontend-design/SKILL.md`. On another
+computer, install it from `anthropics/skills`, path `skills/frontend-design`.
+Follow the user's established SiteGuard direction: clear, practical worker and
+manager screens, plain language, restrained decoration, and accessible controls.
+Preserve all existing routes and features, including Phone check-in and Web
+check-in, unless the user explicitly requests their removal. Keep measurement
+source labels, privacy controls, and incident acknowledgment behavior intact.
+
 ## Verification
 
 npm run typecheck

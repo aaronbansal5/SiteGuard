@@ -9,9 +9,10 @@ import type { RestRequest, Session } from "@siteguard/contracts";
 test("worker sees what safety operations can see and stops sharing a check-in", async ({
   page,
   browser,
+  baseURL,
 }) => {
   const supervisorContext = await browser.newContext({
-    baseURL: "http://127.0.0.1:5173",
+    baseURL,
   });
   const supervisor = supervisorContext.request;
   await supervisor.post("/api/demo/login", { data: { role: "supervisor" } });
@@ -61,14 +62,17 @@ test("worker sees what safety operations can see and stops sharing a check-in", 
   await page.goto("/worker");
   const mirror = page.locator("section.supervisor-mirror");
   await expect(
-    mirror.getByRole("heading", { name: "What safety operations can see" }),
+    mirror.getByRole("heading", { name: "Shared with your manager" }),
   ).toBeVisible();
-  await expect(mirror.getByText("Headache")).toBeVisible();
+  await mirror
+    .getByText("What else can my manager see?", { exact: true })
+    .click();
   await expect(
-    mirror.getByText("Linked from one of your requests"),
+    mirror.getByText(/Symptoms you reported: Headache/),
   ).toBeVisible();
+  await expect(mirror.getByText("Shared with a request")).toBeVisible();
   await expect(
-    mirror.getByText("Your personal comparison, trend and tiredness ratings"),
+    mirror.getByText(/Unshared readings and personal trends stay private/),
   ).toBeVisible();
   await expect(mirror).not.toContainText(/risk score|diagnos|safe to work/i);
   const axe = await new AxeBuilder({ page })
@@ -87,7 +91,7 @@ test("worker sees what safety operations can see and stops sharing a check-in", 
   await dialog.getByRole("button", { name: "Stop sharing" }).click();
   await expect(mirror.getByRole("status")).toContainText("Sharing stopped.");
   await expect(
-    mirror.getByText("None. Your check-in observations stay with you."),
+    mirror.getByText("No check-ins shared. Your readings are private."),
   ).toBeVisible();
 
   // Supervisor access to the observations ended; the request did not.
@@ -103,7 +107,7 @@ test("worker sees what safety operations can see and stops sharing a check-in", 
   // The worker can still open their own summary.
   await page.goto(`/sessions/${session.id}`);
   await expect(
-    page.getByRole("heading", { name: "Your check-in results." }),
+    page.getByRole("heading", { name: "Your observations, in context." }),
   ).toBeVisible();
 
   expect((await supervisor.post("/api/demo/reset", { data: {} })).ok()).toBe(

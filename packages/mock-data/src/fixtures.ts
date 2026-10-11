@@ -14,9 +14,17 @@ export function fixtureId(n: number) {
 }
 export function fixtures(now = Date.now()) {
   const iso = (m: number) => new Date(now + m * 60000).toISOString();
+  const names = [
+    "Mohit Unecha",
+    "Aaron Bansal",
+    "Nikhil Shah",
+    "Maya Patel",
+    "Jordan Ellis",
+    "Sofia Rivera",
+  ];
   const workers: Worker[] = Array.from({ length: 6 }, (_, i) => ({
     id: fixtureId(i + 1),
-    displayName: `Worker W-0${i + 1}`,
+    displayName: names[i],
     skills: i < 4 ? ["site", "equipment"] : ["site"],
   }));
   const breaks: Break[] = workers.map((w, i) => ({

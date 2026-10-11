@@ -57,6 +57,13 @@ test("worker sees shared scene queue and live camera without manager controls", 
     page.getByText("Possible person down", { exact: true }),
   ).toBeVisible();
   await expect(page.getByAltText("Live scene camera feed")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByRole("button", { name: "Stop camera" })).toHaveCount(
     0,
   );
@@ -134,4 +141,44 @@ test("manager sees boxes and commits revision checked scene review", async ({
     .fill("Checked scene");
   await page.getByRole("button", { name: "Resolve after check" }).click();
   await expect(page.getByText("resolved", { exact: true })).toBeVisible();
+});
+
+test("admin queue is bounded and scrolls through newest reports", async ({
+  page,
+}) => {
+  await page.request.post("/api/demo/login", { data: { role: "supervisor" } });
+  const incidents = Array.from({ length: 7 }, (_, index) => ({
+    ...incident,
+    id: fixtureId(700 + index),
+    zoneId: `zone-${index}`,
+    observedAt: new Date(Date.now() - index * 60000).toISOString(),
+  }));
+  await page.route("**/api/fall-detection/state", (route) =>
+    route.fulfill({
+      json: {
+        source: "camera",
+        status: "stopped",
+        cameraActive: false,
+        canViewCamera: true,
+        incidents: incidents.reverse(),
+      },
+    }),
+  );
+  await page.goto("/fall-detection");
+  const queue = page.getByRole("region", {
+    name: "Incident reports, scroll for more",
+  });
+  await expect(queue.locator("article")).toHaveCount(7);
+  await expect(queue.locator("article").first()).toContainText("zone-0");
+  expect(await queue.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(
+    true,
+  );
+  await queue.scrollIntoViewIfNeeded();
+  await queue.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await expect(queue.locator("article").last()).toBeInViewport();
+  const height = await queue.evaluate((el) => el.clientHeight);
+  await page.waitForTimeout(700);
+  expect(await queue.evaluate((el) => el.clientHeight)).toBe(height);
 });

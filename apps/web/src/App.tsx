@@ -210,6 +210,16 @@ function Shell() {
       setLogoutBusy(false);
     }
   };
+  const accountDestination =
+    identity?.role === "supervisor"
+      ? "/supervisor"
+      : new URLSearchParams(location.search).get("next") === "/mobile"
+        ? "/mobile"
+        : "/worker";
+  const authScreen =
+    location.pathname === "/login" ||
+    location.pathname === "/signup" ||
+    (!identity && location.pathname === "/");
   // Phone check-in layout: same identity and APIs, no workspace chrome.
   if (
     location.pathname === "/mobile" ||
@@ -251,121 +261,120 @@ function Shell() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <aside
-        id="workspace-navigation"
-        className={`sidebar ${menu ? "open" : ""}`}
-      >
-        <Link to="/" className="brand">
-          <span className="brand-mark">
-            <Shield size={24} />
-          </span>
-          <span>
-            SiteGuard<small>ADAPTIVEBREAK</small>
-          </span>
-        </Link>
-        <div className="workspace-label">WORKSPACE</div>
-        <nav>
-          {!identity && (
-            <NavLink to="/" end>
-              <LayoutDashboard size={18} /> Sign in
-            </NavLink>
-          )}
-          {identity?.role === "worker" && (
-            <>
-              <NavLink to="/worker">
-                <Activity size={18} /> Worker portal
-              </NavLink>
-              <NavLink to="/history">
-                <History size={18} /> Session history
-              </NavLink>
-              <NavLink to="/mobile">
-                <Smartphone size={18} />
-                Phone check-in
-              </NavLink>
-              <NavLink to="/check-in">
-                <Monitor size={18} />
-                Web check-in
-              </NavLink>
-            </>
-          )}
-          {identity?.role === "supervisor" && (
-            <NavLink to="/supervisor">
-              <Users size={18} /> Safety operations
-            </NavLink>
-          )}
-          {identity && (
-            <NavLink to="/fall-detection">
-              <Camera size={18} /> Fall detection
-            </NavLink>
-          )}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="protected-card">
-            <LockKeyhole size={18} />
-            <strong>Breaks stay protected</strong>
-            <p>
-              Human needs come first.
-              <br />
-              Coverage adapts around them.
-            </p>
-          </div>
-          <span className="sidebar-version">
-            {config?.mode === "demo"
-              ? "LOCAL DEMONSTRATION"
-              : "ROLE-SCOPED WORKSPACE"}
-          </span>
-        </div>
-      </aside>
-      <div className="app-shell">
-        <header className="topbar">
-          <div>
-            <button
-              className="icon-button mobile-menu"
-              aria-label="Toggle navigation"
-              aria-expanded={menu}
-              aria-controls="workspace-navigation"
-              onClick={() => setMenu(!menu)}
-            >
-              <PanelLeft size={20} />
-            </button>
-            <span className="site-indicator" />
+      {!authScreen && (
+        <aside
+          id="workspace-navigation"
+          className={`sidebar ${menu ? "open" : ""}`}
+        >
+          <Link to="/" className="brand">
+            <span className="brand-mark">
+              <Shield size={24} />
+            </span>
             <span>
-              {config?.siteId || "SiteGuard"}{" "}
-              <span className="muted">
-                / {config?.mode === "demo" ? "Demo site" : "Workspace"}
-              </span>
+              SiteGuard<small>ADAPTIVEBREAK</small>
             </span>
-          </div>
-          <div>
-            {config?.mode === "demo" && (
-              <span className="badge demo-badge">Fictional workforce</span>
+          </Link>
+          {identity && <div className="workspace-label">WORKSPACE</div>}
+          <nav>
+            {!identity && (
+              <NavLink to="/" end>
+                <LayoutDashboard size={18} /> Sign in
+              </NavLink>
             )}
-            <span className="identity-chip" title={account?.email}>
-              {identity?.role === "worker"
-                ? "Worker"
-                : identity?.role === "supervisor"
-                  ? "Safety ops"
-                  : "Guest"}
-              {account && <span className="muted">{account.email}</span>}
-              <span className="avatar small">
-                {identity?.role === "supervisor"
-                  ? "SO"
-                  : identity?.role === "worker"
-                    ? "W"
-                    : "SG"}
-              </span>
-            </span>
+            {identity?.role === "worker" && (
+              <>
+                <NavLink to="/worker">
+                  <Activity size={18} /> Worker portal
+                </NavLink>
+                <NavLink to="/history">
+                  <History size={18} /> Session history
+                </NavLink>
+                <NavLink to="/mobile">
+                  <Smartphone size={18} />
+                  Phone check-in
+                </NavLink>
+                <NavLink to="/check-in">
+                  <Monitor size={18} />
+                  Web check-in
+                </NavLink>
+              </>
+            )}
+            {identity?.role === "supervisor" && (
+              <NavLink to="/supervisor">
+                <Users size={18} /> Safety operations
+              </NavLink>
+            )}
             {identity && (
-              <button
-                className="button secondary"
-                disabled={logoutBusy}
-                onClick={() => void logout()}
-              >
-                {logoutBusy ? "Signing out…" : "Sign out"}
-              </button>
+              <NavLink to="/fall-detection">
+                <Camera size={18} /> Fall detection
+              </NavLink>
             )}
+          </nav>
+          <div className="sidebar-bottom">
+            <div className="protected-card">
+              <LockKeyhole size={18} />
+              <strong>Breaks stay protected</strong>
+              <p>
+                Human needs come first.
+                <br />
+                Coverage adapts around them.
+              </p>
+            </div>
+            <span className="sidebar-version">
+              {config?.mode === "demo"
+                ? "LOCAL DEMONSTRATION"
+                : "ROLE-SCOPED WORKSPACE"}
+            </span>
           </div>
-        </header>
+        </aside>
+      )}
+      <div className={authScreen ? "app-shell sign-in-shell" : "app-shell"}>
+        {!authScreen && (
+          <header className="topbar">
+            <div>
+              <button
+                className="icon-button mobile-menu"
+                aria-label="Toggle navigation"
+                aria-expanded={menu}
+                aria-controls="workspace-navigation"
+                onClick={() => setMenu(!menu)}
+              >
+                <PanelLeft size={20} />
+              </button>
+              <span className="site-indicator" />
+              <span>SiteGuard</span>
+            </div>
+            <div>
+              {config?.mode === "demo" && (
+                <span className="badge demo-badge">Fictional workforce</span>
+              )}
+              <span className="identity-chip" title={account?.email}>
+                {identity?.role === "worker"
+                  ? "Worker"
+                  : identity?.role === "supervisor"
+                    ? "Safety ops"
+                    : "Guest"}
+                {account && <span className="muted">{account.email}</span>}
+                <span className="avatar small">
+                  {identity?.role === "supervisor"
+                    ? "SO"
+                    : identity?.role === "worker"
+                      ? "W"
+                      : "SG"}
+                </span>
+              </span>
+              {identity && (
+                <button
+                  className="button secondary"
+                  disabled={logoutBusy}
+                  onClick={() => void logout()}
+                >
+                  {logoutBusy ? "Signing out…" : "Sign out"}
+                </button>
+              )}
+            </div>
+          </header>
+        )}
         <main id="main">
           <ErrorNotice message={error} />
           {loading ? (
@@ -394,12 +403,7 @@ function Shell() {
                   path="/"
                   element={
                     identity ? (
-                      <Navigate
-                        to={
-                          identity.role === "worker" ? "/worker" : "/supervisor"
-                        }
-                        replace
-                      />
+                      <Navigate to={accountDestination} replace />
                     ) : config.mode === "supabase" ? (
                       <Navigate
                         to={"/login" + location.search + location.hash}
@@ -419,12 +423,7 @@ function Shell() {
                       (location.hash.includes("type=recovery") ||
                         new URLSearchParams(location.search).has("recovery"))
                     ) ? (
-                      <Navigate
-                        to={
-                          identity.role === "worker" ? "/worker" : "/supervisor"
-                        }
-                        replace
-                      />
+                      <Navigate to={accountDestination} replace />
                     ) : (
                       <Landing />
                     )
@@ -434,12 +433,7 @@ function Shell() {
                   path="/signup"
                   element={
                     identity ? (
-                      <Navigate
-                        to={
-                          identity.role === "worker" ? "/worker" : "/supervisor"
-                        }
-                        replace
-                      />
+                      <Navigate to={accountDestination} replace />
                     ) : (
                       <Landing />
                     )
@@ -522,15 +516,17 @@ function Shell() {
             </Suspense>
           )}
         </main>
-        <footer className="app-footer">
-          <span>
-            <Shield size={12} /> SiteGuard AdaptiveBreak
-          </span>
-          <span>Recovery visibility. Human decisions.</span>
-          <a href="/api/health" target="_blank" rel="noreferrer">
-            System status <ArrowUpRight size={12} />
-          </a>
-        </footer>
+        {!authScreen && (
+          <footer className="app-footer">
+            <span>
+              <Shield size={12} /> SiteGuard AdaptiveBreak
+            </span>
+            <span>Recovery visibility. Human decisions.</span>
+            <a href="/api/health" target="_blank" rel="noreferrer">
+              System status <ArrowUpRight size={12} />
+            </a>
+          </footer>
+        )}
       </div>
     </AuthContext.Provider>
   );

@@ -259,7 +259,7 @@ export function Measurement() {
               </strong>
               <span>
                 {s.source === "mock"
-                  ? "A deterministic stream demonstrates the flow."
+                  ? "Example readings show how a check-in works."
                   : "Camera capture is managed by the local Presage bridge."}
               </span>
             </div>
@@ -315,7 +315,7 @@ export function Measurement() {
             Finish check-in to stop recording.
             {s.source === "presage" &&
               " Positioning and warm-up may delay valid readings."}{" "}
-            Data sufficiency is not a medical threshold.
+            Readings are not medical clearance.
           </p>
           <button
             className="button primary full"
