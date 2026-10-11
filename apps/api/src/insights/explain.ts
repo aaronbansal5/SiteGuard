@@ -27,6 +27,9 @@ export function sessionFacts(s: Summary) {
             `There are insufficient comparable prior observations for ${label.toLowerCase()}.`,
           ];
   }
+  facts.rest_guidance = [
+    "Use the before-and-after observations and comparable history as descriptive context only. If you feel unwell, take additional rest or contact a supervisor; these measurements do not determine fitness for work.",
+  ];
   return facts;
 }
 const count = (n: number, one: string, many: string) =>

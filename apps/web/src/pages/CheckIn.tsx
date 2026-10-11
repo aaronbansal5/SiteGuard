@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { ShieldCheck, ArrowRight, LockKeyhole } from "lucide-react";
 import { useIdentity } from "../App";
@@ -15,11 +15,25 @@ export function CheckIn() {
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
     [source, setSource] = useState<"mock" | "presage">("mock"),
-    [workload, setWorkload] = useState("heavy"),
-    [temp, setTemp] = useState("26");
+    [sourceSelected, setSourceSelected] = useState(false);
   const health = useResource<{
-    measurementSources: { mock: boolean; presage: boolean };
+    measurementSources: {
+      mock: boolean;
+      presage: boolean;
+      browserCamera?: boolean;
+    };
   }>("/health");
+  const browserCamera = Boolean(
+    health.data?.measurementSources.browserCamera &&
+    window.isSecureContext &&
+    navigator.mediaDevices?.getUserMedia,
+  );
+  useEffect(() => {
+    if (health.data && !sourceSelected) {
+      setSource(browserCamera ? "presage" : "mock");
+      setSourceSelected(true);
+    }
+  }, [browserCamera, health.data, sourceSelected]);
   if (identity?.role !== "worker") return <ChooseWorker />;
   return (
     <>
@@ -83,14 +97,16 @@ export function CheckIn() {
               const result = await api<{ session: Session }>("/sessions", {
                 breakId: search.get("breakId"),
                 source,
+                ...(source === "presage" && browserCamera
+                  ? { input: "custom" as const }
+                  : {}),
                 consentVersion: "v1",
                 shareWithSupervisor: share,
-                context: {
-                  workload: workload || null,
-                  temperatureC: temp === "" ? null : Number(temp),
-                },
+                context: { workload: null, temperatureC: null },
               });
-              navigate(`/sessions/${result.session.id}/measure`);
+              navigate(
+                `/sessions/${result.session.id}/measure${source === "presage" && browserCamera ? "?camera=browser" : ""}`,
+              );
             });
           }}
         >
@@ -119,30 +135,10 @@ export function CheckIn() {
               ? ", including camera warm-up before readings count."
               : "."}
           </p>
-          <div className="form-grid">
-            <label>
-              Recent workload
-              <select
-                value={workload}
-                onChange={(e) => setWorkload(e.target.value)}
-              >
-                <option value="">Not recorded</option>
-                <option value="light">Light</option>
-                <option value="moderate">Moderate</option>
-                <option value="heavy">Heavy</option>
-              </select>
-            </label>
-            <label>
-              Temperature (°C)
-              <input
-                type="number"
-                step="any"
-                value={temp}
-                onChange={(e) => setTemp(e.target.value)}
-                placeholder="Optional"
-              />
-            </label>
-          </div>
+          <p className="fine-print">
+            No workload or temperature questions are required. The before/after
+            reading windows and your eligible history are handled automatically.
+          </p>
           <label className="checkbox">
             <input
               type="checkbox"

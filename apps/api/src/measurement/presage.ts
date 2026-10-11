@@ -13,7 +13,10 @@ export class PresageSource implements MeasurementSource {
   private running = false;
   private task?: Promise<void>;
   private cursor = -1;
-  constructor(private config: Config) {}
+  constructor(
+    private config: Config,
+    private input: "camera" | "custom" = "camera",
+  ) {}
   private headers() {
     return {
       "Content-Type": "application/json",
@@ -52,7 +55,7 @@ export class PresageSource implements MeasurementSource {
       method: "POST",
       headers: this.headers(),
       redirect: "error",
-      body: JSON.stringify({ appSessionId: id }),
+      body: JSON.stringify({ appSessionId: id, input: this.input }),
       // Camera + SDK pipeline startup is slower than a health check (observed
       // several seconds on macOS with SmartSpectra 3.4.0).
       signal: AbortSignal.timeout(30000),
@@ -64,6 +67,31 @@ export class PresageSource implements MeasurementSource {
     ).bridgeSessionId;
     this.running = true;
     this.task = this.stream();
+  }
+  async sendFrame(
+    frame: Buffer,
+    timestampUs: number,
+    contentType:
+      "application/octet-stream" | "image/jpeg" = "application/octet-stream",
+  ) {
+    if (this.input !== "custom" || !this.running || !this.bridgeSessionId)
+      throw new Error("Browser camera input is not active");
+    const response = await fetch(
+      this.url(
+        `/v1/sessions/${encodeURIComponent(this.bridgeSessionId)}/frame?timestampUs=${timestampUs}`,
+      ),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.config.bridgeToken}`,
+          "Content-Type": contentType,
+        },
+        body: new Uint8Array(frame),
+        redirect: "error",
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+    if (!response.ok) throw new Error("Bridge rejected camera frame");
   }
   private async stream() {
     let failures = 0;
@@ -196,19 +224,25 @@ export class PresageSource implements MeasurementSource {
   async stop() {
     this.running = false;
     this.controller?.abort();
+    // Ask the bridge to stop before waiting for the stream task. The bridge
+    // owns the camera lifecycle and closes its SSE response as part of stop;
+    // waiting first can deadlock when the stream is intentionally long-lived.
+    const stopRequest = this.bridgeSessionId
+      ? fetch(
+          this.url(
+            `/v1/sessions/${encodeURIComponent(this.bridgeSessionId)}/stop`,
+          ),
+          {
+            method: "POST",
+            headers: this.headers(),
+            redirect: "error",
+            signal: AbortSignal.timeout(5000),
+          },
+        )
+      : undefined;
     await this.task;
-    if (this.bridgeSessionId) {
-      const r = await fetch(
-        this.url(
-          `/v1/sessions/${encodeURIComponent(this.bridgeSessionId)}/stop`,
-        ),
-        {
-          method: "POST",
-          headers: this.headers(),
-          redirect: "error",
-          signal: AbortSignal.timeout(5000),
-        },
-      );
+    if (stopRequest) {
+      const r = await stopRequest;
       if (!r.ok)
         throw new Error(
           "Bridge stop failed; confirm the camera is stopped before retrying",

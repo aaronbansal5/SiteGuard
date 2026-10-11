@@ -75,12 +75,31 @@ export async function registerRoutes(
   };
   app.get("/api/health", async () => {
     await r.driver.query("SELECT 1");
+    let browserCameraReady = false;
+    if (!c.hosted && c.bridgeToken) {
+      try {
+        const response = await fetch(
+          new URL("/v1/health?input=custom", c.bridgeUrl),
+          {
+            headers: { Authorization: `Bearer ${c.bridgeToken}` },
+            redirect: "error",
+            signal: AbortSignal.timeout(2000),
+          },
+        );
+        browserCameraReady =
+          response.ok &&
+          BridgeHealthSchema.parse(await response.json()).status === "ready";
+      } catch {
+        /* An unavailable bridge is reported as unavailable. */
+      }
+    }
     return {
       status: "ok",
       database: r.driver.kind,
       measurementSources: {
         mock: c.demoMode,
         presage: !c.hosted && Boolean(c.bridgeToken),
+        browserCamera: browserCameraReady,
       },
       insightsMode:
         c.geminiKey && c.geminiModel ? "configured" : "deterministic",
@@ -158,7 +177,7 @@ export async function registerRoutes(
         signed: true,
         httpOnly: true,
         sameSite: "strict",
-        secure: c.hosted,
+        secure: c.hosted || req.headers["x-siteguard-public-proto"] === "https",
         path: "/",
         maxAge: 86400,
       },
@@ -182,6 +201,8 @@ export async function registerRoutes(
       fail(403, "MOCK_DISABLED", "Synthetic measurements are disabled");
     if (b.source === "presage" && c.hosted)
       fail(403, "REAL_LOCAL_ONLY", "Real measurements are local only");
+    if (b.input && b.source !== "presage")
+      fail(400, "INVALID_INPUT", "Custom camera input requires Presage");
     const session = await r.transaction(async (tx) => {
       const br = await tx.get("breaks", b.breakId);
       const now = Date.now();
@@ -203,6 +224,19 @@ export async function registerRoutes(
           "SESSION_ACTIVE",
           "Resume or stop the existing session first",
         );
+      const priorContext =
+        b.context.workload === null && b.context.temperatureC === null
+          ? (await tx.list("sessions"))
+              .filter(
+                (candidate) =>
+                  candidate.workerId === workerId &&
+                  candidate.source === b.source &&
+                  candidate.status === "completed",
+              )
+              .sort((left, right) =>
+                right.startedAt.localeCompare(left.startedAt),
+              )[0]?.context
+          : undefined;
       const s: Session = {
         id: randomUUID(),
         workerId,
@@ -211,7 +245,10 @@ export async function registerRoutes(
         status: "active",
         startedAt: new Date().toISOString(),
         endedAt: null,
-        context: b.context,
+        // Workers are not required to answer workload or temperature
+        // questions. Reuse the latest same-source context only when both are
+        // omitted; otherwise preserve the supplied values.
+        context: priorContext ?? b.context,
         consentVersion: b.consentVersion,
         shareWithSupervisor: b.shareWithSupervisor,
         interruption: null,
@@ -219,7 +256,7 @@ export async function registerRoutes(
       await tx.put("sessions", s);
       return s;
     });
-    await manager.start(session.id, session.source);
+    await manager.start(session.id, session.source, b.input);
     reply.code(201);
     return { session };
   });
@@ -229,6 +266,41 @@ export async function registerRoutes(
   app.get("/api/sessions/:id/readings", async (req) => {
     const s = await access(req, id(req));
     return { readings: await r.readings(s.id) };
+  });
+  app.post("/api/sessions/:id/frame", async (req, reply) => {
+    const s = await access(req, id(req), true);
+    if (c.hosted || s.source !== "presage" || s.status !== "active")
+      fail(409, "INPUT_NOT_ACTIVE", "Browser camera input is not active");
+    const frameType = req.headers["content-type"];
+    const raw = frameType === "application/octet-stream";
+    const jpeg = frameType === "image/jpeg";
+    if (
+      (!raw && !jpeg) ||
+      !Buffer.isBuffer(req.body) ||
+      (raw && req.body.length !== 480 * 360 * 4) ||
+      (jpeg &&
+        (req.body.length < 4 ||
+          req.body.length > 1024 * 1024 ||
+          req.body[0] !== 0xff ||
+          req.body[1] !== 0xd8))
+    )
+      fail(400, "INVALID_FRAME", "Expected a 480x360 camera frame");
+    const timestampUs = Number(
+      (req.query as { timestampUs?: string }).timestampUs,
+    );
+    if (!Number.isSafeInteger(timestampUs) || timestampUs <= 0)
+      fail(400, "INVALID_TIMESTAMP", "Invalid frame timestamp");
+    try {
+      await manager.sendFrame(
+        s.id,
+        req.body,
+        timestampUs,
+        jpeg ? "image/jpeg" : "application/octet-stream",
+      );
+    } catch {
+      fail(503, "FRAME_REJECTED", "Camera frame was not accepted by Presage");
+    }
+    reply.code(204).send();
   });
   app.post("/api/sessions/:id/readings", async (req) => {
     const provided = req.headers.authorization || "",
@@ -728,6 +800,10 @@ export async function registerRoutes(
               schedule.requests.some((request) => request.sessionId === s.id),
           )
           .map((s) => s.id),
+        sharedSessions: sessions
+          .filter((s) => s.shareWithSupervisor && s.status === "completed")
+          .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+          .slice(0, 20),
         coverageGaps: coverageGaps(schedule),
       },
       sessions,

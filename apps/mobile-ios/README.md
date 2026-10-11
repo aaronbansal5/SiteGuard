@@ -2,14 +2,14 @@
 
 A native scaffold for voluntary recurring check-ins measured on the iPhone with the Presage SmartSpectra Swift SDK. Architecture, privacy and the proposed upload contract: [`docs/MOBILE_APP.md`](../../docs/MOBILE_APP.md).
 
-> **Status: not built or tested yet.** The code was written against the official SmartSpectra docs in a Linux environment with no Swift toolchain. Expect small fixes on the first Xcode build. **It uploads nothing to SiteGuard**: the network layer is a fail-closed TODO (`Sources/SiteGuardUploader.swift`).
+> **Status:** A prior build ran live on Hitayu's iPhone and showed 38 readings in 51 seconds (30 valid pulse, 1 valid breathing); it uploaded nothing. A newer build with optional local HTTPS upload and worker-name selection was signed, installed and launched. Pairing and a real phone-to-desktop upload have not yet been verified. No Presage key is embedded in the installed build.
 
 ## What it does
 
-- A reminder countdown every **60 s** by default (demo interval, configurable). The reminder only prompts and never starts the camera.
-- A consent screen before **every** check-in. Then a Presage measurement of pulse and breathing on the front camera, with positioning guidance and a 90 s suggested length (real-Presage warm-up).
-- Readings mapped to the SiteGuard `VitalReading` contract (`Sources/ReadingMapper.swift`). Validity comes only from the SDK's `stable` flag, as in the Presage bridge.
-- A result screen that states plainly that nothing was uploaded. Readings are discarded when you leave it.
+- A reminder countdown every **60 s** by default (demo interval, configurable). The reminder only prompts and never starts the camera. After the worker opts in, a local alert is scheduled for the next due time; permission is restored on relaunch and a banner can appear while the app is foregrounded.
+- A consent screen before **every** check-in. Then a Presage measurement of pulse and breathing on the front camera, with a live in-memory preview, stable-reading cards, positioning guidance, and a 90 s suggested length (real-Presage warm-up). Camera use stops when the app goes into the background.
+- Every sample in each SDK metrics update is mapped to the SiteGuard `VitalReading` contract (`Sources/ReadingMapper.swift`); the app no longer polls only the last sample once per second. Validity comes only from the SDK's `stable` flag, as in the Presage bridge. Rate output remains event-driven, not one reading per camera frame.
+- Optional local HTTPS pairing and per-check-in upload of normalized readings, with a second default-off switch for manager access. If upload is unselected or fails, readings stay on the result screen for retry and are discarded when you leave.
 - A support section that is always visible and directs to the web `/mobile` page or a supervisor in person (it cannot send requests yet).
 
 ## Layout
@@ -27,7 +27,7 @@ apps/mobile-ios/
     Sources/ReminderSchedule.swift     reminder state machine (pure Swift)
     Sources/PositioningGuidance.swift  ValidationCode -> SiteGuard guidance
     Sources/CheckInModel.swift         flow: reminder -> consent -> measuring -> result
-    Sources/SiteGuardUploader.swift    TODO network layer (fails closed)
+    Sources/SiteGuardUploader.swift    local HTTPS upload; token in device-only Keychain
     Sources/AppConfiguration.swift     reads Info.plist values
     Views/                             SwiftUI screens
   SiteGuardCheckInTests/          XCTest; Fixtures/mapped-readings.json is shared with TypeScript tests
@@ -43,6 +43,7 @@ Requirements: a recent Xcode with the iOS 17+ SDK (SmartSpectra "Requires iOS 17
    cd apps/mobile-ios
    ```
 2. **Choose credentials. Never put a key in source.**
+   - _One personal check-in without embedding the key:_ leave `Config/Secrets.xcconfig` absent. The consent screen offers a secure Presage API key field. Paste the key there; it is held only in app memory for that check-in, cleared when measurement stops, and never stored in the project or app bundle. You must enter it again for the next check-in.
    - _Development on your own phone (fastest):_
      ```sh
      cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig   # gitignored
@@ -62,9 +63,10 @@ Requirements: a recent Xcode with the iOS 17+ SDK (SmartSpectra "Requires iOS 17
    Option B, by hand: Xcode → New Project → iOS App (SwiftUI) named `SiteGuardCheckIn`. Delete the generated `ContentView.swift` and app file, then drag in `SiteGuardCheckIn/` (Sources, Views, app file and Info.plist) and `SiteGuardCheckInTests/` as a unit-test target. Untick target membership for `Info.plist` and `Fixtures/` (they must not be copied as resources). Under Build Settings, set _Info.plist File_ to `SiteGuardCheckIn/Info.plist`, turn _Generate Info.plist File_ off, and use `Config/Base.xcconfig` as the project configuration file for Debug and Release. Then **File → Add Package Dependencies…**, paste the package URL above, choose **Exact Version**, and attach the **SmartSpectra** product to the app target.
 
 4. **Signing.** Target → Signing & Capabilities: choose your team and keep the bundle ID `com.siteguard.adaptivebreak.presagebridge`. For OAuth, add **App Attest** here.
+   A local command-line build can also use Xcode automatic provisioning without saving a personal team ID in the project: `xcodebuild -project SiteGuardCheckIn.xcodeproj -scheme SiteGuardCheckIn -destination 'platform=iOS,id=YOUR_DEVICE_ID' -allowProvisioningUpdates DEVELOPMENT_TEAM=YOUR_TEAM_ID CODE_SIGN_STYLE=Automatic build`. On first install, the phone may require you to trust that developer in Settings → General → VPN & Device Management.
 5. **Run tests** (Product → Test, or `xcodebuild test -scheme SiteGuardCheckIn -destination 'platform=iOS Simulator,name=iPhone 16'`). The unit tests need no camera. `ReadingMapperTests` reads `Fixtures/mapped-readings.json` through `#filePath`, so run them from this checkout.
 6. **Run on the iPhone.** Connect it, select it as the destination, and press Run. Trust the developer certificate on the phone if asked (Settings → General → VPN & Device Management). Allow camera access at the first check-in.
-7. **Demo.** Wait for the 60 s reminder (or tap Start check-in), read and accept consent, then sit still facing the front camera, upper chest visible and even light. Finish after about 90 s. The result screen shows reading counts and says nothing was uploaded.
+7. **Demo.** On the Mac, open `http://127.0.0.1:3001/mobile`, choose a worker and tap **Get one-time pairing code** at the top of the worker page. Code issuance is loopback-only; the phone exchange and uploads still require HTTPS. In the native app enter the Mac's trusted HTTPS origin (currently `https://10.0.0.35:5173`), tap **Load worker names**, pick the **same worker name**, and enter the code under **Desktop connection**. Pairing refuses a code for a different worker. The iPhone must fully trust the local CA; bypassing a Safari warning is not enough for URLSession. Start a new check-in during that worker's protected break, accept consent, and separately enable **Upload** and (only if desired) **Allow my manager**. Finish after about 90 s. The result screen reports upload success or a retryable error. On the Mac, enter the supervisor demo and open **Consented check-ins → View detailed readings**. The previous 38-reading check-in cannot be uploaded retroactively.
 
 ### Settings
 
@@ -83,4 +85,4 @@ Requirements: a recent Xcode with the iOS 17+ SDK (SmartSpectra "Requires iOS 17
 
 ## Privacy
 
-Frames stay on the phone. The preview is shown only for positioning and is never saved. SiteGuard requests only pulse and breathing (no face, expression, EDA or HRV metrics) and sets `enableTelemetry = false`. The SDK still contacts Presage to validate the key or subscription. No readings leave the app in this version.
+Frames stay on the phone. The preview is shown only for positioning and is never saved. SiteGuard requests only pulse and breathing (no face, expression, EDA or HRV metrics) and sets `enableTelemetry = false`. The SDK still contacts Presage to validate the key or subscription. Normalized readings leave the app only when the worker enables upload for that check-in; manager access requires its own consent switch. This local demo uses fictional role selection, not production authentication.

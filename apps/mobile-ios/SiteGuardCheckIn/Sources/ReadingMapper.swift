@@ -127,8 +127,8 @@ enum ReadingMapper {
     }
 }
 
-/// Turns repeated polls of the SDK's latest samples into new readings only:
-/// a metric sample is forwarded once, when its timestamp advances. Samples
+/// Turns SDK payloads into new readings only: a metric sample is forwarded
+/// once, when its timestamp advances. Samples
 /// without a positive timestamp are ignored (docs/swift/metrics.md filters
 /// `timestamp > 0`). Sequence numbers start at 0 and increase by one.
 struct ReadingCollector {
@@ -147,6 +147,30 @@ struct ReadingCollector {
             .enumerated()
             .map { ReadingEnvelope(sequence: envelopes.count + $0.offset, reading: $0.element) }
         envelopes.append(contentsOf: added)
+        return added
+    }
+
+    /// Ingest every sample in a payload, not just each metric's last value.
+    /// Rates are event-driven and multiple values can arrive between UI ticks.
+    mutating func ingest(pulses: [MetricSample], breathings: [MetricSample]) -> [ReadingEnvelope] {
+        let newPulses = pulses.filter { $0.timestampMicros > lastPulseMicros }
+            .sorted { $0.timestampMicros < $1.timestampMicros }
+        let newBreathings = breathings.filter { $0.timestampMicros > lastBreathingMicros }
+            .sorted { $0.timestampMicros < $1.timestampMicros }
+        var pulseIndex = 0
+        var breathingIndex = 0
+        var added: [ReadingEnvelope] = []
+        while pulseIndex < newPulses.count || breathingIndex < newBreathings.count {
+            let pulseTime = pulseIndex < newPulses.count
+                ? newPulses[pulseIndex].timestampMicros : Int64.max
+            let breathingTime = breathingIndex < newBreathings.count
+                ? newBreathings[breathingIndex].timestampMicros : Int64.max
+            let pulse = pulseTime <= breathingTime ? newPulses[pulseIndex] : nil
+            let breathing = breathingTime <= pulseTime ? newBreathings[breathingIndex] : nil
+            if pulse != nil { pulseIndex += 1 }
+            if breathing != nil { breathingIndex += 1 }
+            added += ingest(pulse: pulse, breathing: breathing)
+        }
         return added
     }
 

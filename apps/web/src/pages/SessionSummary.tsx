@@ -136,8 +136,12 @@ export function SessionSummary() {
           <section className="card explanation">
             <div className="card-header">
               <div>
-                <h2>What the observations show</h2>
-                <p>Factual context, without a medical judgment.</p>
+                <h2>Before / after guidance</h2>
+                <p>
+                  Gemini can select approved context from the initial and final
+                  windows and eligible history; it cannot make a medical
+                  recommendation.
+                </p>
               </div>
               <span className="badge">
                 {explanation?.origin === "gemini"

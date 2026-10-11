@@ -17,6 +17,7 @@ export type Identity = z.infer<typeof LoginSchema>;
 export const StartSessionSchema = z.strictObject({
   breakId: Id,
   source: SourceSchema,
+  input: z.enum(["camera", "custom"]).optional(),
   consentVersion: z.literal("v1"),
   shareWithSupervisor: z.boolean(),
   context: ContextSchema,

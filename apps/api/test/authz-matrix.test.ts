@@ -132,6 +132,13 @@ const cases: Case[] = [
     expected: ownerOrSharing(200),
   },
   {
+    route: "POST /api/sessions/:id/frame",
+    name: "camera frame requires owned active Presage session",
+    url: `/api/sessions/${ACTIVE}/frame`,
+    active: true,
+    expected: ownerOnly(409),
+  },
+  {
     route: "POST /api/sessions/:id/readings",
     name: "ingest with cookies only",
     url: `/api/sessions/${ACTIVE}/readings`,

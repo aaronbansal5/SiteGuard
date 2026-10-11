@@ -1,26 +1,29 @@
 # SiteGuard on phones: recurring voluntary check-ins
 
-Branch `feature/mobile-app`, 2026-10-10. Two parts:
+Two phone paths:
 
 - **A. Phone web layout** at `/mobile` in `apps/web`. Works in any phone browser. Implemented and tested here.
-- **B. Native iOS scaffold** in `apps/mobile-ios` (SwiftUI + SmartSpectra Swift SDK). Written against the official docs but **not compiled or run**, because this environment is Linux with no Swift toolchain. Uploading to SiteGuard is **not implemented**. A secure phone ingestion path is proposed below as a design only.
+- **B. Native iOS app** in `apps/mobile-ios` (SwiftUI + SmartSpectra Swift SDK). Physical iPhone capture and pulse readings were observed. Local HTTPS-only device pairing and optional normalized-reading upload are implemented in code and API-tested, but not yet verified by a fresh phone-to-desktop run.
 
-Nothing on this page changes `docs/API_CONTRACT.md` or `docs/PRESAGE_CONTRACT.md`. The API still ingests real (`source=presage`) readings only through the local Presage bridge and still rejects `source=presage` in hosted mode.
+The canonical API contract now includes a separate local-demo native upload endpoint. The original bridge ingest and hosted-mode rejection remain unchanged.
 
 ## Status
 
-| Item                                                                         | State                                                                                     | Evidence                                                                                                                                 |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `/mobile` phone layout, reminders, consent, synthetic check-in, insights     | Implemented                                                                               | `tests/integration/mobile-checkin.spec.ts` (390×844 phone viewport, touch)                                                               |
-| Reminder interval logic (60 s demo default, pause, dismiss, bounds, storage) | Implemented                                                                               | `apps/web/src/lib/checkin-reminder.test.ts` (Vitest fake timers)                                                                         |
-| iOS reading mapping matches the contract and the Presage bridge              | TypeScript half verified; Swift half written, not run                                     | `packages/contracts/src/mobile-ios-fixture.test.ts` checks the shared fixture; `ReadingMapperTests.swift` checks the same fixture on Mac |
-| iOS app builds and measures on a device                                      | **Not verified**                                                                          | Needs Xcode on Mohit's Mac, a physical iPhone and a Presage key or OAuth config                                                          |
-| Phone → SiteGuard upload                                                     | **Not implemented** (fails closed, clearly marked TODO)                                   | `apps/mobile-ios/SiteGuardCheckIn/Sources/SiteGuardUploader.swift`                                                                       |
-| Phone ingestion API (pairing tokens, TLS, consent)                           | **Design only** (see [Proposed contract](#proposed-phone-ingestion-contract-design-only)) | n/a                                                                                                                                      |
+| Item                                                                         | State                                                     | Evidence                                                                                                                                 |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `/mobile` phone layout, reminders, consent, synthetic check-in, insights     | Implemented                                               | `tests/integration/mobile-checkin.spec.ts` (390×844 phone viewport, touch)                                                               |
+| Reminder interval logic (60 s demo default, pause, dismiss, bounds, storage) | Implemented                                               | `apps/web/src/lib/checkin-reminder.test.ts` (Vitest fake timers)                                                                         |
+| iOS reading mapping matches the contract and the Presage bridge              | TypeScript half verified; Swift half written, not run     | `packages/contracts/src/mobile-ios-fixture.test.ts` checks the shared fixture; `ReadingMapperTests.swift` checks the same fixture on Mac |
+| Browser camera → local Presage bridge                                        | Implemented; live iPhone pulse/breathing **not verified** | Aspect-preserving JPEG frames are proxied and decoded transiently; bridge and API tests pass                                             |
+| iOS app builds and measures on a device                                      | **Partially verified**                                    | User's iPhone screenshot: 51 s, 38 readings, 30 valid pulse, 1 valid breathing; new upload build installed, fresh measurement pending.   |
+| Phone → SiteGuard upload                                                     | **Implemented in code; device E2E unverified**            | `SiteGuardUploader.swift`; unsigned iOS build passed. User must opt in per check-in.                                                     |
+| Phone ingestion API (pairing tokens, TLS, consent)                           | **Implemented for local demo; fixture-tested**            | `apps/api/test/device-upload.test.ts`; in-memory credentials and no production identity verification.                                    |
 
-## Why the phone browser uses synthetic readings
+## Browser camera relay
 
-Presage SmartSpectra ships for Swift/iOS, Kotlin/Android, C++ and Node.js only (index: <https://smartspectra.presagetech.com/llms.txt>). There is no browser SDK, so a phone browser cannot measure. The `/mobile` check-in therefore uses the existing **mock** source through the existing session APIs, and labels it "Synthetic demo" everywhere: the top strip, the consent screen, the measuring screen, the result and the personal-insights panel. Real phone measurement needs the native app (Part B).
+Presage has no browser SDK. After consent and camera permission, `/mobile` encodes phone-camera frames as JPEG over same-origin HTTPS to the local API; the API forwards them to the loopback-only Node bridge, where they are decoded in memory for `useCustomInput` / `sendFrame`. Frames are bounded, session-bound, processed transiently and not written to the database or filesystem. The SDK key and bridge token stay server-side. Synthetic mode is a separate, explicitly selected demo option and is never a fallback after a camera failure. This path is implemented but has not yet produced live iPhone pulse and breathing readings; do not mark it verified.
+
+The phone must reach a trusted HTTPS origin. `SITEGUARD_WEB_HOST=0.0.0.0 SITEGUARD_HTTPS_KEY=/absolute/path/key.pem SITEGUARD_HTTPS_CERT=/absolute/path/cert.pem npm run dev:live` enables HTTPS on Vite port 5173 while the API and bridge remain loopback-only. Use a certificate trusted by the iPhone for the Mac's LAN hostname; never commit the private key. Plain `http://<mac-LAN-IP>:5173` cannot use the camera in Safari. Keep this demo service on a trusted local network only: demo role selection is not production authentication. Do not use `HOST=0.0.0.0` for this command: that also exposes the API listener on plain HTTP.
 
 ## A. Phone web layout (`/mobile`)
 
@@ -29,7 +32,7 @@ Presage SmartSpectra ships for Swift/iOS, Kotlin/Android, C++ and Node.js only (
 - `apps/web/src/pages/Mobile.tsx`: the phone experience, rendered without the desktop sidebar (`App.tsx` routes `/mobile` to it, reusing the same identity and APIs).
 - `apps/web/src/lib/checkin-reminder.ts` + `.test.ts`: reminder state machine, interval parsing, storage, and the opt-in notification helper.
 - `apps/web/src/styles.css`: the `.mobile-*` section (touch targets ≥ 48 px, 16 px inputs so iOS Safari does not zoom, safe-area padding).
-- `apps/web/vite.config.ts`: dev server host comes from `HOST` (default `127.0.0.1`).
+- `apps/web/vite.config.ts`: dev server host comes from `SITEGUARD_WEB_HOST` (default `127.0.0.1`); the API host remains separate.
 - `tests/integration/mobile-checkin.spec.ts`: Playwright at a phone viewport.
 
 ### Flow
@@ -38,8 +41,8 @@ Presage SmartSpectra ships for Swift/iOS, Kotlin/Android, C++ and Node.js only (
 2. **Home**: break status, the reminder card, "Start check-in", and support actions (request rest, report a symptom, request assistance). Support needs no measurement and no consent.
 3. **Reminder**: a countdown "Next optional reminder in mm:ss". The setting reads "Check-in reminder every N seconds" and shows a **Demo interval** badge in `DEMO_MODE`. The default is **60 s in `DEMO_MODE`** (`/api/health` → `measurementSources.mock`) and 30 min otherwise, bounded 30 s–4 h. Settings are stored per device in `localStorage`, guarded with try/catch.
 4. **When due**: a calm in-app card (`role="status"`, not an alert): "Check-in available · optional … Skipping has no effect on your breaks or requests", with "Review consent and check in" and "Not now". "Not now" restarts a full interval. The card stays until the worker answers; it never repeats or escalates.
-5. **Consent, every time**: the form state is new on each visit, so consent is never remembered. Begin is disabled until the box is ticked. Source is fixed to synthetic. Workload and temperature are optional. Sharing with safety operations is off by default.
-6. **Measuring**: elapsed time, the suggested length (`RECOMMENDED_CHECK_IN_SECONDS.mock` = 60 s, "a data-sufficiency guide, not a medical threshold"), the latest valid synthetic values, and "Finish check-in" at any time. Reminders are paused from the consent screen until the check-in ends.
+5. **Consent, every time**: the form state is new on each visit, so consent is never remembered. On secure browsers with a configured bridge, Presage camera is the default; synthetic demo mode can be explicitly selected when enabled. Workload and temperature are optional. Sharing with safety operations is off by default.
+6. **Measuring**: the front-camera preview, elapsed time, suggested length, latest valid pulse and breathing (or blanks), and "Finish check-in" at any time. Any camera or relay failure is shown explicitly. Reminders are paused from consent until the check-in ends.
 7. **Done**: observed pulse and breathing changes (or "Insufficient data"), then the worker-only **personal-insights panel** (`PersonalInsightsPanel`, `docs/RECOVERY_MODEL.md`), a link to the full summary, and the next reminder countdown, which restarts at completion.
 
 An active session found on load (after a reload, for example) is resumed instead of starting a second one.
@@ -50,7 +53,7 @@ An active session found on load (after a reload, for example) is resumed instead
 
 ### Notifications (optional)
 
-The browser Notification API is used only after the worker taps "Also notify me when SiteGuard is in the background", and only while the page is hidden. The text says only that an optional check-in is available. The button is not shown without a secure context (HTTPS or `localhost`), so on a LAN `http://` address reminders stay in the app. On Android Chrome, `new Notification()` throws without a service worker; the helper catches that and keeps the in-app prompt. Phones also throttle or suspend timers in background tabs, so a reminder may appear late or only when the page is reopened.
+The browser Notification API is used only after the worker taps "Also notify me when SiteGuard is in the background", and only while the page is hidden. The text says only that an optional check-in is available. The button is not shown without a secure context (HTTPS or `localhost`), so on a LAN `http://` address reminders stay in the app. On iPhone, a normal Safari tab cannot deliver reliable timed background alerts; the UI now directs workers to the native SiteGuard app for local notifications instead of offering a misleading browser opt-in. iOS Web Push would require an installed Home Screen web app, a service worker, a push subscription and server-side push delivery. On Android Chrome, `new Notification()` throws without a service worker; the helper catches that and keeps the in-app prompt. Phones also throttle or suspend timers in background tabs, so a reminder may appear late or only when the page is reopened.
 
 ### Invariants kept
 
@@ -63,19 +66,11 @@ The browser Notification API is used only after the worker taps "Also notify me 
 
 ### Run on a phone on the same Wi-Fi (trusted network only)
 
-The dev servers have no TLS and use demo login. Do this only on a network you trust (home or a private hotspot), never on venue or public Wi-Fi.
+The browser camera requires HTTPS. Use a locally trusted certificate whose subject alternative name includes the Mac's current LAN IP or `.local` hostname. Keep its private key outside Git (this Mac's temporary files are under ignored `.local-tls/`); install **only the public CA certificate** on the iPhone and manually enable full trust under Settings → General → About → Certificate Trust Settings. Remove that local CA from the iPhone after the demo. [Apple's trust instructions](https://support.apple.com/en-us/102390).
 
-```sh
-cp .env.example .env          # once; DEMO_MODE=true, HOSTED=false
-HOST=0.0.0.0 npm run dev      # API and Vite listen on all interfaces
-```
+Run the bridge, API and frontend with a configured local `.env`, then open `https://<laptop-ip>:5173/mobile` on the same private Wi-Fi. Set `SITEGUARD_WEB_HOST=0.0.0.0` and `SITEGUARD_HTTPS_KEY` / `SITEGUARD_HTTPS_CERT` to absolute local files; leave `HOST=127.0.0.1` so the API is not exposed over plain HTTP. `npm run dev:live` starts all three services. Vite proxies `/api` to the loopback API. Demo role selection is not production authentication; do not use venue or public Wi-Fi.
 
-1. Find the laptop's LAN address (macOS: `ipconfig getifaddr en0`).
-2. On the phone, open `http://<laptop-ip>:5173/mobile`. Vite proxies `/api` to the API, so the phone talks only to port 5173. The origin check passes because the phone's `Origin` and `Host` match.
-3. Choose **Worker W-01**. In a fresh demo, W-01's protected break runs from 2 min before startup to 13 min after it. To reopen it later, use "Reset demonstration" in the desktop Safety operations view (local demo only), or stop the API and run `npm run demo:reset`.
-4. Stop with Ctrl+C when done. `HOST=0.0.0.0` also binds the API on port 3001; stop the servers afterwards and don't leave them running.
-
-Background notifications are unavailable over plain `http://` on a LAN, as noted above.
+Choose **Worker W-01** during an active protected break. Stop the services with Ctrl+C when done. If the Mac changes IP or the certificate expires, generate a new leaf certificate and retrust only if the CA itself changes.
 
 ## B. Native iOS app (`apps/mobile-ios`)
 
@@ -90,12 +85,12 @@ Setup steps are in `apps/mobile-ios/README.md`. Summary:
 - **Validity**: taken only from the sample's explicit `stable` flag (`data-types.md`: "Whether the measurement is considered stable/reliable"; pulse corresponds to confidence ≥ 40, breathing to ≥ 45). The mapping is the same as the bridge's `statusFromStable` and `normalizeSample`. The Swift docs show `.confidence` on pulse samples in the official sample but do not spell out `.stable` for Swift. It is a field of the language-agnostic payload, so the first Mac build must confirm the accessor name.
 - **Check-in cycle**: the reminder defaults to 60 s (`SITEGUARD_CHECKIN_INTERVAL_SECONDS`, changeable in the app). Each check-in suggests 90 s, because real Presage needs about 30–45 s of warm-up (`docs/PRESAGE_OPPORTUNITIES.md` R1). Reminders pause during a check-in. Local notifications are scheduled only after the worker opts in.
 - **Consent**: the consent screen appears before every check-in, with fresh state. The camera starts only after consent and Begin. iOS also shows its own camera prompt (`NSCameraUsageDescription`) on first use.
-- **Network layer**: **TODO, fails closed.** `UnpairedUploader` throws `notPaired`. The result screen says nothing was uploaded and that readings stay in memory for this check-in only, then are discarded. Session summaries and personal insights are therefore not available in the native app yet.
+- **Network layer**: `LocalHTTPSUploader` uses normal iOS certificate validation and stores a scoped token in the device-only Keychain. Pair via a one-time code displayed to the signed-in worker on `/mobile`. Upload and supervisor sharing are separate, default-off per-check-in choices. A failed upload retains readings on the result screen for one retry; leaving discards them. The desktop worker summary and consented supervisor detail are available only after successful upload.
 - **Support**: always visible. Because the native app cannot send requests yet, it says so and offers a link to the web `/mobile` page (if `SITEGUARD_WEB_URL` is set) or "tell your supervisor directly". It never implies that a request was sent.
 
-## Proposed phone ingestion contract (design only)
+## Longer-term phone ingestion contract (design only)
 
-Status: **proposal, not implemented**. Implementing it touches authentication, the canonical API contract, storage and the hosted-mode rule. It needs its own reviewed change with the tests listed below, and real devices. Shipping a half-tested credential path would be weaker than the current rule, so it was not attempted here.
+Status: **proposal for production-style deployment, not implemented**. The current path is local-demo-only and intentionally simpler: short-lived pairing and device tokens live in server memory, upload occurs once at check-in completion, and real phone data never reaches hosted demo mode. The following is a future design, not a claim that these endpoints exist.
 
 ### Goals and non-goals
 
@@ -137,11 +132,11 @@ Pairing expiry, single use and lockout; hashed token storage; revocation takes e
 
 ## Limitations
 
-- The phone browser cannot measure. `/mobile` check-ins are synthetic by design.
+- The browser relay is not yet verified with live iPhone pulse and breathing data. It requires HTTPS trusted by the phone, a running local Presage bridge and a valid key.
 - Timers in background tabs are throttled on phones. Browser notifications need HTTPS and are unreliable on Android without a service worker. Neither is required for the in-app flow.
-- `HOST=0.0.0.0` exposes demo login with no TLS to the local network. Use a trusted network and stop the servers afterwards.
-- The iOS app has not been compiled. Expect small API-name fixes against the pinned SDK on first build (especially the sample `.stable` accessor and `ValidationCode.rawValue` type). The SDK needs a physical device; the Simulator has no camera (`docs/swift/troubleshooting.md`).
-- The iOS app uploads nothing yet, and its support section can only point to other channels.
+- `SITEGUARD_WEB_HOST=0.0.0.0` exposes the HTTPS demo frontend to the local network. Use a trusted network and stop the servers afterwards; leave the API listener on loopback.
+- The prior iOS build measured on a physical device; the new upload build still needs signing, installation and a fresh phone-to-desktop check. The Simulator has no camera (`docs/swift/troubleshooting.md`).
+- The updated iOS app can upload normalized readings after trusted-HTTPS pairing and fresh per-check-in consent; a physical-device upload is still unverified. Its support section still points to other channels because native support requests are not implemented.
 - The demo protected break for W-01 lasts 15 minutes from server start. Reset the demo to reopen it.
 
 ## Verification record
