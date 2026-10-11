@@ -1,8 +1,41 @@
 # SiteGuard AdaptiveBreak
 
-Contactless recovery visibility and safety-conscious break planning for physically demanding worksites.
+**People first. Every shift.**
 
-A persistent worker/supervisor demo: voluntary check-ins → descriptive pulse/breathing trends → symptom/rest requests → protected staffing coordination. All seeded measurements and history are clearly synthetic. The application consumes a separately implemented native Presage bridge; it does not include the SDK itself.
+SiteGuard connects proactive worker check-ins with rapid human response for physically demanding worksites. Workers can complete a voluntary, contactless camera check-in, understand their pulse and breathing trends in context, and request rest or assistance. Safety teams receive the information they need to respond while protected breaks stay protected.
+
+## Watch the demo
+
+[![Watch the SiteGuard AdaptiveBreak demo](https://img.youtube.com/vi/CzoFM4OR6TA/maxresdefault.jpg)](https://www.youtube.com/watch?v=CzoFM4OR6TA)
+
+**[Watch SiteGuard on YouTube →](https://www.youtube.com/watch?v=CzoFM4OR6TA)**
+
+## Our mission
+
+Workplace safety should adapt around people—not force people to adapt around rigid schedules. Our mission is to give workers a simple way to speak up before fatigue becomes an incident and give safety teams clear, privacy-conscious context for timely human decisions.
+
+SiteGuard creates two connected safety loops:
+
+1. **Proactive check-ins:** Presage camera observations capture pulse and breathing trends; worker history adds context; Gemini explains approved evidence in plain language; the worker chooses whether to request support.
+2. **Rapid response:** Scene monitoring can surface a possible fall for immediate human review, helping the safety team see the event and coordinate a response.
+
+## How it works
+
+```text
+Camera / Presage + check-in history
+                 ↓
+        Rest-support model
+                 ↓
+ Confidence + uncertainty + evidence
+                 ↓
+   Gemini plain-language explanation
+                 ↓
+ Worker choice + safety-team response
+```
+
+The persistent worker/supervisor experience connects voluntary check-ins → descriptive pulse and breathing trends → symptom/rest requests → protected staffing coordination. Tiger Data and TimescaleDB store time-series history, Supabase provides role-scoped authentication, and the React web app and native iOS scaffold share the same Fastify API.
+
+All seeded measurements and history are clearly synthetic. The application consumes a separately implemented native Presage bridge; it does not include the SDK itself.
 
 ## Run locally
 
