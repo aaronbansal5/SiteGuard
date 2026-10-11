@@ -50,69 +50,89 @@ export function Measurement() {
     let stopped = false;
     let media: MediaStream | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let busy = false;
-    let timestampUs = 0;
+    let inFlight = 0;
+    let encoding = false;
+    let lastTimestampUs = 0;
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
-    const fail = (error: unknown) => {
+    const failCapture = (error: unknown) => {
       if (stopped) return;
+      stopped = true;
+      clearTimeout(timer);
       setCameraError(
         error instanceof Error ? error.message : "Camera capture stopped.",
       );
+      media?.getTracks().forEach((track) => track.stop());
       setCameraActive(false);
     };
     const capture = async () => {
-      if (stopped || busy || !media || !context || !videoRef.current) return;
+      if (stopped || !media || !context || !videoRef.current) return;
       const captureStartedAt = performance.now();
-      busy = true;
       try {
         const video = videoRef.current;
-        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-        const scale = Math.min(
-          1,
-          640 / Math.max(video.videoWidth, video.videoHeight),
-        );
-        canvas.width = Math.round(video.videoWidth * scale);
-        canvas.height = Math.round(video.videoHeight * scale);
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const frame = await new Promise<Blob>((resolve, reject) =>
-          canvas.toBlob(
-            (blob) =>
-              blob
-                ? resolve(blob)
-                : reject(new Error("Camera frame encoding failed")),
-            "image/jpeg",
-            0.9,
-          ),
-        );
-        timestampUs = Math.max(timestampUs + 1, Date.now() * 1000);
-        const response = await fetch(
-          `/api/sessions/${encodeURIComponent(id!)}/frame?timestampUs=${timestampUs}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "image/jpeg" },
-            body: frame,
-            credentials: "same-origin",
-            cache: "no-store",
-          },
-        );
-        if (!response.ok) {
-          let detail =
-            response.status === 409
-              ? "This check-in is no longer active. Restart the web check-in."
-              : `Camera frame rejected (${response.status}).`;
-          try {
-            const body = (await response.json()) as { message?: string };
-            if (body.message) detail = body.message;
-          } catch {
-            // Keep the status-based fallback when the server did not return JSON.
-          }
-          throw new Error(detail);
+        if (
+          !encoding &&
+          inFlight < 5 &&
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+        ) {
+          encoding = true;
+          const sourceWidth = video.videoWidth;
+          const sourceHeight = video.videoHeight;
+          if (!sourceWidth || !sourceHeight)
+            throw new Error("Camera video has no usable frame size.");
+          const scale = Math.min(1, 640 / Math.max(sourceWidth, sourceHeight));
+          const frameWidth = Math.round(sourceWidth * scale);
+          const frameHeight = Math.round(sourceHeight * scale);
+          if (canvas.width !== frameWidth) canvas.width = frameWidth;
+          if (canvas.height !== frameHeight) canvas.height = frameHeight;
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frame = await new Promise<Blob>((resolve, reject) =>
+            canvas.toBlob(
+              (blob) =>
+                blob
+                  ? resolve(blob)
+                  : reject(new Error("Camera frame encoding failed")),
+              "image/jpeg",
+              0.92,
+            ),
+          );
+          encoding = false;
+          if (stopped) return;
+          const timestampUs = Math.max(lastTimestampUs + 1, Date.now() * 1000);
+          lastTimestampUs = timestampUs;
+          inFlight++;
+          void fetch(
+            `/api/sessions/${encodeURIComponent(id!)}/frame?timestampUs=${timestampUs}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "image/jpeg" },
+              body: frame,
+              credentials: "same-origin",
+              cache: "no-store",
+            },
+          )
+            .then(async (response) => {
+              if (response.ok) return;
+              let detail =
+                response.status === 409
+                  ? "This check-in is no longer active. Restart the web check-in."
+                  : `Camera frame rejected (${response.status}).`;
+              try {
+                const body = (await response.json()) as {
+                  error?: { message?: string };
+                  message?: string;
+                };
+                detail = body.error?.message || body.message || detail;
+              } catch {
+                // Keep the status-based fallback when the server did not return JSON.
+              }
+              throw new Error(detail);
+            })
+            .catch(failCapture)
+            .finally(() => {
+              inFlight--;
+            });
         }
-      } catch (error) {
-        fail(error);
-      } finally {
-        busy = false;
         if (!stopped)
           timer = setTimeout(
             () => void capture(),
@@ -122,6 +142,9 @@ export function Measurement() {
                 (performance.now() - captureStartedAt),
             ),
           );
+      } catch (error) {
+        encoding = false;
+        failCapture(error);
       }
     };
     const start = async () => {
@@ -140,13 +163,17 @@ export function Measurement() {
             },
           },
         });
-        if (stopped) return;
-        videoRef.current!.srcObject = media;
-        await videoRef.current!.play();
+        if (stopped) {
+          media.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        if (!videoRef.current) throw new Error("Camera preview unavailable.");
+        videoRef.current.srcObject = media;
+        await videoRef.current.play();
         setCameraActive(true);
         void capture();
       } catch (error) {
-        fail(error);
+        failCapture(error);
       }
     };
     void start();

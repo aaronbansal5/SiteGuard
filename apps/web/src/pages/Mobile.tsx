@@ -929,8 +929,11 @@ function MobileMeasuring({
               if (!response.ok) {
                 let detail = `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`;
                 try {
-                  const body = (await response.json()) as { message?: string };
-                  if (body.message) detail = body.message;
+                  const body = (await response.json()) as {
+                    error?: { message?: string };
+                    message?: string;
+                  };
+                  detail = body.error?.message || body.message || detail;
                 } catch {
                   // Keep the status-based fallback when the server did not return JSON.
                 }

@@ -91,7 +91,16 @@ export class PresageSource implements MeasurementSource {
         signal: AbortSignal.timeout(5000),
       },
     );
-    if (!response.ok) throw new Error("Bridge rejected camera frame");
+    if (!response.ok) {
+      let detail = `Bridge rejected camera frame (${response.status})`;
+      try {
+        const body = (await response.json()) as { message?: string };
+        if (body.message) detail = body.message;
+      } catch {
+        // Preserve the status-based fallback for non-JSON bridge responses.
+      }
+      throw new Error(detail);
+    }
   }
   private async stream() {
     let failures = 0;
