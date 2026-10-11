@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import {
+  useParams,
+  useNavigate,
+  Link,
+  useSearchParams,
+} from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
 import type { Session } from "@siteguard/contracts";
 import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
@@ -16,6 +21,7 @@ import { SourceBadge } from "../components/SourceBadge";
 import { VitalChart } from "../components/VitalChart";
 export function Measurement() {
   const { id } = useParams(),
+    [search] = useSearchParams(),
     session = useResource<{ session: Session }>(`/sessions/${id}`);
   const stream = useSessionStream(
       id!,
@@ -24,11 +30,106 @@ export function Measurement() {
     a = useAction(),
     navigate = useNavigate();
   const [now, setNow] = useState(Date.now());
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraError, setCameraError] = useState("");
+  const [cameraActive, setCameraActive] = useState(false);
+  const browserCamera = search.get("camera") === "browser";
+  const s = session.data?.session;
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
-  const s = session.data?.session;
+  useEffect(() => {
+    if (!browserCamera || s?.source !== "presage" || s.status !== "active")
+      return;
+    let stopped = false;
+    let media: MediaStream | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let busy = false;
+    let timestampUs = 0;
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    const fail = (error: unknown) => {
+      if (stopped) return;
+      setCameraError(
+        error instanceof Error ? error.message : "Camera capture stopped.",
+      );
+      setCameraActive(false);
+    };
+    const capture = async () => {
+      if (stopped || busy || !media || !context || !videoRef.current) return;
+      busy = true;
+      try {
+        const video = videoRef.current;
+        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+        const scale = Math.min(
+          1,
+          640 / Math.max(video.videoWidth, video.videoHeight),
+        );
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const frame = await new Promise<Blob>((resolve, reject) =>
+          canvas.toBlob(
+            (blob) =>
+              blob
+                ? resolve(blob)
+                : reject(new Error("Camera frame encoding failed")),
+            "image/jpeg",
+            0.9,
+          ),
+        );
+        timestampUs = Math.max(timestampUs + 1, Date.now() * 1000);
+        const response = await fetch(
+          `/api/sessions/${encodeURIComponent(id!)}/frame?timestampUs=${timestampUs}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "image/jpeg" },
+            body: frame,
+            credentials: "same-origin",
+            cache: "no-store",
+          },
+        );
+        if (!response.ok)
+          throw new Error(`Camera frame rejected (${response.status}).`);
+      } catch (error) {
+        fail(error);
+      } finally {
+        busy = false;
+        if (!stopped) timer = setTimeout(() => void capture(), 33);
+      }
+    };
+    const start = async () => {
+      try {
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
+          throw new Error("Camera check-in requires HTTPS.");
+        media = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: "user",
+            width: { ideal: 960 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 },
+          },
+        });
+        if (stopped) return;
+        videoRef.current!.srcObject = media;
+        await videoRef.current!.play();
+        setCameraActive(true);
+        void capture();
+      } catch (error) {
+        fail(error);
+      }
+    };
+    void start();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      media?.getTracks().forEach((track) => track.stop());
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setCameraActive(false);
+    };
+  }, [browserCamera, id, s?.source, s?.status]);
   if (!s)
     return (
       <>
@@ -86,20 +187,46 @@ export function Measurement() {
             <span className="badge">{quality || "Waiting"}</span>
           </div>
           <div className="camera-frame">
-            <div className="scan-corners" />
-            <div className="head-outline">
-              <ScanLine size={68} strokeWidth={1} />
-            </div>
-            <strong>
-              {s.source === "mock"
-                ? "No camera required"
-                : "Face the bridge camera"}
-            </strong>
-            <span>
-              {s.source === "mock"
-                ? "A deterministic stream demonstrates the flow."
-                : "Camera capture is managed by the local Presage bridge."}
-            </span>
+            {browserCamera && s.source === "presage" ? (
+              <>
+                <video
+                  ref={videoRef}
+                  muted
+                  playsInline
+                  autoPlay
+                  aria-label="Live camera preview"
+                  style={{
+                    width: "100%",
+                    borderRadius: 12,
+                    transform: "scaleX(-1)",
+                  }}
+                />
+                <strong>
+                  {cameraActive ? "Camera active" : "Starting camera…"}
+                </strong>
+                <span>
+                  {cameraError ||
+                    "Frames are processed transiently by Presage; no video is saved."}
+                </span>
+              </>
+            ) : (
+              <>
+                <div className="scan-corners" />
+                <div className="head-outline">
+                  <ScanLine size={68} strokeWidth={1} />
+                </div>
+                <strong>
+                  {s.source === "mock"
+                    ? "No camera required"
+                    : "Face the bridge camera"}
+                </strong>
+                <span>
+                  {s.source === "mock"
+                    ? "A deterministic stream demonstrates the flow."
+                    : "Camera capture is managed by the local Presage bridge."}
+                </span>
+              </>
+            )}
           </div>
           <div className="connection">
             <span className={`dot ${stream.error ? "amber" : ""}`} />
@@ -158,7 +285,7 @@ export function Measurement() {
           />
         </div>
       </div>
-      <ErrorNotice message={a.error || stream.error} />
+      <ErrorNotice message={a.error || cameraError || stream.error} />
       <section className="card">
         <div className="card-header">
           <div>

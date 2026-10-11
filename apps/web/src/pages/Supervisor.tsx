@@ -222,7 +222,10 @@ function Operations() {
               <div className="card-header">
                 <div>
                   <h2>Consented check-ins</h2>
-                  <p>Only sessions the worker explicitly shared for this check-in. Measurements are observations, not clearance.</p>
+                  <p>
+                    Only sessions the worker explicitly shared for this
+                    check-in. Measurements are observations, not clearance.
+                  </p>
                 </div>
               </div>
               {o.sharedSessions?.length ? (
@@ -230,17 +233,31 @@ function Operations() {
                   {o.sharedSessions.map((session) => (
                     <article className="request-item" key={session.id}>
                       <div>
-                        <strong>{o.workers.find((w) => w.id === session.workerId)?.displayName ?? session.workerId}</strong>
-                        <p>{time(session.startedAt)} · {session.source === "presage" ? "Presage camera" : "Synthetic demo"}</p>
+                        <strong>
+                          {o.workers.find((w) => w.id === session.workerId)
+                            ?.displayName ?? session.workerId}
+                        </strong>
+                        <p>
+                          {time(session.startedAt)} ·{" "}
+                          {session.source === "presage"
+                            ? "Presage camera"
+                            : "Synthetic demo"}
+                        </p>
                       </div>
-                      <Link className="text-link" to={`/sessions/${session.id}`}>
+                      <Link
+                        className="text-link"
+                        to={`/sessions/${session.id}`}
+                      >
                         View detailed readings <ArrowRight size={14} />
                       </Link>
                     </article>
                   ))}
                 </div>
               ) : (
-                <p className="muted">No completed check-ins have been shared with safety operations.</p>
+                <p className="muted">
+                  No completed check-ins have been shared with safety
+                  operations.
+                </p>
               )}
             </section>
             <div className="two-columns operations-columns">

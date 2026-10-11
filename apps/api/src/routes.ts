@@ -223,6 +223,19 @@ export async function registerRoutes(
           "SESSION_ACTIVE",
           "Resume or stop the existing session first",
         );
+      const priorContext =
+        b.context.workload === null && b.context.temperatureC === null
+          ? (await tx.list("sessions"))
+              .filter(
+                (candidate) =>
+                  candidate.workerId === workerId &&
+                  candidate.source === b.source &&
+                  candidate.status === "completed",
+              )
+              .sort((left, right) =>
+                right.startedAt.localeCompare(left.startedAt),
+              )[0]?.context
+          : undefined;
       const s: Session = {
         id: randomUUID(),
         workerId,
@@ -231,7 +244,10 @@ export async function registerRoutes(
         status: "active",
         startedAt: new Date().toISOString(),
         endedAt: null,
-        context: b.context,
+        // Workers are not required to answer workload or temperature
+        // questions. Reuse the latest same-source context only when both are
+        // omitted; otherwise preserve the supplied values.
+        context: priorContext ?? b.context,
         consentVersion: b.consentVersion,
         shareWithSupervisor: b.shareWithSupervisor,
         interruption: null,

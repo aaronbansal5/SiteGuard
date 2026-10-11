@@ -469,7 +469,11 @@ async function main() {
       }[];
     };
     const rest = overview.requests.find((r) => r.kind === "additional_rest")!;
-    const own = (await protectedBreaks()).find((x) => x.workerId === workerId)!;
+    const own = (
+      (await (await worker.request.get("/api/breaks")).json()) as {
+        breaks: BreakRow[];
+      }
+    ).breaks.find((x) => x.kind === "protected")!;
     approvedStart = rest.restStartsAt!;
     check(b, rest.status === "approved", "request approved");
     check(
