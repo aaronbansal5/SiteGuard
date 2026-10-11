@@ -318,7 +318,29 @@ export function Measurement() {
               )}
             </div>
           ) : s.source === "presage" ? (
-            <CameraPreview sessionId={s.id} />
+            <>
+              <CameraPreview sessionId={s.id} />
+              <div className="notice demo">
+                <p>
+                  Camera preview still waiting? Continue the labelled
+                  presentation demo without claiming a camera result.
+                </p>
+                <button
+                  className="button secondary full"
+                  disabled={a.busy || autoCompleting}
+                  onClick={() =>
+                    void a.run(async () => {
+                      await api(`/sessions/${s.id}/complete`, {});
+                      navigate(`/sessions/${s.id}`);
+                    })
+                  }
+                >
+                  {a.busy || autoCompleting
+                    ? "Finishing check-in…"
+                    : "Continue with presentation demo"}
+                </button>
+              </div>
+            </>
           ) : (
             <div className="camera-frame">
               <div className="scan-corners" />

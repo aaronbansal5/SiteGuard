@@ -1107,7 +1107,30 @@ function MobileMeasuring({
         </>
       )}
       {s.source === "presage" && !phoneCamera && (
-        <CameraPreview sessionId={s.id} />
+        <>
+          <CameraPreview sessionId={s.id} />
+          <div className="notice demo">
+            <p>
+              Camera preview still waiting? Continue the labelled presentation
+              demo without claiming a camera result.
+            </p>
+            <button
+              type="button"
+              className="button secondary mobile-big"
+              disabled={a.busy || autoCompleting}
+              onClick={() =>
+                void a.run(async () => {
+                  await api(`/sessions/${s.id}/complete`, {});
+                  onFinished();
+                })
+              }
+            >
+              {a.busy || autoCompleting
+                ? "Finishing…"
+                : "Continue with presentation demo"}
+            </button>
+          </div>
+        </>
       )}
       <div className="mobile-countdown">
         <span>Remaining</span>
