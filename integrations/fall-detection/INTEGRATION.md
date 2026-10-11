@@ -1,3 +1,15 @@
+# Integrated sidebar and camera access
+
+The Hitayu web app exposes `/fall-detection` in its sidebar. Signed-in workers and supervisors can view a sanitized incident queue. Worker responses omit manager notes, raw track identifiers and bounding boxes. Only supervisors can request `/api/fall-detection/preview`, control capture or update incidents. API role checks occur before contacting the detector.
+
+Set a strong independent `FALL_DETECTION_TOKEN` in the root ignored `.env` and run `npm run fall:camera` from the root. The app API and detector share this backend-only credential. The configured detector denies direct browser access, including the old standalone dashboard and preview URL. Do not use a `VITE_*` environment variable for this token. The service starts with the camera off; use the manager sidebar tab to confirm consent and start capture. Stop Presage first when both would use the same camera.
+
+The preview uses in-memory browser blobs; frames are neither recorded nor persisted. The local service must stay bound to loopback. Hosted deployments disable this local adapter. Source labels and the strict over-two-second width-greater-than-height rule remain visible.
+
+**Identity:** main provides account authentication via OIDC and server-assigned worker/manager roles. Local `AUTH_MODE=demo` still allows demo role selection; it is not production identity. Live camera access requires a current manager session and the adapter is disabled when `HOSTED=true`.
+
+## Previous standalone handoff
+
 # Claude integration handoff
 
 The detector is self-contained. Do not merge its SQLite file into SiteGuard, add native dependencies to npm, or let it contend with the Presage webcam.

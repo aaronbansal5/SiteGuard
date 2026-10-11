@@ -1,5 +1,7 @@
 """Loopback-only demo server. No authentication or production deployment support."""
 import argparse
+import hmac
+import os
 import json
 import threading
 import time
@@ -30,6 +32,7 @@ def retention_loop(store, days, stop, interval=RETENTION_INTERVAL):
 
 
 def handler(runtime):
+    access_token = os.environ.get("FALL_DETECTION_TOKEN")
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -49,6 +52,9 @@ def handler(runtime):
 
         def allowed(self):
             # Loopback binding plus Host/Origin checks protect local demo writes.
+            if access_token and not hmac.compare_digest(
+                    self.headers.get("Authorization", ""), "Bearer " + access_token):
+                return False
             expected = '127.0.0.1:' + str(self.server.server_port)
             host = self.headers.get('Host', '')
             origin = self.headers.get('Origin')

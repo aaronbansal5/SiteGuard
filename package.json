@@ -32,7 +32,8 @@
     "verify:all": "node --env-file-if-exists=.env scripts/verify-all.mjs",
     "dev:live": "concurrently -n bridge,api,web \"npm run start --prefix integrations/presage-bridge\" \"tsx watch --env-file-if-exists=.env apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\"",
     "auth:bootstrap": "tsx --env-file-if-exists=.env scripts/auth-bootstrap.ts",
-    "auth:disable": "tsx --env-file-if-exists=.env scripts/auth-disable.ts"
+    "auth:disable": "tsx --env-file-if-exists=.env scripts/auth-disable.ts",
+    "fall:camera": "node --env-file-if-exists=.env scripts/fall-camera.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

@@ -21,6 +21,7 @@ export interface Config {
   hosted: boolean;
   bridgeUrl: string;
   bridgeToken?: string;
+  fallDetectionToken?: string;
   geminiKey?: string;
   geminiModel?: string;
   webDist: string;
@@ -60,6 +61,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     hosted,
     bridgeUrl: process.env.PRESAGE_BRIDGE_URL || "http://127.0.0.1:4311",
     bridgeToken: process.env.PRESAGE_BRIDGE_TOKEN,
+    fallDetectionToken: process.env.FALL_DETECTION_TOKEN,
     geminiKey: process.env.GEMINI_API_KEY?.trim() || undefined,
     geminiModel: process.env.GEMINI_MODEL?.trim() || undefined,
     webDist: resolve("apps/web/dist"),
@@ -76,6 +78,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
       !(process.env.MEASUREMENT_TOKEN || overrides.measurementToken))
   )
     throw new Error("Hosted mode requires COOKIE_SECRET and MEASUREMENT_TOKEN");
+  if (c.fallDetectionToken !== undefined && c.fallDetectionToken.length < 32)
+    throw new Error("FALL_DETECTION_TOKEN must have at least 32 characters");
   if (c.cookieSecret.length < 32)
     throw new Error("COOKIE_SECRET must have at least 32 characters");
   if (!Number.isInteger(c.port) || c.port < 1 || c.port > 65535)

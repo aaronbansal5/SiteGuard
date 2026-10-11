@@ -149,6 +149,26 @@ class ServerTests(unittest.TestCase):
                          {'configured': False, 'pending': 1, 'error': None})
         store.delivered(pending[0]['eventId'])
         self.assertEqual(store.pending(), [])
+    def test_configured_token_blocks_direct_detector_access(self):
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'FALL_DETECTION_TOKEN': 'private-local-test-token'}):
+            guarded = ThreadingHTTPServer(('127.0.0.1', 0), handler(self.runtime))
+        runner = threading.Thread(target=guarded.serve_forever, daemon=True)
+        runner.start()
+        url = 'http://127.0.0.1:' + str(guarded.server_port)
+        try:
+            for path in ('/', '/api/state', '/api/preview'):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(url + path)
+                self.assertEqual(error.exception.code, 403)
+            request = urllib.request.Request(url + '/api/state', headers={
+                'Authorization': 'Bearer private-local-test-token'})
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+        finally:
+            guarded.shutdown()
+            guarded.server_close()
+            runner.join()
 
     def test_camera_never_substitutes_synthetic(self):
         self.runtime.source = 'camera'

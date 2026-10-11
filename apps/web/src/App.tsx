@@ -27,6 +27,7 @@ import {
   PanelLeft,
   LockKeyhole,
   Smartphone,
+  Camera,
 } from "lucide-react";
 import type { Identity } from "@siteguard/contracts";
 import { api } from "./lib/api";
@@ -57,6 +58,11 @@ const HistoryPage = lazy(() =>
 );
 const MobileApp = lazy(() =>
   import("./pages/Mobile").then((module) => ({ default: module.MobileApp })),
+);
+const FallDetection = lazy(() =>
+  import("./pages/FallDetection").then((module) => ({
+    default: module.FallDetection,
+  })),
 );
 const Supervisor = lazy(() =>
   import("./pages/Supervisor").then((module) => ({
@@ -259,6 +265,11 @@ function Shell() {
               <Users size={18} /> Safety operations
             </NavLink>
           )}
+          {identity && (
+            <NavLink to="/fall-detection">
+              <Camera size={18} /> Fall detection
+            </NavLink>
+          )}
         </nav>
         <div className="sidebar-bottom">
           <div className="protected-card">
@@ -364,6 +375,14 @@ function Shell() {
                     ) : (
                       <Landing />
                     )
+                  }
+                />
+                <Route
+                  path="/fall-detection"
+                  element={
+                    <Protected>
+                      <FallDetection />
+                    </Protected>
                   }
                 />
                 <Route
