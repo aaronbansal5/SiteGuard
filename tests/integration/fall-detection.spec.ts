@@ -10,7 +10,7 @@ const incident = {
   durationSeconds: 2.1,
   revision: 0,
 };
-test("worker sees shared scene queue but cannot access camera", async ({
+test("worker sees shared scene queue and live camera without manager controls", async ({
   page,
 }) => {
   await page.request.post("/api/demo/login", {
@@ -22,9 +22,18 @@ test("worker sees shared scene queue but cannot access camera", async ({
         source: "camera",
         status: "running",
         cameraActive: true,
-        canViewCamera: false,
+        canViewCamera: true,
         incidents: [incident],
       },
+    }),
+  );
+  await page.route("**/api/fall-detection/preview", (route) =>
+    route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6X8AAAAASUVORK5CYII=",
+        "base64",
+      ),
     }),
   );
   await page.goto("/fall-detection");
@@ -34,14 +43,12 @@ test("worker sees shared scene queue but cannot access camera", async ({
   await expect(
     page.getByText("Possible person down", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByAltText("Manager-only live scene camera feed"),
-  ).toHaveCount(0);
+  await expect(page.getByAltText("Live scene camera feed")).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop camera" })).toHaveCount(
     0,
   );
   expect((await page.request.get("/api/fall-detection/preview")).status()).toBe(
-    403,
+    200,
   );
 });
 test("manager sees boxes and commits revision checked scene review", async ({
@@ -84,9 +91,7 @@ test("manager sees boxes and commits revision checked scene review", async ({
     });
   });
   await page.goto("/fall-detection");
-  await expect(
-    page.getByAltText("Manager-only live scene camera feed"),
-  ).toBeVisible();
+  await expect(page.getByAltText("Live scene camera feed")).toBeVisible();
   await expect(
     page.locator('svg[aria-label="Anonymous person tracking boxes"] rect'),
   ).toHaveCount(1);

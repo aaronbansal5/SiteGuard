@@ -60,7 +60,7 @@ const scene = {
   ],
 };
 describe("fall detection role boundary", () => {
-  it("requires identity and rejects worker preview/control/incident writes before contacting detector", async () => {
+  it("requires identity and rejects worker control/incident writes before contacting detector", async () => {
     const { app } = await setup(),
       fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
@@ -69,7 +69,6 @@ describe("fall detection role boundary", () => {
     );
     const cookie = await login(app);
     const requests = [
-      { method: "GET" as const, url: "/api/fall-detection/preview" },
       {
         method: "POST" as const,
         url: "/api/fall-detection/camera/start",
@@ -92,7 +91,7 @@ describe("fall detection role boundary", () => {
       ).toBe(403);
     expect(fetcher).not.toHaveBeenCalled();
   });
-  it("shares sanitized incident status with workers while hiding notes and raw tracks", async () => {
+  it("shares sanitized incident status with workers while hiding notes", async () => {
     const { app } = await setup();
     vi.stubGlobal(
       "fetch",
@@ -105,10 +104,9 @@ describe("fall detection role boundary", () => {
       headers: { cookie: worker },
     });
     expect(workerResult.statusCode).toBe(200);
-    expect(workerResult.json().canViewCamera).toBe(false);
-    expect(workerResult.json().tracks).toBeUndefined();
+    expect(workerResult.json().canViewCamera).toBe(true);
+    expect(workerResult.json().tracks[0].trackId).toBe("secret-track");
     expect(workerResult.json().incidents[0].note).toBeUndefined();
-    expect(workerResult.body).not.toContain("secret-track");
     const managerResult = await app.inject({
       url: "/api/fall-detection/state",
       headers: { cookie: manager },
@@ -117,9 +115,9 @@ describe("fall detection role boundary", () => {
     expect(managerResult.json().incidents[0].note).toBeNull();
     expect(managerResult.json().tracks[0].trackId).toBe("secret-track");
   });
-  it("proxies manager preview using a backend-only credential", async () => {
+  it("proxies worker preview using a backend-only credential", async () => {
     const { app } = await setup(),
-      cookie = await login(app, "supervisor");
+      cookie = await login(app);
     const fetcher = vi.fn(
       async () =>
         new Response(new Uint8Array([255, 216, 255, 217]), {

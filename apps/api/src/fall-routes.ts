@@ -110,12 +110,13 @@ export function registerFallRoutes(
     return {
       ...status,
       incidents,
-      canViewCamera: actor.role === "supervisor",
-      ...(actor.role === "supervisor" ? { tracks, frameSize } : {}),
+      canViewCamera: true,
+      tracks,
+      frameSize,
     };
   });
   app.get("/api/fall-detection/preview", async (req, reply) => {
-    supervisor(req);
+    identity(req);
     const response = await detector("/api/preview");
     if (!response.headers.get("content-type")?.startsWith("image/jpeg"))
       fail(503, "DETECTOR_UNAVAILABLE", "Live camera frame unavailable");

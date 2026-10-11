@@ -9,8 +9,9 @@ at `http://127.0.0.1:${PORT:-3001}`. Native camera prerequisites remain in
 
 Signed-in workers and managers open **Fall detection** in the sidebar. Managers
 can start/stop the camera and see its live preview with anonymous tracking boxes.
-Workers see shared incident status without frames, tracking coordinates, worker
-associations, or manager notes. A valid wider-than-tall person box must persist
+All signed-in users can view the live feed and tracking boxes. Workers see shared
+incident status without worker associations or manager notes; camera controls
+and incident review actions remain manager-only. A valid wider-than-tall person box must persist
 continuously for **more than two seconds** to generate a possible-person-down
 observation; this does not confirm a fall or injury.
 

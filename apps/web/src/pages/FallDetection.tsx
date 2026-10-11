@@ -80,7 +80,11 @@ function SceneView({ manager }: { manager: boolean }) {
     alertTimer.current = setTimeout(() => setAlert(""), 10000);
   }, [scene]);
   useEffect(() => {
-    if (!manager || !scene?.cameraActive || scene.status !== "running") {
+    if (
+      !scene?.canViewCamera ||
+      !scene.cameraActive ||
+      scene.status !== "running"
+    ) {
       setPreview("");
       setPreviewError("");
       return;
@@ -125,7 +129,7 @@ function SceneView({ manager }: { manager: boolean }) {
       clearTimeout(timer);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [manager, scene?.cameraActive, scene?.status]);
+  }, [scene?.canViewCamera, scene?.cameraActive, scene?.status]);
   async function control(kind: "start" | "stop") {
     await action.run(async () => {
       await api(
@@ -141,7 +145,7 @@ function SceneView({ manager }: { manager: boolean }) {
       <PageHeading
         eyebrow="SITEGUARD / SCENE REVIEW"
         title="Fall detection"
-        description="Shared incident visibility. Live camera access is reserved for managers."
+        description="Live scene monitoring and incident visibility for everyone signed in."
       />
       {alert && (
         <div className="fall-new-alert" role="alert">
@@ -187,14 +191,14 @@ function SceneView({ manager }: { manager: boolean }) {
                       : `${scene.delivery.pending} observation(s) awaiting database confirmation.`)}
                 </p>
               )}
-            {manager ? (
+            {
               <>
                 <ErrorNotice message={previewError} />
                 {preview && (
                   <div style={{ position: "relative", maxWidth: 960 }}>
                     <img
                       src={preview}
-                      alt="Manager-only live scene camera feed"
+                      alt="Live scene camera feed"
                       style={{ display: "block", width: "100%" }}
                     />
                     <svg
@@ -242,7 +246,8 @@ function SceneView({ manager }: { manager: boolean }) {
                     are processed locally and are not stored.
                   </p>
                 )}
-                {scene.source !== "synthetic" &&
+                {manager &&
+                  scene.source !== "synthetic" &&
                   (scene.cameraActive ? (
                     <button
                       className="button secondary"
@@ -272,13 +277,7 @@ function SceneView({ manager }: { manager: boolean }) {
                     </>
                   ))}
               </>
-            ) : (
-              <p>
-                Camera {scene.cameraActive ? "active" : "off"}. Your workspace
-                shows incident status; managers handle the live feed and scene
-                follow-up.
-              </p>
-            )}
+            }
           </section>
           <section className="card">
             <h2>
