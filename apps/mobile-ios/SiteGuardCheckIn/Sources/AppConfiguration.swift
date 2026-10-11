@@ -2,6 +2,7 @@
 // Config/Secrets.xcconfig (untracked) through $(VARIABLE) substitution; no
 // secret is written in source. See apps/mobile-ios/README.md.
 import Foundation
+import Security
 
 struct AppConfiguration {
     /// SmartSpectra API key for local development builds only. A key in
@@ -41,5 +42,56 @@ struct AppConfiguration {
             // Opened in Safari as a link only; no data is sent by this app.
             siteGuardWebURL: ["https", "http"].contains(web?.scheme ?? "") ? web : nil
         )
+    }
+}
+
+/// Device-only Keychain storage for a key the worker explicitly chooses to
+/// remember. It is never written to UserDefaults, a file, or SiteGuard's API.
+enum PresageKeyStore {
+    private static let service = "com.siteguard.adaptivebreak.presage"
+    private static let account = "smart-spectra-api-key"
+
+    static func load() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let key = String(data: data, encoding: .utf8),
+              !key.isEmpty else { return nil }
+        return key
+    }
+
+    static func save(_ key: String) -> Bool {
+        let identity: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(key.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
+        let existing = SecItemCopyMatching(identity as CFDictionary, nil)
+        if existing == errSecSuccess {
+            return SecItemUpdate(identity as CFDictionary, attributes as CFDictionary) == errSecSuccess
+        }
+        var item = identity
+        attributes.forEach { item[$0.key] = $0.value }
+        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func delete() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }

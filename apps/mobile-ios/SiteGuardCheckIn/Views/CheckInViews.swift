@@ -8,6 +8,17 @@ struct ConsentView: View {
     @State private var choices = ConsentChoices()
     @State private var starting = false
     @State private var enteredPresageKey = ""
+    @State private var rememberPresageKey = true
+    @State private var replaceSavedKey = false
+
+    private var needsKeyEntry: Bool {
+        !model.configuration.hasPresageCredentials && (!model.hasSavedPresageKey || replaceSavedKey)
+    }
+
+    private var canBegin: Bool {
+        consented && !starting &&
+        (!needsKeyEntry || !enteredPresageKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -53,13 +64,32 @@ struct ConsentView: View {
             if !model.configuration.hasPresageCredentials {
                 VStack(alignment: .leading, spacing: 9) {
                     Label("Presage key", systemImage: "key").font(.headline).foregroundStyle(SGStyle.ink)
-                    SecureField("Enter API key for this check-in", text: $enteredPresageKey)
-                        .textContentType(.password)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-                    Text("Kept only in memory for this check-in. Not saved or uploaded to SiteGuard.")
-                        .font(.footnote).foregroundStyle(SGStyle.muted)
+                    if model.hasSavedPresageKey && !replaceSavedKey {
+                        Label("Saved securely on this iPhone. You do not need to enter it again.",
+                              systemImage: "checkmark.circle")
+                            .font(.callout).foregroundStyle(SGStyle.primary)
+                        HStack(spacing: 16) {
+                            Button("Change key") { replaceSavedKey = true }
+                            Button("Forget key") { model.forgetPresageKey() }
+                        }
+                        .font(.callout.weight(.semibold))
+                    } else {
+                        SecureField("Enter API key", text: $enteredPresageKey)
+                            .textContentType(.password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textFieldStyle(.roundedBorder)
+                        Toggle("Remember securely on this iPhone", isOn: $rememberPresageKey)
+                        Text("The key stays in this phone's device-only Keychain if you choose to remember it. It is never uploaded to SiteGuard.")
+                            .font(.footnote).foregroundStyle(SGStyle.muted)
+                        if replaceSavedKey {
+                            Button("Keep existing key") {
+                                enteredPresageKey = ""
+                                replaceSavedKey = false
+                            }
+                            .font(.footnote.weight(.semibold))
+                        }
+                    }
                 }
                 .sgCard()
             }
@@ -72,19 +102,16 @@ struct ConsentView: View {
                 let key = enteredPresageKey
                 enteredPresageKey = ""
                 Task {
-                    await model.begin(consented: consented, choices: choices, enteredPresageKey: key)
+                    await model.begin(consented: consented, choices: choices,
+                                      enteredPresageKey: key, rememberPresageKey: rememberPresageKey)
                     starting = false
                 }
             } label: {
                 Label(starting ? "Starting…" : "Begin check-in", systemImage: "camera")
             }
             .buttonStyle(SGPrimaryButton())
-            .disabled(!consented || starting ||
-                (!model.configuration.hasPresageCredentials &&
-                 enteredPresageKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
-            .opacity((!consented || starting ||
-                (!model.configuration.hasPresageCredentials &&
-                 enteredPresageKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)) ? 0.5 : 1)
+            .disabled(!canBegin)
+            .opacity(canBegin ? 1 : 0.5)
             Button {
                 model.cancelConsent()
             } label: {

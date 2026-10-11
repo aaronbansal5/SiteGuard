@@ -17,7 +17,7 @@ The canonical API contract now includes a separate local-demo native upload endp
 | Browser camera → local Presage bridge                                        | Implemented; live iPhone pulse/breathing **not verified**                                 | Aspect-preserving JPEG frames are proxied and decoded transiently; bridge and API tests pass                                            |
 | iOS app builds and measures on a device                                      | **Partially verified**                                                                     | User's iPhone screenshot: 51 s, 38 readings, 30 valid pulse, 1 valid breathing; new upload build installed, fresh measurement pending.    |
 | Phone → SiteGuard upload                                                     | **Implemented in code; device E2E unverified**                                            | `SiteGuardUploader.swift`; unsigned iOS build passed. User must opt in per check-in.                                                       |
-| Phone ingestion API (pairing tokens, TLS, consent)                           | **Implemented for local demo; fixture-tested**                                            | `apps/api/test/device-upload.test.ts`; in-memory credentials and no production identity verification.                                    |
+| Phone ingestion API (pairing tokens, TLS, consent)                           | **Implemented for local demo; fixture-tested**                                            | `apps/api/test/device-upload.test.ts`; persistent token hashes survive a local API restart, but there is no production identity verification. |
 
 ## Browser camera relay
 
@@ -91,7 +91,7 @@ Setup steps are in `apps/mobile-ios/README.md`. Summary:
 
 ## Longer-term phone ingestion contract (design only)
 
-Status: **proposal for production-style deployment, not implemented**. The current path is local-demo-only and intentionally simpler: short-lived pairing and device tokens live in server memory, upload occurs once at check-in completion, and real phone data never reaches hosted demo mode. The following is a future design, not a claim that these endpoints exist.
+Status: **proposal for production-style deployment, not implemented**. The current path is local-demo-only and intentionally simpler: five-minute one-time pairing codes live in server memory; device tokens live in the iPhone's device-only Keychain and only their SHA-256 digests persist in the local database for up to 30 days. Upload occurs once at check-in completion, and real phone data never reaches hosted demo mode. The following is a future design, not a claim that these endpoints exist.
 
 ### Goals and non-goals
 

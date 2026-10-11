@@ -8,8 +8,8 @@ import { worker } from "./auth.js";
 import { fail } from "./errors.js";
 import { sessionSummary } from "./domain/sessions.js";
 
-// Deliberately local-demo-only. Pairings and device credentials expire on
-// server restart; no device credential or camera frame is persisted.
+// Deliberately local-demo-only. One-time codes stay in memory. Only a hash of
+// each device credential is persisted; no raw token or camera frame is stored.
 const PairBody = z.strictObject({ code: z.string().regex(/^[A-Z2-9]{8}$/) });
 const CheckInBody = z.strictObject({
   id: Id,
@@ -21,7 +21,6 @@ const CheckInBody = z.strictObject({
   readings: z.array(ReadingEnvelopeSchema).min(1).max(1000),
 });
 type Pairing = { workerId: string; expiresAt: number };
-type Device = { workerId: string; expiresAt: number };
 const readingValues = (e: ReadingEnvelope) => [
   e.sequence, e.reading.timestamp, e.reading.heartRateBpm,
   e.reading.respiratoryRateBrpm, e.reading.quality, e.reading.source,
@@ -29,7 +28,6 @@ const readingValues = (e: ReadingEnvelope) => [
 
 export function registerDeviceRoutes(app: FastifyInstance, r: Repository, c: Config) {
   const pairings = new Map<string, Pairing>();
-  const devices = new Map<string, Device>(); // SHA-256 token -> worker binding
   const failures = new Map<string, { count: number; until: number }>();
   const local = (req: FastifyRequest) => {
     const remote = req.socket.remoteAddress;
@@ -42,17 +40,20 @@ export function registerDeviceRoutes(app: FastifyInstance, r: Repository, c: Con
     if (req.headers["x-siteguard-public-proto"] !== "https")
       fail(403, "DEVICE_LOCAL_HTTPS_ONLY", "Phone pairing and upload require local HTTPS");
   };
-  const device = (req: FastifyRequest) => {
+  const device = async (req: FastifyRequest) => {
     available(req);
     const authorization = req.headers.authorization ?? "";
     if (!/^Bearer [A-Za-z0-9_-]{43}$/.test(authorization))
       fail(401, "DEVICE_UNPAIRED", "Pair this phone first");
     const token = authorization.slice(7);
     const digest = createHash("sha256").update(token).digest("hex");
-    const entry = devices.get(digest);
-    if (!entry || entry.expiresAt <= Date.now())
+    const [entry] = await r.driver.query(
+      "SELECT worker_id,expires_at FROM device_pairings WHERE token_digest=$1",
+      [digest],
+    );
+    if (!entry || Date.parse(String(entry.expires_at)) <= Date.now())
       fail(401, "DEVICE_UNPAIRED", "Pair this phone again");
-    return entry.workerId;
+    return String(entry.worker_id);
   };
   app.post("/api/devices/pairings", async (req, reply) => {
     // Issuing a short-lived code on the Mac's loopback HTTP origin is safe;
@@ -88,16 +89,20 @@ export function registerDeviceRoutes(app: FastifyInstance, r: Repository, c: Con
       failures.set(key, { count: (attempts?.until && attempts.until > now ? attempts.count : 0) + 1, until: now + 10 * 60_000 });
       fail(401, "INVALID_PAIRING", "Code invalid or expired");
     }
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = now + 30 * 24 * 60 * 60_000;
+    await r.driver.query("DELETE FROM device_pairings WHERE expires_at<=$1", [new Date(now).toISOString()]);
+    await r.driver.query(
+      "INSERT INTO device_pairings (token_digest,worker_id,expires_at) VALUES ($1,$2,$3)",
+      [createHash("sha256").update(token).digest("hex"), pairing.workerId, new Date(expiresAt).toISOString()],
+    );
     pairings.delete(code);
     failures.delete(key);
-    const token = randomBytes(32).toString("base64url");
-    const expiresAt = now + 24 * 60 * 60_000;
-    devices.set(createHash("sha256").update(token).digest("hex"), { workerId: pairing.workerId, expiresAt });
     reply.code(201);
     return { deviceToken: token, workerId: pairing.workerId, expiresAt: new Date(expiresAt).toISOString() };
   });
   app.post("/api/device/check-ins", async (req, reply) => {
-    const workerId = device(req);
+    const workerId = await device(req);
     const body = CheckInBody.parse(req.body);
     if (body.readings.some((e, i) => e.sequence !== i || e.reading.source !== "presage"))
       fail(400, "INVALID_READINGS", "Readings must be sequential real Presage observations");

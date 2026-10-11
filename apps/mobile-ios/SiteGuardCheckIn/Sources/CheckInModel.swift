@@ -49,6 +49,7 @@ final class CheckInModel {
     private(set) var pulseRateBpm: Double?
     private(set) var breathingRateBrpm: Double?
     private(set) var pairingMessage: String?
+    private(set) var hasSavedPresageKey = false
     var pairedWorkerId: String? { uploader.pairedWorkerId }
     private(set) var serverURLText: String
     private(set) var availableWorkers: [DeviceWorker] = []
@@ -69,6 +70,7 @@ final class CheckInModel {
         let address = saved ?? configuration.siteGuardWebURL?.absoluteString ?? ""
         self.serverURLText = address
         self.uploader = uploader ?? LocalHTTPSUploader(origin: URL(string: address))
+        self.hasSavedPresageKey = PresageKeyStore.load() != nil
         reminder = ReminderSchedule(intervalSeconds: configuration.reminderIntervalSeconds)
         reminder.enable(now: Date())
         ticker = Task { [weak self] in
@@ -189,11 +191,18 @@ final class CheckInModel {
         stage = .home
     }
 
+    func forgetPresageKey() {
+        PresageKeyStore.delete()
+        hasSavedPresageKey = false
+    }
+
     /// Starts the camera only after explicit consent for this check-in.
-    func begin(consented: Bool, choices: ConsentChoices, enteredPresageKey: String? = nil) async {
+    func begin(consented: Bool, choices: ConsentChoices, enteredPresageKey: String? = nil,
+               rememberPresageKey: Bool = false) async {
         guard consented, stage == .consent else { return }
         let localKey = enteredPresageKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = configuration.smartSpectraAPIKey ?? (localKey?.isEmpty == false ? localKey : nil)
+        let enteredKey = localKey?.isEmpty == false ? localKey : nil
+        let key = configuration.smartSpectraAPIKey ?? enteredKey ?? PresageKeyStore.load()
         guard configuration.usesOAuth || key != nil else {
             errorMessage = "Enter a Presage API key to start this check-in."
             return
@@ -216,6 +225,19 @@ final class CheckInModel {
                 ?? "The measurement could not start. Nothing was recorded."
             try? await measurement.stop()
             return
+        }
+        // Store only a key the worker typed for this check-in, and only after
+        // Presage accepted startup. A failed camera start does not overwrite
+        // a previously working key.
+        if let enteredKey {
+            if rememberPresageKey {
+                hasSavedPresageKey = PresageKeyStore.save(enteredKey)
+                if !hasSavedPresageKey {
+                    errorMessage = "The key could not be saved on this phone; this check-in can continue."
+                }
+            } else if hasSavedPresageKey {
+                forgetPresageKey()
+            }
         }
         stage = .measuring(startedAt: startedAt)
         measurement.observeMetrics { [weak self] pulses, breathings in

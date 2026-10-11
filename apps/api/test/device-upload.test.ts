@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fixtureId } from "@siteguard/mock-data";
 import { login, testApp } from "./helpers.js";
+import { createApp } from "../src/app.js";
 
 const running: Awaited<ReturnType<typeof testApp>>[] = [];
 afterEach(async () => {
@@ -56,6 +60,60 @@ function payload(shared: boolean) {
 }
 
 describe("local iPhone upload", () => {
+  it("keeps a hashed device pairing across a local API restart", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "siteguard-pairing-test-"));
+    const options = {
+      sqlitePath: join(directory, "demo.sqlite"),
+      databaseUrl: undefined,
+      cookieSecret: "test-secret-at-least-thirty-two-characters",
+      measurementToken: "internal-test-token",
+      bridgeToken: undefined,
+      webDist: "/nonexistent/siteguard-web",
+      geminiKey: undefined,
+      geminiModel: undefined,
+    };
+    let first: Awaited<ReturnType<typeof createApp>> | undefined;
+    let second: Awaited<ReturnType<typeof createApp>> | undefined;
+    try {
+      first = await createApp(options);
+      const cookie = await login(first.app, "worker", fixtureId(1));
+      const issued = await first.app.inject({
+        method: "POST", url: "/api/devices/pairings", headers: { cookie }, payload: {},
+      });
+      expect(issued.statusCode).toBe(201);
+      const paired = await first.app.inject({
+        method: "POST", url: "/api/devices/pair", headers: tls,
+        payload: { code: issued.json().code },
+      });
+      expect(paired.statusCode).toBe(201);
+      const token = paired.json().deviceToken as string;
+      const digestRows = await first.repo.driver.query("SELECT token_digest FROM device_pairings");
+      expect(digestRows).toHaveLength(1);
+      expect(digestRows[0].token_digest).not.toBe(token);
+      await first.app.close();
+      first = undefined;
+
+      second = await createApp(options);
+      const uploaded = await second.app.inject({
+        method: "POST", url: "/api/device/check-ins",
+        headers: { ...tls, authorization: `Bearer ${token}` },
+        payload: payload(true),
+      });
+      expect(uploaded.statusCode).toBe(201);
+      await second.repo.driver.query("UPDATE device_pairings SET expires_at=$1", [new Date(0).toISOString()]);
+      const expired = await second.app.inject({
+        method: "POST", url: "/api/device/check-ins",
+        headers: { ...tls, authorization: `Bearer ${token}` },
+        payload: payload(true),
+      });
+      expect(expired.statusCode).toBe(401);
+    } finally {
+      if (second) await second.app.close();
+      if (first) await first.app.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("opens a fresh fictional break without resetting earlier real readings", async () => {
     const { app, repo, token } = await pair();
     const phoneSession = payload(true);
