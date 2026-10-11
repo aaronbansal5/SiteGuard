@@ -400,6 +400,23 @@ describe("synthetic research route", () => {
     expect(fs.open).not.toHaveBeenCalled();
   });
 
+  it("allows only the explicit local theory-demo override for Presage", async () => {
+    const { app, repo, session, url } = await apiSetup({
+      researchDemoAllowPresage: true,
+    });
+    await repo.put("sessions", { ...session, source: "presage" });
+    const cookie = await login(app);
+    const res = await app.inject({ url, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      syntheticDemo: true,
+      evidence: { source: "presage", synthetic: false },
+      modelProvenance: { kind: "synthetic_demo", runtime_ready: false },
+      demoModel: { status: "insufficient_evidence" },
+    });
+    expect(res.json().disclaimer).toContain("Theory demo only");
+  });
+
   it("authorizes the owner and requires completion before reading any artifact", async () => {
     const { app, repo, session, url } = await apiSetup();
     const other = await login(app, "worker", fixtureId(2));

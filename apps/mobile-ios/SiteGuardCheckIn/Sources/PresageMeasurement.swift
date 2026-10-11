@@ -45,6 +45,9 @@ final class PresageMeasurement {
         sdk.config.enableTelemetry = false
         // Live preview for positioning only. Frames are never stored or sent.
         sdk.config.imageOutputEnabled = true
+        // SmartSpectra owns the native iPhone capture cadence. The browser
+        // camera uses its own 15 FPS transport cadence; do not apply that web
+        // setting here because no documented SDK frame-rate control exists.
         try sdk.useCamera(.front)
     }
 

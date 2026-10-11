@@ -52,6 +52,10 @@ import {
 import { ErrorNotice, HelpActions, Loading } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
 import { PersonalInsightsPanel } from "../components/PersonalInsights";
+import {
+  BROWSER_CAMERA_FPS,
+  BROWSER_CAMERA_FRAME_INTERVAL_MS,
+} from "../lib/camera";
 
 type Health = {
   checkInTestMode?: boolean;
@@ -251,7 +255,8 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const activeBreak = sorted.find(
     (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
   );
-  const checkInBreak = activeBreak ?? (localTest ? sorted[0] : undefined);
+  const checkInBreak = activeBreak ?? sorted[0];
+  const onDemand = Boolean(checkInBreak && !activeBreak);
   const nextBreak = sorted.find((b) => Date.parse(b.startsAt) > now);
   const presageAvailable = Boolean(health.data?.measurementSources.presage);
   const canMeasure =
@@ -261,7 +266,7 @@ function MobileWorker({ workerId }: { workerId: string }) {
     !browserCamera && !demoMode && !(localTest && presageAvailable)
       ? "Camera check-in needs HTTPS and a running Presage bridge. Synthetic demo mode is also unavailable."
       : !checkInBreak
-        ? `Check-ins open during your scheduled break${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
+        ? `No scheduled check-in window is available${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
         : "";
 
   return (
@@ -289,6 +294,7 @@ function MobileWorker({ workerId }: { workerId: string }) {
           localTest={localTest}
           presageAvailable={presageAvailable}
           breakId={checkInBreak?.id ?? null}
+          onDemand={onDemand}
           browserCamera={browserCamera}
           demoMode={Boolean(demoMode)}
           canMeasure={canMeasure}
@@ -624,6 +630,7 @@ function MobileConsent({
   localTest,
   presageAvailable,
   breakId,
+  onDemand,
   browserCamera,
   demoMode,
   canMeasure,
@@ -635,6 +642,7 @@ function MobileConsent({
   localTest: boolean;
   presageAvailable: boolean;
   breakId: string | null;
+  onDemand: boolean;
   browserCamera: boolean;
   demoMode: boolean;
   canMeasure: boolean;
@@ -670,13 +678,17 @@ function MobileConsent({
                 facingMode: "user",
                 width: { ideal: 960 },
                 height: { ideal: 720 },
-                frameRate: { ideal: 30 },
+                frameRate: {
+                  ideal: BROWSER_CAMERA_FPS,
+                  max: BROWSER_CAMERA_FPS,
+                },
               },
             });
           }
           try {
             const result = await startOrResumeCheckIn(workerId, {
               breakId,
+              onDemand,
               source,
               ...(phoneCamera ? { input: "custom" as const } : {}),
               consentVersion: localTest ? "local-test" : "v1",
@@ -699,13 +711,19 @@ function MobileConsent({
           check-in starts recording.
         </p>
       )}
+      {onDemand && !localTest && (
+        <p className="notice demo">
+          On-demand check-in: this records observations now without changing or
+          approving your scheduled break.
+        </p>
+      )}
       {!localTest && (
         <ul className="mobile-consent-points">
           <li>
             {phoneCamera ? (
               <>
-                <strong>Your camera is used for this check-in.</strong> Frames
-                are sent over HTTPS to the SiteGuard server for transient
+                <strong>Your browser camera is used for this check-in.</strong>
+                Frames are sent over HTTPS to the SiteGuard server for transient
                 Presage processing. They are not saved. Stop at any time.
               </>
             ) : source === "presage" ? (
@@ -751,7 +769,7 @@ function MobileConsent({
               disabled={!browserCamera && !presageAvailable}
             >
               {browserCamera
-                ? "iPhone camera · Presage"
+                ? "Browser camera · Presage"
                 : "Presage · laptop camera bridge"}
             </option>
             <option value="mock">Synthetic demo · no camera</option>
@@ -906,11 +924,17 @@ function MobileMeasuring({
               cache: "no-store",
             },
           )
-            .then((response) => {
-              if (!response.ok)
-                throw new Error(
-                  `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`,
-                );
+            .then(async (response) => {
+              if (!response.ok) {
+                let detail = `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`;
+                try {
+                  const body = (await response.json()) as { message?: string };
+                  if (body.message) detail = body.message;
+                } catch {
+                  // Keep the status-based fallback when the server did not return JSON.
+                }
+                throw new Error(detail);
+              }
             })
             .catch(failCapture)
             .finally(() => {
@@ -920,7 +944,11 @@ function MobileMeasuring({
         if (!stopped)
           timer = setTimeout(
             () => void capture(),
-            Math.max(0, 33 - (performance.now() - captureStartedAt)),
+            Math.max(
+              0,
+              BROWSER_CAMERA_FRAME_INTERVAL_MS -
+                (performance.now() - captureStartedAt),
+            ),
           );
       } catch (error) {
         encoding = false;
@@ -939,7 +967,10 @@ function MobileMeasuring({
                 facingMode: "user",
                 width: { ideal: 960 },
                 height: { ideal: 720 },
-                frameRate: { ideal: 30 },
+                frameRate: {
+                  ideal: BROWSER_CAMERA_FPS,
+                  max: BROWSER_CAMERA_FPS,
+                },
               },
             });
         if (stopped) {

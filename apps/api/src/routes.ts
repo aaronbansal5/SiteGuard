@@ -235,6 +235,7 @@ export async function registerRoutes(
         fail(403, "FORBIDDEN", "Break does not belong to worker");
       if (
         !localTest &&
+        !b.onDemand &&
         (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
       )
         fail(
@@ -355,8 +356,14 @@ export async function registerRoutes(
         timestampUs,
         jpeg ? "image/jpeg" : "application/octet-stream",
       );
-    } catch {
-      fail(503, "FRAME_REJECTED", "Camera frame was not accepted by Presage");
+    } catch (error) {
+      fail(
+        503,
+        "FRAME_REJECTED",
+        error instanceof Error
+          ? error.message
+          : "Camera frame was not accepted by Presage",
+      );
     }
     reply.code(204).send();
   });

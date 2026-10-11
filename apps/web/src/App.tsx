@@ -28,6 +28,7 @@ import {
   LockKeyhole,
   Smartphone,
   Camera,
+  Monitor,
 } from "lucide-react";
 import type { Identity } from "@siteguard/contracts";
 import { api } from "./lib/api";
@@ -258,6 +259,10 @@ function Shell() {
                 <Smartphone size={18} />
                 Phone check-in
               </NavLink>
+              <NavLink to="/check-in">
+                <Monitor size={18} />
+                Web check-in
+              </NavLink>
             </>
           )}
           {identity?.role === "supervisor" && (
@@ -395,6 +400,14 @@ function Shell() {
                 />
                 <Route
                   path="/check-in"
+                  element={
+                    <Protected role="worker">
+                      <CheckIn />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="/web-check-in"
                   element={
                     <Protected role="worker">
                       <CheckIn />

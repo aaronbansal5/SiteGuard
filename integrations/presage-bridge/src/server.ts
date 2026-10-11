@@ -59,6 +59,8 @@ class BridgeSession {
   stopping?: Promise<void>;
   frameWindowStartedAt = 0;
   frameWindowCount = 0;
+  lastFrameTimestampUs = 0;
+  frameQueue: Promise<void> = Promise.resolve();
   readonly log: EventLog;
   readonly streams = new Set<ServerResponse>();
   constructor(
@@ -500,7 +502,39 @@ export class PresageBridge {
         );
       frame = Buffer.concat(chunks);
     }
-    session.capture.sendFrame(frame, frameWidth, frameHeight, timestampUs);
+    // Browser uploads can complete out of order when a frame is encoded while
+    // another request is still in flight. SmartSpectra requires strictly
+    // increasing timestamps, so stale frames are harmlessly discarded and
+    // accepted frames are delivered one at a time.
+    if (timestampUs <= session.lastFrameTimestampUs) {
+      res.writeHead(204, { "Cache-Control": "no-store" });
+      res.end();
+      return;
+    }
+    session.lastFrameTimestampUs = timestampUs;
+    const capture = session.capture;
+    session.frameQueue = session.frameQueue.then(() => {
+      if (session.state !== "active")
+        throw new Error("Presage session is no longer active");
+      capture.sendFrame!(frame, frameWidth, frameHeight, timestampUs);
+    });
+    try {
+      await session.frameQueue;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Presage rejected the camera frame";
+      // A SmartSpectra invalid-state error is terminal for this SDK instance.
+      // Release the camera and close the event stream so clients can start a
+      // fresh check-in instead of continuing to post frames into a dead state.
+      session.log.append({
+        type: "error",
+        code: "PRESAGE_FRAME_REJECTED",
+        message: "Presage stopped accepting camera frames. Restart this check-in.",
+        retryable: false,
+      });
+      await this.stopSession(session);
+      throw new HttpError(503, "PRESAGE_FRAME_REJECTED", message);
+    }
     const now = Date.now();
     if (session.frameWindowCount === 0) {
       session.frameWindowStartedAt = now;
