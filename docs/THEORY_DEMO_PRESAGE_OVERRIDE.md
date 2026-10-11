@@ -19,12 +19,38 @@ cd /Users/mohitunecha/Coding/SiteGuard
 DEMO_MODE=true \
 RESEARCH_DEMO_ENABLED=true \
 RESEARCH_DEMO_ALLOW_PRESAGE=true \
-npm run dev
+npm run dev:live
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173) and complete a Presage
-check-in. The session must finish with usable measurements before the model can
-produce a demo signal.
+check-in. This command starts the Presage bridge, API and web server together.
+Use one running instance; a bridge on port 4311 is required for camera capture.
+
+Presage check-ins count down from 90 seconds and finish automatically; the
+synthetic source uses 60 seconds. You can finish early. A usable summary is
+scored by the synthetic artifact. Incomplete Presage evidence under this local
+override shows a labelled presentation scenario with no model score. The
+scenario is a walkthrough, not a model prediction. Actual readings are never
+invented or filled in.
+
+## Role-play different outcomes
+
+On a labelled presentation result, select **Shuffle demo scenario** to choose a
+different fictional walkthrough. Or select **Rest**, **Recheck**, or **Support**
+directly to rehearse a specific flow. The same controls work on the phone web
+summary. Reloading returns to the initial Rest scenario.
+
+Shuffling only updates the local preview. It never fabricates vitals, changes
+model predictions or confidence, writes session records, or sends requests.
+**Request additional rest** and **Request assistance** still use the real app
+workflow when submitted. Research details and actual camera evidence are
+expandable below the role-play card. Random scenario controls never appear on
+non-presentation research results.
+
+If the API restarts during measurement, the old session is completed as
+interrupted. The web and phone screens check session status and open its summary;
+start a fresh camera check-in to record again. If completion fails, its error is
+shown and the Finish check-in button becomes available for retry.
 
 ## Environment-file version
 
@@ -56,6 +82,7 @@ when demo mode is off, or when the research demo flag is off.
 - Keeps the original Presage source label; it does not relabel measurements as
   synthetic.
 - Applies only the local synthetic artifact to the completed summary.
+- Labels the incomplete-evidence presentation fallback separately from inference.
 - Returns provenance showing `dataset_kind=synthetic_demo` and
   `runtime_ready=false`.
 - Never requests rest, changes a break, or mutates a session automatically.
@@ -68,6 +95,7 @@ npm run typecheck
 npm test -- --run
 npm run format:check
 npm run build
+npx playwright test --config playwright.reliability.config.ts
 ```
 
 The synthetic model artifact is local and ignored by Git:

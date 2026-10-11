@@ -827,6 +827,71 @@ main {
 .research-details {
   margin-top: 16px;
 }
+.demo-playground {
+  padding: clamp(18px, 3vw, 32px);
+  border: 1px solid #d8e7d1;
+  border-radius: 20px;
+  background: #f6f9f3;
+}
+.demo-playground-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.demo-scenario-picker {
+  display: flex;
+  gap: 4px;
+  background: #e8eee4;
+  padding: 4px;
+  border-radius: 12px;
+  margin: 24px 0;
+  width: fit-content;
+  max-width: 100%;
+}
+.demo-scenario-picker button {
+  border: 0;
+  background: transparent;
+  color: #42593e;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px 16px;
+  border-radius: 9px;
+  min-height: 44px;
+}
+.demo-scenario-picker button[aria-pressed="true"] {
+  color: #183d35;
+  background: #fff;
+  box-shadow: 0 1px 4px #183d3514;
+}
+.demo-scenario-picker button:focus-visible {
+  outline: 2px solid #467455;
+  outline-offset: 2px;
+}
+.demo-scenario-story {
+  max-width: 65ch;
+}
+.demo-scenario-story h3 {
+  color: #183d35;
+  font-size: clamp(24px, 3vw, 36px);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin: 8px 0 14px;
+}
+.demo-scenario-story > p:not(.fine-print) {
+  line-height: 1.65;
+  color: #42593e;
+}
+.demo-scenario-next {
+  padding-top: 12px;
+  border-top: 1px solid #d8e7d1;
+}
+.demo-provenance {
+  margin-bottom: 0;
+  max-width: 80ch;
+}
 .research-signal strong {
   font-size: 20px;
   line-height: 1.4;
@@ -2234,6 +2299,14 @@ textarea::placeholder {
   display: grid;
   gap: 14px;
   align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+.mobile-main > .card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mobile-main .card-header > div {
+  min-width: 0;
 }
 .mobile-card {
   background: #fff;
@@ -2447,6 +2520,7 @@ textarea::placeholder {
   grid-area: 1 / 1;
   padding: 24px;
   text-align: center;
+  color: #fff;
 }
 .face-position-guide {
   position: absolute;

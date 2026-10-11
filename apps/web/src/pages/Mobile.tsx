@@ -1,5 +1,7 @@
 import { CameraPreview } from "../components/CameraPreview";
 import { startOrResumeCheckIn } from "../lib/checkin";
+import { useCheckInCompletion } from "../lib/checkin-completion";
+import { ResearchRestSupportCard } from "./SessionSummary";
 // Phone layout for voluntary recurring check-ins (docs/MOBILE_APP.md).
 //
 // Invariants kept here:
@@ -59,6 +61,7 @@ import {
 
 type Health = {
   checkInTestMode?: boolean;
+  presentationDemo?: boolean;
   measurementSources: {
     mock: boolean;
     presage: boolean;
@@ -301,6 +304,7 @@ function MobileWorker({ workerId }: { workerId: string }) {
         <MobileMeasuring
           sessionId={stage.sessionId}
           initialMedia={stage.media}
+          presentationDemo={health.data?.presentationDemo === true}
           onFinished={() =>
             setStage({ kind: "done", sessionId: stage.sessionId })
           }
@@ -781,21 +785,32 @@ function MobileMeasuring({
   sessionId,
   initialMedia,
   onFinished,
+  presentationDemo,
 }: {
   sessionId: string;
   initialMedia?: MediaStream;
   onFinished: () => void;
+  presentationDemo: boolean;
 }) {
-  const session = useResource<{ session: Session }>(`/sessions/${sessionId}`);
+  const session = useResource<{ session: Session }>(
+    `/sessions/${sessionId}`,
+    5000,
+  );
   const s = session.data?.session;
   const stream = useSessionStream(sessionId, s?.status === "active");
-  const a = useAction();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const completion = useCheckInCompletion(s, onFinished);
+  const { targetSeconds, remaining, busy: autoCompleting } = completion;
   const phoneCamera = initialMedia !== undefined;
   useEffect(() => {
-    if (!phoneCamera || s?.source !== "presage" || s.status !== "active")
+    if (
+      !phoneCamera ||
+      s?.source !== "presage" ||
+      s.status !== "active" ||
+      autoCompleting
+    )
       return;
     let stopped = false;
     let media: MediaStream | undefined;
@@ -945,15 +960,7 @@ function MobileMeasuring({
       media?.getTracks().forEach((track) => track.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
     };
-  }, [s?.source, s?.status, sessionId, initialMedia]);
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    if (s?.status === "completed") onFinished();
-  }, [s?.status, onFinished]);
+  }, [s?.source, s?.status, sessionId, initialMedia, autoCompleting]);
   if (!s)
     return (
       <section className="mobile-card">
@@ -971,10 +978,6 @@ function MobileMeasuring({
         )}
       </section>
     );
-  const elapsed = Math.max(
-    0,
-    Math.floor((now - Date.parse(s.startedAt)) / 1000),
-  );
   const latest = (pick: "heartRateBpm" | "respiratoryRateBrpm") =>
     stream.readings
       .map((e) => e.reading)
@@ -1012,17 +1015,38 @@ function MobileMeasuring({
         </>
       )}
       {s.source === "presage" && !phoneCamera && (
-        <CameraPreview sessionId={s.id} />
+        <>
+          <CameraPreview sessionId={s.id} />
+          {presentationDemo && (
+            <div className="notice demo">
+              <p>
+                Camera preview still waiting? Continue the labelled presentation
+                demo without claiming a camera result.
+              </p>
+              <button
+                type="button"
+                className="button secondary mobile-big"
+                disabled={autoCompleting}
+                onClick={() => void completion.finish()}
+              >
+                {autoCompleting
+                  ? "Finishing…"
+                  : "Continue with presentation demo"}
+              </button>
+            </div>
+          )}
+        </>
       )}
       <div className="mobile-countdown">
-        <span>Elapsed</span>
+        <span>Remaining</span>
         <strong data-testid="checkin-elapsed">
-          {formatCountdown(elapsed)}
+          {formatCountdown(remaining)}
         </strong>
       </div>
       <p className="fine-print">
-        No time limit. Keep testing for as long as you need, then select Finish
-        check-in to stop recording. Data sufficiency is not a medical threshold.
+        Standard {targetSeconds}-second demo check-in. It will finish
+        automatically; you can finish early. This duration is a demo flow, not a
+        medical threshold.
       </p>
       <div className="mobile-readings">
         <div>
@@ -1048,37 +1072,25 @@ function MobileMeasuring({
           : "Presage measurement."}{" "}
         Latest quality: {quality ?? "waiting"} · {stream.status}
       </p>
-      <ErrorNotice message={a.error || cameraError || stream.error} />
+      <ErrorNotice message={completion.error || cameraError || stream.error} />
       {(cameraError || stream.error) && s.source === "presage" && (
         <button
           type="button"
           className="button secondary mobile-big"
-          disabled={a.busy}
-          onClick={() =>
-            void a.run(async () => {
-              await api(`/sessions/${s.id}/complete`, {});
-              onFinished();
-            })
-          }
+          disabled={autoCompleting}
+          onClick={() => void completion.finish()}
         >
-          {a.busy
-            ? "Resetting camera…"
-            : "Start a fresh browser camera check-in"}
+          {autoCompleting ? "Finishing…" : "Finish interrupted check-in"}
         </button>
       )}
       <button
         type="button"
         className="button primary mobile-big"
-        disabled={a.busy}
-        onClick={() =>
-          void a.run(async () => {
-            await api(`/sessions/${s.id}/complete`, {});
-            onFinished();
-          })
-        }
+        disabled={autoCompleting}
+        onClick={() => void completion.finish()}
       >
         <Square size={16} />
-        {a.busy ? "Stopping…" : "Finish check-in"}
+        {autoCompleting ? "Finishing…" : "Finish check-in"}
       </button>
     </section>
   );
@@ -1124,6 +1136,13 @@ function MobileDone({
   const v = summary.data?.summary;
   return (
     <>
+      {v && (
+        <ResearchRestSupportCard
+          sessionId={sessionId}
+          source={v.source}
+          completed
+        />
+      )}
       <section className="mobile-card">
         <div className="row-between">
           <span className="eyebrow">CHECK-IN COMPLETE</span>

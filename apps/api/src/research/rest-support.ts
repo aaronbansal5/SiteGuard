@@ -59,11 +59,15 @@ export interface RestSupportResult {
       | "inferred"
       | "insufficient_evidence"
       | "unavailable"
-      | "measurement_source_blocked";
+      | "measurement_source_blocked"
+      /** Explicit local presentation scenario, never a model prediction. */
+      | "presentation_simulation";
     /** Uncalibrated logistic output, never a validated confidence or fatigue score. */
     score: number | null;
     target: "self-reported request for additional rest";
   };
+  /** Local walkthrough result used only when the configured theory demo lacks usable sensor evidence. */
+  presentationSimulation?: true;
 }
 
 function extractMetric(
@@ -85,7 +89,10 @@ function extractMetric(
     final <= 0 ||
     metric.initialCount < 5 ||
     metric.finalCount < 5 ||
-    Math.abs(final - initial - delta) > 1e-9 * Math.max(1, Math.abs(delta)) ||
+    // Canonical analytics rounds the change to two decimals, while retaining
+    // full-precision window medians from Presage.
+    Math.abs(Math.round((final - initial) * 100) / 100 - delta) >
+      1e-9 * Math.max(1, Math.abs(delta)) ||
     !Number.isFinite(delta / initial)
   ) {
     issues.push(`${name}: unavailable or inconsistent initial/final windows.`);

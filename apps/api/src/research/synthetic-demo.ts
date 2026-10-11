@@ -166,8 +166,33 @@ export function createResearchDemoEvaluator(c: Config) {
       !breathing ||
       durationSeconds === null ||
       issues.some((issue) => !issue.startsWith("Workload/environment context"))
-    )
+    ) {
+      // Do not represent an abstention as a sensor conclusion in the explicit
+      // local theory demo. This is a separately labelled walkthrough only.
+      if (base.evidence.source === "presage" && c.researchDemoAllowPresage)
+        return {
+          ...result,
+          signal: "consider_additional_rest",
+          presentationSimulation: true,
+          demoModel: {
+            status: "presentation_simulation",
+            score: null,
+            target: TARGET,
+          },
+          disclaimer:
+            "Presentation simulation only: this fallback is not a model prediction or a physiological measurement. " +
+            "Experimental research estimate — not medical advice or work clearance. " +
+            "The worker chooses whether to request rest; scheduled breaks remain protected.",
+          uncertainty: {
+            level: "unquantified",
+            reasons: [
+              "The configured theory demo had insufficient usable sensor evidence, so SiteGuard is showing a labelled presentation scenario rather than a model prediction.",
+              ...result.uncertainty.reasons,
+            ],
+          },
+        };
       return result;
+    }
 
     // Feature order and scaling match scripts/research/train.py. Each metric
     // can have a different history count, so use the smaller eligible count.
