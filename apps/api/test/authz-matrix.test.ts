@@ -179,6 +179,12 @@ const cases: Case[] = [
     expected: ownerOnly(200),
   },
   {
+    route: "GET /api/sessions/:id/rest-support",
+    name: "research rest support",
+    url: `/api/sessions/${UNSHARED}/rest-support`,
+    expected: ownerOnly(200),
+  },
+  {
     route: "POST /api/sessions/:id/self-report",
     name: "self-report",
     url: `/api/sessions/${UNSHARED}/self-report`,

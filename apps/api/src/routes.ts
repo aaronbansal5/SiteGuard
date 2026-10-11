@@ -37,6 +37,7 @@ import {
 import { audit } from "./domain/requests.js";
 import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
 import { personalInsights, personalTrend } from "./domain/personal.js";
+import { evaluateRestSupport } from "./research/rest-support.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
   app: FastifyInstance,
@@ -349,6 +350,17 @@ export async function registerRoutes(
       fail(403, "FORBIDDEN", "This session belongs to another worker");
     return s;
   };
+  app.get("/api/sessions/:id/rest-support", async (req) => {
+    const s = await ownSession(req);
+    if (s.status !== "completed")
+      fail(
+        409,
+        "SESSION_ACTIVE",
+        "Complete the check-in before reviewing rest support",
+      );
+    const summary = await sessionSummary(r, s.id);
+    return evaluateRestSupport(summary);
+  });
   app.get("/api/sessions/:id/personal-insights", async (req) => {
     const s = await ownSession(req);
     return { insights: await personalInsights(r, s.id) };
