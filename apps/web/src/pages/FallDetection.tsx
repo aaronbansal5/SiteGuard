@@ -171,8 +171,8 @@ function SceneView({ manager }: { manager: boolean }) {
               </span>
             </div>
             <p>
-              A valid person box must stay wider than tall for more than two
-              seconds. This heuristic does not confirm a fall or injury.
+              A valid person box wider than tall immediately flags a possible
+              person down. This heuristic does not confirm a fall or injury.
             </p>
             {scene.status === "unavailable" && (
               <p role="status">

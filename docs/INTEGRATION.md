@@ -11,9 +11,8 @@ Signed-in workers and managers open **Fall detection** in the sidebar. Managers
 can start/stop the camera and see its live preview with anonymous tracking boxes.
 All signed-in users can view the live feed and tracking boxes. Workers see shared
 incident status without worker associations or manager notes; camera controls
-and incident review actions remain manager-only. A valid wider-than-tall person box must persist
-continuously for **more than two seconds** to generate a possible-person-down
-observation; this does not confirm a fall or injury.
+and incident review actions remain manager-only. A valid wider-than-tall person box generates a possible-person-down observation
+**on the first qualifying frame**, without a dwell timer; this does not confirm a fall or injury.
 
 The Scene review queue reads `safety_incidents` in the configured application
 database (PostgreSQL/Tiger Data or explicitly enabled rehearsal SQLite). Local

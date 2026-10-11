@@ -434,7 +434,7 @@
             <h3>Synthetic scenario controls</h3>
             <p>
               Generated bounding boxes test the workflow. They are not real
-              camera detections. A wider-than-tall box must persist for over two seconds to trigger an observation.
+              camera detections. A valid wider-than-tall box immediately triggers an observation.
             </p>
             <div class="buttons">
               <button data-scenario="upright">Standing upright</button
@@ -456,7 +456,7 @@
                 <div class="symbol" aria-hidden="true">◎</div>
                 <h3>No observations yet</h3>
                 <p>
-                  Observations appear after a person box stays wider than tall for over two seconds.
+                  Observations appear on the first valid wider-than-tall person box.
                 </p>
               </div>
             </div>
@@ -642,7 +642,7 @@
           root.append(
             textNode(
               "div",
-              "No observations yet. A person box must stay wider than tall for over two seconds.",
+              "No observations yet. A valid wider-than-tall person box immediately flags an observation.",
               "empty",
             ),
           );

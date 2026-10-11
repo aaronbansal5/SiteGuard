@@ -19,7 +19,7 @@ class Runtime:
         self.camera_id, self.zone_id = camera_id, zone_id
         self.video_input = video_input
         self.run_id, self.sequence = str(uuid.uuid4()), 0
-        self.detector = Detector(ratio_threshold=1.0, min_duration=2.0, require_upright=False, duration_exclusive=True)
+        self.detector = Detector(ratio_threshold=1.0, min_duration=0.0, require_upright=False, duration_exclusive=False)
         self.lock, self.stop = threading.RLock(), threading.Event()
         if source == 'synthetic':
             self.status, self.message = 'starting', None
