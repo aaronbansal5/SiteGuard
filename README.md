@@ -10,6 +10,12 @@ SiteGuard connects proactive worker check-ins with rapid human response for phys
 
 **[Watch SiteGuard on YouTube →](https://www.youtube.com/watch?v=CzoFM4OR6TA)**
 
+## Pitch deck
+
+**[Download the SiteGuard hackathon pitch deck →](docs/SiteGuard-Pitch-Deck.pptx)**
+
+The 10-slide deck covers the worker story, live product flow, system architecture, privacy controls, fall-response workflow, integration evidence, and MLH prize categories.
+
 ## Our mission
 
 Workplace safety should adapt around people—not force people to adapt around rigid schedules. Our mission is to give workers a simple way to speak up before fatigue becomes an incident and give safety teams clear, privacy-conscious context for timely human decisions.
