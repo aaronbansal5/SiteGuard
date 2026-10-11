@@ -54,6 +54,7 @@ final class CheckInModel {
     private(set) var serverURLText: String
     private(set) var availableWorkers: [DeviceWorker] = []
     private(set) var canRetryUpload = false
+    private(set) var isFinishing = false
     var isPaired: Bool { uploader.isPaired }
 
     private var ticker: Task<Void, Never>?
@@ -211,6 +212,7 @@ final class CheckInModel {
         currentChoices = choices
         pendingUpload = nil
         canRetryUpload = false
+        isFinishing = false
         preview = nil
         pulseRateBpm = nil
         breathingRateBrpm = nil
@@ -280,7 +282,9 @@ final class CheckInModel {
     }
 
     func finish() async {
-        guard case let .measuring(startedAt) = stage else { return }
+        guard case let .measuring(startedAt) = stage, !isFinishing else { return }
+        isFinishing = true
+        defer { isFinishing = false }
         sampler?.cancel()
         sampler = nil
         previewUpdater?.cancel()

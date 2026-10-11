@@ -63,7 +63,9 @@ export function SessionSummary() {
     return () => controller.abort();
   }, [id, summary.data]);
   const s = session.data?.session,
-    v = summary.data?.summary;
+    v = summary.data?.summary,
+    ownsSession =
+      identity?.role === "worker" && identity.workerId === s?.workerId;
   return (
     <>
       <Link
@@ -84,10 +86,18 @@ export function SessionSummary() {
         <>
           <PageHeading
             eyebrow="CHECK-IN SUMMARY / 03"
-            title="Your observations, in context."
+            title="Your next step, with context."
             description={`${date(s.startedAt)} · ${time(s.startedAt)} · ${Math.round(v.durationSeconds)} seconds recorded`}
             action={<SourceBadge source={s.source} />}
           />
+          {ownsSession && (
+            <ResearchRestSupportCard
+              key={s.id}
+              sessionId={s.id}
+              source={s.source}
+              completed={s.status === "completed"}
+            />
+          )}
           <div className="notice subtle">
             <FileText size={18} />
             <span>
@@ -104,22 +114,34 @@ export function SessionSummary() {
                 : `${s.context.temperatureC}°C`}
             </span>
           </div>
-          <div className="two-columns">
-            <Metric
-              title="Pulse"
-              unit="bpm"
-              value={v.pulse}
-              comparison={v.pulseComparison}
-              icon={<Activity size={20} />}
-            />
-            <Metric
-              title="Breathing rate"
-              unit="brpm"
-              value={v.breathing}
-              comparison={v.breathingComparison}
-              icon={<Wind size={20} />}
-            />
-          </div>
+          <section aria-labelledby="measurement-evidence">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">MEASUREMENT EVIDENCE</span>
+                <h2 id="measurement-evidence">What the check-in recorded</h2>
+                <p className="muted">
+                  These observations explain the estimate; they do not make a
+                  rest or work decision.
+                </p>
+              </div>
+            </div>
+            <div className="two-columns">
+              <Metric
+                title="Pulse"
+                unit="bpm"
+                value={v.pulse}
+                comparison={v.pulseComparison}
+                icon={<Activity size={20} />}
+              />
+              <Metric
+                title="Breathing rate"
+                unit="brpm"
+                value={v.breathing}
+                comparison={v.breathingComparison}
+                icon={<Wind size={20} />}
+              />
+            </div>
+          </section>
           {readings.data && (
             <div className="two-columns">
               <VitalChart
@@ -170,33 +192,13 @@ export function SessionSummary() {
               ))}
             </div>
           </section>
-          {identity?.role === "worker" && identity.workerId === s.workerId && (
+          {ownsSession && (
             <>
-              <ResearchRestSupportCard
-                key={s.id}
-                sessionId={s.id}
-                source={s.source}
-                completed={s.status === "completed"}
-              />
               <PersonalInsightsPanel
                 sessionId={s.id}
                 completed={s.status === "completed"}
               />
             </>
-          )}
-          {identity?.role === "worker" && (
-            <section className="card">
-              <div className="card-header">
-                <div>
-                  <h2>Choose your next step</h2>
-                  <p>Your needs matter independently of the measurements.</p>
-                </div>
-                <Link to="/history">
-                  Session history <ArrowRight size={14} />
-                </Link>
-              </div>
-              <HelpActions sessionId={s.id} />
-            </section>
           )}
           <SafetyNote />
         </>
@@ -209,6 +211,15 @@ const REST_SUPPORT_SIGNALS: Record<RestSupportResult["signal"], string> = {
   consider_additional_rest: "Consider additional rest",
   no_additional_signal: "No additional rest-support signal",
   insufficient_evidence: "Insufficient evidence",
+};
+
+const REST_SUPPORT_NEXT_STEP: Record<RestSupportResult["signal"], string> = {
+  consider_additional_rest:
+    "The experimental model found a rest-support signal. You can choose to request additional rest.",
+  no_additional_signal:
+    "The experimental model found no additional rest-support signal. This does not determine what you need—choose the support that feels right.",
+  insufficient_evidence:
+    "The model could not make an estimate from this check-in. Choose based on how you feel; support is still available.",
 };
 
 function isRestSupportResult(value: unknown): value is RestSupportResult {
@@ -307,9 +318,9 @@ function ResearchRestSupportCard({
     >
       <div className="card-header">
         <div>
-          <h2 id="research-rest-support-title">Research rest support</h2>
+          <h2 id="research-rest-support-title">Suggested next step</h2>
           <p>
-            Experimental research estimate — not medical advice or work
+            Experimental local research model — not medical advice or work
             clearance.
           </p>
         </div>
@@ -337,12 +348,13 @@ function ResearchRestSupportCard({
           >
             Retry research estimate
           </button>
+          <HelpActions sessionId={sessionId} />
         </>
       ) : (
         <>
           <div className="two-columns">
             <div className="comparison">
-              <span>Rest-support signal</span>
+              <span>Model result</span>
               <strong>{REST_SUPPORT_SIGNALS[result.support.signal]}</strong>
               <small>
                 This signal does not determine your rest needs or readiness.
@@ -356,6 +368,16 @@ function ResearchRestSupportCard({
               </small>
             </div>
           </div>
+          <div className="research-next-step" role="status">
+            <h3>What you can do</h3>
+            <p>{REST_SUPPORT_NEXT_STEP[result.support.signal]}</p>
+          </div>
+          <HelpActions sessionId={sessionId} />
+          <p className="fine-print">
+            {result.support.syntheticDemo
+              ? "Local synthetic-model theory demo — trained on fabricated research records; this output is unvalidated."
+              : "Descriptive research rule — no trained-model result is available for this check-in."}
+          </p>
           <div className="limitations">
             <h3>Uncertainty: {result.support.uncertainty.level}</h3>
             {result.support.uncertainty.reasons.length ? (

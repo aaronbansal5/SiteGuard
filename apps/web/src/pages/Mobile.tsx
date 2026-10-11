@@ -55,6 +55,9 @@ import { PersonalInsightsPanel } from "../components/PersonalInsights";
 import {
   BROWSER_CAMERA_FPS,
   BROWSER_CAMERA_FRAME_INTERVAL_MS,
+  BROWSER_CAMERA_IDEAL_HEIGHT,
+  BROWSER_CAMERA_IDEAL_WIDTH,
+  BROWSER_CAMERA_MAX_DIMENSION,
 } from "../lib/camera";
 
 type Health = {
@@ -255,17 +258,17 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const activeBreak = sorted.find(
     (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
   );
-  const checkInBreak = activeBreak ?? sorted[0];
+  const nextBreak = sorted.find((b) => Date.parse(b.endsAt) > now);
+  const checkInBreak = activeBreak ?? nextBreak;
   const onDemand = Boolean(checkInBreak && !activeBreak);
-  const nextBreak = sorted.find((b) => Date.parse(b.startsAt) > now);
   const presageAvailable = Boolean(health.data?.measurementSources.presage);
   const canMeasure =
     Boolean(browserCamera || demoMode || (localTest && presageAvailable)) &&
-    Boolean(checkInBreak);
+    (localTest || Boolean(checkInBreak));
   const blockedReason =
     !browserCamera && !demoMode && !(localTest && presageAvailable)
       ? "Camera check-in needs HTTPS and a running Presage bridge. Synthetic demo mode is also unavailable."
-      : !checkInBreak
+      : !localTest && !checkInBreak
         ? `No scheduled check-in window is available${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
         : "";
 
@@ -663,7 +666,8 @@ function MobileConsent({
       className="mobile-card"
       onSubmit={(e) => {
         e.preventDefault();
-        if ((!localTest && !consent) || !breakId || a.busy) return;
+        if ((!localTest && !consent) || (!localTest && !breakId) || a.busy)
+          return;
         void a.run(async () => {
           let media: MediaStream | undefined;
           if (phoneCamera) {
@@ -676,8 +680,8 @@ function MobileConsent({
               audio: false,
               video: {
                 facingMode: "user",
-                width: { ideal: 960 },
-                height: { ideal: 720 },
+                width: { ideal: BROWSER_CAMERA_IDEAL_WIDTH },
+                height: { ideal: BROWSER_CAMERA_IDEAL_HEIGHT },
                 frameRate: {
                   ideal: BROWSER_CAMERA_FPS,
                   max: BROWSER_CAMERA_FPS,
@@ -687,7 +691,7 @@ function MobileConsent({
           }
           try {
             const result = await startOrResumeCheckIn(workerId, {
-              breakId,
+              ...(breakId ? { breakId } : {}),
               onDemand,
               source,
               ...(phoneCamera ? { input: "custom" as const } : {}),
@@ -887,7 +891,10 @@ function MobileMeasuring({
           const sourceHeight = videoRef.current.videoHeight;
           if (!sourceWidth || !sourceHeight)
             throw new Error("Camera video has no usable frame size.");
-          const scale = Math.min(1, 640 / Math.max(sourceWidth, sourceHeight));
+          const scale = Math.min(
+            1,
+            BROWSER_CAMERA_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight),
+          );
           const frameWidth = Math.round(sourceWidth * scale);
           const frameHeight = Math.round(sourceHeight * scale);
           if (canvas.width !== frameWidth) canvas.width = frameWidth;
@@ -928,8 +935,11 @@ function MobileMeasuring({
               if (!response.ok) {
                 let detail = `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`;
                 try {
-                  const body = (await response.json()) as { message?: string };
-                  if (body.message) detail = body.message;
+                  const body = (await response.json()) as {
+                    error?: { message?: string };
+                    message?: string;
+                  };
+                  detail = body.error?.message || body.message || detail;
                 } catch {
                   // Keep the status-based fallback when the server did not return JSON.
                 }
@@ -965,8 +975,8 @@ function MobileMeasuring({
               audio: false,
               video: {
                 facingMode: "user",
-                width: { ideal: 960 },
-                height: { ideal: 720 },
+                width: { ideal: BROWSER_CAMERA_IDEAL_WIDTH },
+                height: { ideal: BROWSER_CAMERA_IDEAL_HEIGHT },
                 frameRate: {
                   ideal: BROWSER_CAMERA_FPS,
                   max: BROWSER_CAMERA_FPS,

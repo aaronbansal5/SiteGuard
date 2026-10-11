@@ -15,6 +15,7 @@ export function CheckIn() {
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
     [source, setSource] = useState<"mock" | "presage">("mock"),
+    [cameraInput, setCameraInput] = useState<"browser" | "native">("native"),
     [sourceSelected, setSourceSelected] = useState(false);
   const health = useResource<{
     checkInTestMode?: boolean;
@@ -27,14 +28,17 @@ export function CheckIn() {
   const breaks = useResource<{ breaks: Break[] }>("/breaks");
   const localTest = health.data?.checkInTestMode === true;
   const now = Date.now();
+  const workerBreaks = [...(breaks.data?.breaks ?? [])].sort(
+    (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
+  );
   const availableBreak =
-    breaks.data?.breaks.find(
+    workerBreaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
-    ) ??
-    [...(breaks.data?.breaks ?? [])].sort(
-      (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
-    )[0];
-  const breakId = search.get("breakId") || availableBreak?.id;
+    ) ?? workerBreaks.find((b) => Date.parse(b.endsAt) > now);
+  const requestedBreak = workerBreaks.find(
+    (b) => b.id === search.get("breakId"),
+  );
+  const breakId = requestedBreak?.id || availableBreak?.id;
   const onDemand = Boolean(
     availableBreak &&
     !(
@@ -120,10 +124,10 @@ export function CheckIn() {
             if ((!localTest && !consent) || a.busy) return;
             void a.run(async () => {
               const result = await startOrResumeCheckIn(identity.workerId, {
-                breakId: breakId!,
+                ...(breakId ? { breakId } : {}),
                 onDemand,
                 source,
-                ...(source === "presage" && browserCamera
+                ...(source === "presage" && cameraInput === "browser"
                   ? { input: "custom" as const }
                   : {}),
                 consentVersion: localTest ? "local-test" : "v1",
@@ -131,7 +135,7 @@ export function CheckIn() {
                 context: { workload: null, temperatureC: null },
               });
               navigate(
-                `/sessions/${result.session.id}/measure${source === "presage" && browserCamera ? "?camera=browser" : ""}`,
+                `/sessions/${result.session.id}/measure${source === "presage" && cameraInput === "browser" ? "?camera=browser" : ""}`,
               );
             });
           }}
@@ -173,6 +177,40 @@ export function CheckIn() {
               ? ", including camera warm-up before readings count."
               : "."}
           </p>
+          {source === "presage" && browserCamera && (
+            <fieldset className="camera-input-choice">
+              <legend>Camera connection</legend>
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="camera-input"
+                  checked={cameraInput === "native"}
+                  onChange={() => setCameraInput("native")}
+                />
+                <span>
+                  <strong>This Mac via Presage · recommended</strong>
+                  <small>
+                    Uses Presage’s local camera pipeline for the most reliable
+                    desktop check-in.
+                  </small>
+                </span>
+              </label>
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="camera-input"
+                  checked={cameraInput === "browser"}
+                  onChange={() => setCameraInput("browser")}
+                />
+                <span>
+                  <strong>This browser</strong>
+                  <small>
+                    Live preview from Chrome, processed locally by Presage.
+                  </small>
+                </span>
+              </label>
+            </fieldset>
+          )}
           <p className="fine-print">
             No workload or temperature questions are required. The before/after
             reading windows and your eligible history are handled automatically.
@@ -203,7 +241,7 @@ export function CheckIn() {
             message={
               a.error ||
               health.error ||
-              (!breakId
+              (!localTest && !breakId
                 ? "Select your active protected break from the worker portal before starting."
                 : "")
             }
@@ -211,7 +249,10 @@ export function CheckIn() {
           <button
             className="button primary full"
             disabled={
-              health.loading || (!localTest && !consent) || a.busy || !breakId
+              health.loading ||
+              (!localTest && !consent) ||
+              a.busy ||
+              (!localTest && !breakId)
             }
           >
             {a.busy

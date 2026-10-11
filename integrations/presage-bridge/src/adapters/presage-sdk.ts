@@ -131,14 +131,15 @@ export interface SmartSpectraModule {
   ValidationCode: { kOk: number } & Readonly<Record<string, number>>;
   SmartSpectraErrorCode: Record<string, number>;
   CameraSelection: { default: unknown };
-  PixelFormat: { kRGBA: number };
+  FrameTransform: { kNone: number };
+  PixelFormat: { kRGB: number };
   decodeMetrics(buf: Buffer): unknown;
 }
 
 interface VendorSdk {
   on(event: string, cb: (...args: never[]) => void): unknown;
   useCamera(selection: unknown): unknown;
-  useCustomInput(): unknown;
+  useCustomInput(frameTransform?: number): unknown;
   sendFrame(
     frame: Buffer,
     width: number,
@@ -319,8 +320,15 @@ export class PresageSdkAdapter implements SdkAdapter {
     sdk.on("processingStatus", ((status: number) => {
       if (debug) console.error(`[presage-sdk] processing status=${status}`);
       if (status === m.ProcessingStatus.kRunning) settle();
-      else if (status === m.ProcessingStatus.kError)
+      else if (status === m.ProcessingStatus.kError) {
         settle(new Error("SmartSpectra entered error state while starting"));
+        if (settled && !closed)
+          handlers.onError(
+            "PROCESSING_ERROR",
+            "Presage stopped processing this camera stream. Restart the check-in.",
+            false,
+          );
+      }
     }) as never);
     let warmUpAnnounced = false;
     sdk.on("validationStatus", ((code: number, _ts: number, hint: string) => {
@@ -422,7 +430,7 @@ export class PresageSdkAdapter implements SdkAdapter {
     };
 
     try {
-      if (mode === "custom") sdk.useCustomInput();
+      if (mode === "custom") sdk.useCustomInput(m.FrameTransform.kNone);
       else sdk.useCamera(m.CameraSelection.default);
       sdk.start();
       // A custom-input pipeline cannot emit validation or metrics before the
@@ -438,8 +446,8 @@ export class PresageSdkAdapter implements SdkAdapter {
                   frame,
                   width,
                   height,
-                  width * 4,
-                  m.PixelFormat.kRGBA,
+                  width * 3,
+                  m.PixelFormat.kRGB,
                   timestampUs,
                 ) === false
               )
@@ -447,8 +455,14 @@ export class PresageSdkAdapter implements SdkAdapter {
             } catch (error) {
               const status = (sdk as { processingStatus?: number })
                 .processingStatus;
+              const code =
+                error &&
+                typeof error === "object" &&
+                typeof (error as { code?: unknown }).code === "number"
+                  ? errorName((error as { code: number }).code)
+                  : "SDK_ERROR_UNKNOWN";
               throw new Error(
-                `SmartSpectra frame rejected in state ${status ?? "unknown"}: ${error instanceof Error ? error.message : String(error)}`,
+                `SmartSpectra frame rejected in state ${status ?? "unknown"} (${code}): ${error instanceof Error ? error.message : String(error)}`,
               );
             }
           },

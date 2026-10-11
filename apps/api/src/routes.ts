@@ -229,10 +229,29 @@ export async function registerRoutes(
     if (b.input && b.source !== "presage")
       fail(400, "INVALID_INPUT", "Custom camera input requires Presage");
     const session = await r.transaction(async (tx) => {
-      const br = await tx.get("breaks", b.breakId);
       const now = Date.now();
+      let br = b.breakId ? await tx.get("breaks", b.breakId) : undefined;
+      if (!br && localTest && !b.breakId) {
+        br = {
+          id: randomUUID(),
+          workerId,
+          startsAt: new Date(now).toISOString(),
+          endsAt: new Date(now + 15 * 60_000).toISOString(),
+          kind: "additional",
+          policyLabel: "Local test session · no scheduled break",
+          revision: 0,
+          requestId: null,
+        };
+        await tx.put("breaks", br);
+      }
       if (!br || br.workerId !== workerId)
-        fail(403, "FORBIDDEN", "Break does not belong to worker");
+        fail(
+          localTest ? 400 : 403,
+          localTest ? "BREAK_REQUIRED" : "FORBIDDEN",
+          localTest
+            ? "Local test session could not create its virtual test window"
+            : "Break does not belong to worker",
+        );
       if (
         !localTest &&
         !b.onDemand &&
@@ -269,7 +288,7 @@ export async function registerRoutes(
       const s: Session = {
         id: randomUUID(),
         workerId,
-        breakId: b.breakId,
+        breakId: br.id,
         source: b.source,
         status: "active",
         startedAt: new Date().toISOString(),
