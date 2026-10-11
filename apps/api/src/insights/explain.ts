@@ -28,7 +28,7 @@ export function sessionFacts(s: Summary) {
           ];
   }
   facts.rest_guidance = [
-    "Use the before-and-after observations and comparable history as descriptive context only. If you feel tired or unwell, take additional rest or contact a supervisor; these measurements do not determine fitness for work.",
+    "Use the before-and-after observations and comparable history as descriptive context only. If you feel unwell, take additional rest or contact a supervisor; these measurements do not determine fitness for work.",
   ];
   return facts;
 }
