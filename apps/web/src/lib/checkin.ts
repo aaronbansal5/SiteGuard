@@ -4,7 +4,7 @@ import { api } from "./api";
 type Preferences = Pick<
   Session,
   "breakId" | "source" | "consentVersion" | "shareWithSupervisor" | "context"
-> & { input?: "camera" | "custom" };
+> & { input?: "camera" | "custom"; onDemand?: boolean };
 
 /** Called only by an explicit worker start/switch action. Never mix sources. */
 export async function startOrResumeCheckIn(

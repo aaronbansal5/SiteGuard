@@ -251,7 +251,8 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const activeBreak = sorted.find(
     (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
   );
-  const checkInBreak = activeBreak ?? (localTest ? sorted[0] : undefined);
+  const checkInBreak = activeBreak ?? sorted[0];
+  const onDemand = Boolean(checkInBreak && !activeBreak);
   const nextBreak = sorted.find((b) => Date.parse(b.startsAt) > now);
   const presageAvailable = Boolean(health.data?.measurementSources.presage);
   const canMeasure =
@@ -261,7 +262,7 @@ function MobileWorker({ workerId }: { workerId: string }) {
     !browserCamera && !demoMode && !(localTest && presageAvailable)
       ? "Camera check-in needs HTTPS and a running Presage bridge. Synthetic demo mode is also unavailable."
       : !checkInBreak
-        ? `Check-ins open during your scheduled break${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
+        ? `No scheduled check-in window is available${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
         : "";
 
   return (
@@ -289,6 +290,7 @@ function MobileWorker({ workerId }: { workerId: string }) {
           localTest={localTest}
           presageAvailable={presageAvailable}
           breakId={checkInBreak?.id ?? null}
+          onDemand={onDemand}
           browserCamera={browserCamera}
           demoMode={Boolean(demoMode)}
           canMeasure={canMeasure}
@@ -624,6 +626,7 @@ function MobileConsent({
   localTest,
   presageAvailable,
   breakId,
+  onDemand,
   browserCamera,
   demoMode,
   canMeasure,
@@ -635,6 +638,7 @@ function MobileConsent({
   localTest: boolean;
   presageAvailable: boolean;
   breakId: string | null;
+  onDemand: boolean;
   browserCamera: boolean;
   demoMode: boolean;
   canMeasure: boolean;
@@ -677,6 +681,7 @@ function MobileConsent({
           try {
             const result = await startOrResumeCheckIn(workerId, {
               breakId,
+              onDemand,
               source,
               ...(phoneCamera ? { input: "custom" as const } : {}),
               consentVersion: localTest ? "local-test" : "v1",
@@ -699,13 +704,19 @@ function MobileConsent({
           check-in starts recording.
         </p>
       )}
+      {onDemand && !localTest && (
+        <p className="notice demo">
+          On-demand check-in: this records observations now without changing or
+          approving your scheduled break.
+        </p>
+      )}
       {!localTest && (
         <ul className="mobile-consent-points">
           <li>
             {phoneCamera ? (
               <>
-                <strong>Your camera is used for this check-in.</strong> Frames
-                are sent over HTTPS to the SiteGuard server for transient
+                <strong>Your browser camera is used for this check-in.</strong>
+                Frames are sent over HTTPS to the SiteGuard server for transient
                 Presage processing. They are not saved. Stop at any time.
               </>
             ) : source === "presage" ? (
@@ -751,7 +762,7 @@ function MobileConsent({
               disabled={!browserCamera && !presageAvailable}
             >
               {browserCamera
-                ? "iPhone camera · Presage"
+                ? "Browser camera · Presage"
                 : "Presage · laptop camera bridge"}
             </option>
             <option value="mock">Synthetic demo · no camera</option>

@@ -235,6 +235,7 @@ export async function registerRoutes(
         fail(403, "FORBIDDEN", "Break does not belong to worker");
       if (
         !localTest &&
+        !b.onDemand &&
         (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
       )
         fail(
