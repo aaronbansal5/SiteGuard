@@ -49,7 +49,11 @@ it.skipIf(!databaseUrl)(
         await repo.driver.query(
           "SELECT version FROM schema_migrations ORDER BY version",
         ),
-      ).toEqual([{ version: "001_initial" }, { version: "003_self_reports" }]);
+      ).toEqual([
+        { version: "001_initial" },
+        { version: "003_self_reports" },
+        { version: "004_device_pairings" },
+      ]);
 
       const s = await populatedSession(repo);
       expect(await repo.ingest(s.id, [mockReading(s.startedAt, 0)])).toEqual({
