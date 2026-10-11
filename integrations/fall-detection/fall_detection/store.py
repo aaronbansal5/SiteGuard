@@ -29,6 +29,12 @@ class Store:
         CREATE TABLE IF NOT EXISTS delivery(event_id TEXT PRIMARY KEY REFERENCES events(id), delivered_at TEXT);
         ''')
 
+        # Backfill legacy unresolved reports missing an application delivery receipt.
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO delivery(event_id,delivered_at) "
+                            "SELECT e.id,NULL FROM events e JOIN incidents i ON e.id=i.id "
+                            "WHERE json_extract(i.payload, '$.status') IN ('open','acknowledged')")
+
     def record(self, observation, source, run_id, sequence, camera_id, zone_id, observed_at=None):
         event = dict(observation, protocolVersion=1, eventId=str(uuid.uuid4()),
                      detectorRunId=run_id, sequence=sequence, cameraId=camera_id,

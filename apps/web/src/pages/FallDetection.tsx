@@ -290,82 +290,88 @@ function SceneView({ manager }: { manager: boolean }) {
               unresolved
             </h2>
             {!scene.incidents.length && <p>No incident reports yet.</p>}
-            {scene.incidents.map((incident) => (
-              <article key={incident.id} className="fall-incident">
-                <div className="fall-heading">
-                  <h3>Possible person down</h3>
-                  <span className="badge">
-                    {incident.status.replace("_", " ")}
-                  </span>
-                </div>
-                <p>
-                  {clock.format(new Date(incident.observedAt))} ·{" "}
-                  {incident.zoneId} · {incident.durationSeconds.toFixed(1)}{" "}
-                  seconds horizontal
-                </p>
-                <small>
-                  {incident.source === "synthetic"
-                    ? "Synthetic observation"
-                    : incident.source === "recorded_fixture"
-                      ? "Recorded fixture"
-                      : "Camera observation"}
-                </small>
-                {manager && incident.note && <p>{incident.note}</p>}
-                {manager &&
-                  ["open", "acknowledged"].includes(incident.status) && (
-                    <>
-                      <label className="fall-note">
-                        Follow-up note (required to close)
-                        <textarea
-                          value={notes[incident.id] || ""}
-                          maxLength={1000}
-                          onChange={(e) =>
-                            setNotes({
-                              ...notes,
-                              [incident.id]: e.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <div className="button-row">
-                        {["acknowledge", "resolve", "false_alarm"].map(
-                          (kind) => (
-                            <button
-                              key={kind}
-                              className="button secondary"
-                              disabled={
-                                action.busy ||
-                                (kind !== "acknowledge" &&
-                                  !notes[incident.id]?.trim())
-                              }
-                              onClick={() =>
-                                void action.run(async () => {
-                                  await api(
-                                    `/safety/incidents/${incident.id}`,
-                                    {
-                                      action: kind,
-                                      revision: incident.revision,
-                                      note: notes[incident.id] || "",
-                                    },
-                                    "PATCH",
-                                  );
-                                  await resource.refresh();
-                                })
-                              }
-                            >
-                              {kind === "acknowledge"
-                                ? "Acknowledge"
-                                : kind === "resolve"
-                                  ? "Resolve after check"
-                                  : "Mark false alarm"}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    </>
-                  )}
-              </article>
-            ))}
+            {[...scene.incidents]
+              .sort(
+                (a, b) =>
+                  Number(["open", "acknowledged"].includes(b.status)) -
+                  Number(["open", "acknowledged"].includes(a.status)),
+              )
+              .map((incident) => (
+                <article key={incident.id} className="fall-incident">
+                  <div className="fall-heading">
+                    <h3>Possible person down</h3>
+                    <span className="badge">
+                      {incident.status.replace("_", " ")}
+                    </span>
+                  </div>
+                  <p>
+                    {clock.format(new Date(incident.observedAt))} ·{" "}
+                    {incident.zoneId} · {incident.durationSeconds.toFixed(1)}{" "}
+                    seconds horizontal
+                  </p>
+                  <small>
+                    {incident.source === "synthetic"
+                      ? "Synthetic observation"
+                      : incident.source === "recorded_fixture"
+                        ? "Recorded fixture"
+                        : "Camera observation"}
+                  </small>
+                  {manager && incident.note && <p>{incident.note}</p>}
+                  {manager &&
+                    ["open", "acknowledged"].includes(incident.status) && (
+                      <>
+                        <label className="fall-note">
+                          Follow-up note (required to close)
+                          <textarea
+                            value={notes[incident.id] || ""}
+                            maxLength={1000}
+                            onChange={(e) =>
+                              setNotes({
+                                ...notes,
+                                [incident.id]: e.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <div className="button-row">
+                          {["acknowledge", "resolve", "false_alarm"].map(
+                            (kind) => (
+                              <button
+                                key={kind}
+                                className="button secondary"
+                                disabled={
+                                  action.busy ||
+                                  (kind !== "acknowledge" &&
+                                    !notes[incident.id]?.trim())
+                                }
+                                onClick={() =>
+                                  void action.run(async () => {
+                                    await api(
+                                      `/safety/incidents/${incident.id}`,
+                                      {
+                                        action: kind,
+                                        revision: incident.revision,
+                                        note: notes[incident.id] || "",
+                                      },
+                                      "PATCH",
+                                    );
+                                    await resource.refresh();
+                                  })
+                                }
+                              >
+                                {kind === "acknowledge"
+                                  ? "Acknowledge"
+                                  : kind === "resolve"
+                                    ? "Resolve after check"
+                                    : "Mark false alarm"}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      </>
+                    )}
+                </article>
+              ))}
           </section>
         </>
       )}

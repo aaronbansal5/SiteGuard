@@ -69,7 +69,7 @@ def posture(observation, dimensions, policy):
     clipped = (rectangle.left <= horizontal_margin or rectangle.top <= vertical_margin
                or rectangle.right >= image_width - horizontal_margin
                or rectangle.bottom >= image_height - vertical_margin)
-    if clipped or not policy.min_area_fraction <= rectangle.area / (image_width * image_height) <= policy.max_area_fraction:
+    if (policy.edge_margin > 0 and clipped) or not policy.min_area_fraction <= rectangle.area / (image_width * image_height) <= policy.max_area_fraction:
         return 'ignored'
     if rectangle.aspect >= policy.upright_threshold:
         return 'upright'

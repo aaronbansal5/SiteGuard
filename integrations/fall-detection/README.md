@@ -4,7 +4,7 @@ Independent of the React/Fastify app, Presage, Tiger Data and Gemini. The synthe
 
 ## Current local test rule
 
-The running standalone dashboard uses **bounding-box width > height** and creates a possible-person-down report **on the first eligible frame**, without a dwell timer. No preceding-upright observation is required. Confidence, edge and area filters still apply, as do duplicate-region and unresolved-incident suppression. A wider box is a review heuristic, not confirmation that someone fell.
+The running standalone dashboard uses **bounding-box width > height** and creates a possible-person-down report **on the first eligible frame**, without a dwell timer. No preceding-upright observation is required. Confidence and minimum-area filters still apply; the immediate laptop-camera mode accepts large and edge-touching boxes, as do duplicate-region and unresolved-incident suppression. A wider box is a review heuristic, not confirmation that someone fell.
 
 New incidents pulse a red screen border and show a ten-second alert banner. Reduced-motion users get a static border. Existing reports do not flash again on refresh. Detection times are captured when the observation frame is processed, stored in UTC and displayed in America/New_York with the timezone shown. The original configurable sustained-transition engine remains available to callers of Detector; the standalone Runtime explicitly selects immediate flagging.
 

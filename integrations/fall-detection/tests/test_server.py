@@ -77,7 +77,7 @@ class ServerTests(unittest.TestCase):
         self.runtime.detector.ratio_threshold = 0.5
         self.runtime.frame([Observation('1', (100, 100, 200, 160))], 1, [640, 360])
         self.assertFalse(self.runtime.state()['tracks'][0]['horizontal'])
-        self.runtime.frame([Observation('1', (0, 100, 200, 160))], 2, [640, 360])
+        self.runtime.frame([Observation('1', (0, 100, 200, 160), confidence=0.1)], 2, [640, 360])
         self.assertEqual(self.runtime.state()['tracks'][0]['state'], 'ignored')
 
     def fall(self, track, start):
@@ -110,6 +110,12 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(incidents[0]['durationSeconds'], 0)
         self.runtime.frame([wide], 1.1, [640, 360])
         self.assertEqual(len(self.runtime.store.list('incidents')), 1)
+
+    def test_large_edge_touching_horizontal_box_immediately_enters_queue(self):
+        self.runtime.frame([Observation('close-up', (0, 200, 640, 360))], 1, [640, 360])
+        self.assertEqual(self.runtime.state()['tracks'][0]['state'], 'horizontal')
+        self.assertEqual(self.runtime.store.review_queue()[0]['trackId'], 'close-up')
+        self.assertEqual(len(self.runtime.store.pending()), 1)
 
     def test_empty_and_upright_frames_do_not_flag(self):
         self.runtime.frame([], 1, [640, 360])

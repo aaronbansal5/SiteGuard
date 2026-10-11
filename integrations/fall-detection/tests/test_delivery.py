@@ -18,6 +18,24 @@ class DeliveryTests(unittest.TestCase):
         self.event = self.store.record({'trackId':'1','durationSeconds':2.1,'evidence':{'heightWidthRatio':0.5}}, 'camera', str(uuid.uuid4()), 1, 'cam', 'yard')
         self.delivery = Delivery(self.store, 'http://127.0.0.1:3001', 'a'*32)
     def tearDown(self): self.store.db.close()
+    def test_legacy_open_report_gets_delivery_receipt_on_reopen(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'legacy.sqlite'
+            store = Store(path)
+            event = store.record({'trackId':'legacy','durationSeconds':0,'evidence':{'heightWidthRatio':0.5}}, 'camera', str(uuid.uuid4()), 1, 'cam', 'yard')
+            store.db.execute('DELETE FROM delivery')
+            store.db.commit()
+            store.db.close()
+            reopened = Store(path)
+            self.assertEqual([item['eventId'] for item in reopened.pending()], [event['eventId']])
+            reopened.delivered(event['eventId'])
+            reopened.db.close()
+            again = Store(path)
+            self.assertEqual(again.pending(), [])
+            again.db.close()
+
     def test_delivery_and_explicit_database_resolution(self):
         class Opener:
             def open(inner, request, timeout):
