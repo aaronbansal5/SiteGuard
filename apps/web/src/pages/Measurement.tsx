@@ -20,6 +20,10 @@ import {
 } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
 import { VitalChart } from "../components/VitalChart";
+import {
+  BROWSER_CAMERA_FPS,
+  BROWSER_CAMERA_FRAME_INTERVAL_MS,
+} from "../lib/camera";
 export function Measurement() {
   const { id } = useParams(),
     [search] = useSearchParams(),
@@ -91,13 +95,25 @@ export function Measurement() {
             cache: "no-store",
           },
         );
-        if (!response.ok)
-          throw new Error(`Camera frame rejected (${response.status}).`);
+        if (!response.ok) {
+          let detail = `Camera frame rejected (${response.status}).`;
+          try {
+            const body = (await response.json()) as { message?: string };
+            if (body.message) detail = body.message;
+          } catch {
+            // Keep the status-based fallback when the server did not return JSON.
+          }
+          throw new Error(detail);
+        }
       } catch (error) {
         fail(error);
       } finally {
         busy = false;
-        if (!stopped) timer = setTimeout(() => void capture(), 33);
+        if (!stopped)
+          timer = setTimeout(
+            () => void capture(),
+            BROWSER_CAMERA_FRAME_INTERVAL_MS,
+          );
       }
     };
     const start = async () => {
@@ -110,7 +126,10 @@ export function Measurement() {
             facingMode: "user",
             width: { ideal: 960 },
             height: { ideal: 720 },
-            frameRate: { ideal: 30 },
+            frameRate: {
+              ideal: BROWSER_CAMERA_FPS,
+              max: BROWSER_CAMERA_FPS,
+            },
           },
         });
         if (stopped) return;

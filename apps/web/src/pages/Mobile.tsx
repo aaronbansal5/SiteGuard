@@ -52,6 +52,10 @@ import {
 import { ErrorNotice, HelpActions, Loading } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
 import { PersonalInsightsPanel } from "../components/PersonalInsights";
+import {
+  BROWSER_CAMERA_FPS,
+  BROWSER_CAMERA_FRAME_INTERVAL_MS,
+} from "../lib/camera";
 
 type Health = {
   checkInTestMode?: boolean;
@@ -674,7 +678,10 @@ function MobileConsent({
                 facingMode: "user",
                 width: { ideal: 960 },
                 height: { ideal: 720 },
-                frameRate: { ideal: 30 },
+                frameRate: {
+                  ideal: BROWSER_CAMERA_FPS,
+                  max: BROWSER_CAMERA_FPS,
+                },
               },
             });
           }
@@ -917,11 +924,17 @@ function MobileMeasuring({
               cache: "no-store",
             },
           )
-            .then((response) => {
-              if (!response.ok)
-                throw new Error(
-                  `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`,
-                );
+            .then(async (response) => {
+              if (!response.ok) {
+                let detail = `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`;
+                try {
+                  const body = (await response.json()) as { message?: string };
+                  if (body.message) detail = body.message;
+                } catch {
+                  // Keep the status-based fallback when the server did not return JSON.
+                }
+                throw new Error(detail);
+              }
             })
             .catch(failCapture)
             .finally(() => {
@@ -931,7 +944,11 @@ function MobileMeasuring({
         if (!stopped)
           timer = setTimeout(
             () => void capture(),
-            Math.max(0, 33 - (performance.now() - captureStartedAt)),
+            Math.max(
+              0,
+              BROWSER_CAMERA_FRAME_INTERVAL_MS -
+                (performance.now() - captureStartedAt),
+            ),
           );
       } catch (error) {
         encoding = false;
@@ -950,7 +967,10 @@ function MobileMeasuring({
                 facingMode: "user",
                 width: { ideal: 960 },
                 height: { ideal: 720 },
-                frameRate: { ideal: 30 },
+                frameRate: {
+                  ideal: BROWSER_CAMERA_FPS,
+                  max: BROWSER_CAMERA_FPS,
+                },
               },
             });
         if (stopped) {
