@@ -2,7 +2,11 @@ import { test, expect, type Page } from "@playwright/test";
 
 const workerId = "00000000-0000-4000-8000-000000000001";
 const sessionId = "00000000-0000-4000-8000-000000009000";
-async function fixture(page: Page, source: "mock" | "presage" = "presage") {
+async function fixture(
+  page: Page,
+  source: "mock" | "presage" = "presage",
+  presentationSimulation = true,
+) {
   const session = {
     id: sessionId,
     workerId,
@@ -114,7 +118,7 @@ async function fixture(page: Page, source: "mock" | "presage" = "presage") {
         experimental: true,
         disclaimer: "Presentation simulation only",
         syntheticDemo: true,
-        presentationSimulation: true,
+        presentationSimulation,
         modelProvenance: { kind: "synthetic_demo", runtime_ready: false },
         demoModel: { status: "presentation_simulation", score: null },
       };
@@ -224,5 +228,91 @@ test("API restart status leaves the camera screen and opens the summary", async 
   await page.clock.fastForward(6000);
   await expect(page).toHaveURL(new RegExp(`/sessions/${sessionId}$`));
   expect(state.completionCalls).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+for (const width of [1280, 390]) {
+  test(`role-play shuffles without writing records or fabricating readings at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { session, errors } = await fixture(page);
+    session.status = "completed";
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.method() !== "GET" &&
+        !request.url().endsWith("/insights/explain")
+      )
+        writes.push(request.url());
+    });
+    await page.goto(`/sessions/${sessionId}`);
+    const playground = page.locator(".demo-playground");
+    await expect(
+      playground.getByText("Simulated role-play", { exact: true }),
+    ).toBeVisible();
+    await expect(playground.getByRole("heading")).toHaveText(
+      "Take a moment. Request extra rest.",
+    );
+    for (let count = 0; count < 8; count++) {
+      const previous = await playground.getByRole("heading").textContent();
+      await playground
+        .getByRole("button", { name: "Shuffle demo scenario" })
+        .click();
+      await expect(playground.getByRole("heading")).not.toHaveText(previous!);
+    }
+    await playground
+      .getByRole("button", { name: "Recheck", exact: true })
+      .click();
+    await expect(
+      playground.getByRole("link", { name: "Start a fresh camera check-in" }),
+    ).toHaveAttribute("href", "/web-check-in");
+    await playground
+      .getByRole("button", { name: "Support", exact: true })
+      .click();
+    await expect(playground.getByRole("heading")).toHaveText(
+      "Ask someone to check in with you.",
+    );
+    const details = page.locator("details.research-details");
+    await expect(details).not.toHaveAttribute("open");
+    await details.locator("summary").click();
+    await expect(
+      details.getByRole("cell", { name: "Not available", exact: true }),
+    ).toHaveCount(14);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await details.locator("summary").click();
+    await playground.getByRole("button", { name: "Rest", exact: true }).click();
+    await expect(
+      playground.getByRole("button", { name: "Rest", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(playground.getByRole("heading")).toHaveText(
+      "Take a moment. Request extra rest.",
+    );
+    await page.screenshot({
+      path: test.info().outputPath(`role-play-${width}.png`),
+      fullPage: true,
+    });
+  });
+}
+
+test("real research results never acquire random scenario controls", async ({
+  page,
+}) => {
+  const { session, errors } = await fixture(page, "presage", false);
+  session.status = "completed";
+  await page.goto(`/sessions/${sessionId}`);
+  await expect(page.getByText("Model result", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Shuffle demo scenario" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Consider additional rest", { exact: true }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });

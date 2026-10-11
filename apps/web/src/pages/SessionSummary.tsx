@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Activity, Wind, ArrowRight, FileText } from "lucide-react";
+import {
+  ArrowLeft,
+  Activity,
+  Wind,
+  ArrowRight,
+  FileText,
+  Shuffle,
+} from "lucide-react";
 import type {
   Session,
   Summary,
@@ -277,6 +284,94 @@ function isRestSupportResult(value: unknown): value is RestSupportResult {
   );
 }
 
+const DEMO_SCENARIOS = [
+  {
+    label: "Rest",
+    title: "Take a moment. Request extra rest.",
+    story:
+      "A worker finishes a demanding task and wants a little more time before their next assignment.",
+    next: "Demo scenario: a worker chooses to request additional rest. Select Request additional rest to continue the walkthrough.",
+  },
+  {
+    label: "Recheck",
+    title: "Pause and check in again.",
+    story:
+      "The check-in is incomplete. The worker can try again with steadier positioning and better lighting.",
+    next: "In this role-play, try another check-in or choose support based on how you feel. Missing readings are not an all-clear.",
+  },
+  {
+    label: "Support",
+    title: "Ask someone to check in with you.",
+    story:
+      "A worker wants a human follow-up. Help does not depend on camera quality or a model result.",
+    next: "Select Request assistance to demonstrate the human follow-up flow. Requests are sent only when you choose to submit them.",
+  },
+] as const;
+
+function PresentationPlayground({ sessionId }: { sessionId: string }) {
+  const [selected, setSelected] = useState(0);
+  const scenario = DEMO_SCENARIOS[selected];
+  const shuffle = () => {
+    const random = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+    setSelected(
+      (current) =>
+        (current + 1 + Math.floor(random * 2)) % DEMO_SCENARIOS.length,
+    );
+  };
+  return (
+    <div className="demo-playground">
+      <div className="demo-playground-toolbar">
+        <span className="badge amber">Simulated role-play</span>
+        <button
+          className="button secondary small-button"
+          type="button"
+          onClick={shuffle}
+        >
+          <Shuffle size={16} aria-hidden="true" />
+          Shuffle demo scenario
+        </button>
+      </div>
+      <div
+        className="demo-scenario-picker"
+        role="group"
+        aria-label="Choose demo scenario"
+      >
+        {DEMO_SCENARIOS.map((item, index) => (
+          <button
+            type="button"
+            key={item.label}
+            aria-pressed={selected === index}
+            onClick={() => setSelected(index)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div
+        className="demo-scenario-story"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <p className="fine-print">Presentation result</p>
+        <h3>{scenario.title}</h3>
+        <p>{scenario.story}</p>
+        <p className="demo-scenario-next">{scenario.next}</p>
+      </div>
+      {selected === 1 && (
+        <Link className="button secondary" to="/web-check-in">
+          Start a fresh camera check-in
+        </Link>
+      )}
+      <HelpActions sessionId={sessionId} />
+      <p className="fine-print demo-provenance">
+        Fictional scenario, not a camera finding or model prediction. Shuffling
+        changes only this preview, not measurements, confidence, or saved
+        records. Submitting a request uses the real app workflow.
+      </p>
+    </div>
+  );
+}
+
 export function ResearchRestSupportCard({
   sessionId,
   source,
@@ -328,11 +423,18 @@ export function ResearchRestSupportCard({
         <div>
           <h2 id="research-rest-support-title">Suggested next step</h2>
           <p>
-            Experimental local research model — not medical advice or work
-            clearance.
+            {result.status === "available" &&
+            result.support.presentationSimulation
+              ? "Explore the worker flow with a fictional scenario."
+              : "Experimental local research model — not medical advice or work clearance."}
           </p>
         </div>
-        <span className="badge amber">Experimental</span>
+        <span className="badge amber">
+          {result.status === "available" &&
+          result.support.presentationSimulation
+            ? "Demo"
+            : "Experimental"}
+        </span>
       </div>
       {source === "mock" && (
         <p className="fine-print">Uses synthetic demo measurements.</p>
@@ -360,92 +462,80 @@ export function ResearchRestSupportCard({
         </>
       ) : (
         <>
-          {result.support.presentationSimulation && (
-            <div className="notice demo">
-              <p>
-                Presentation simulation: this is a planned demo scenario because
-                the camera did not provide enough usable evidence. It is not a
-                sensor reading or model prediction.
-              </p>
-            </div>
+          {result.support.presentationSimulation ? (
+            <PresentationPlayground sessionId={sessionId} />
+          ) : (
+            <>
+              <div className="two-columns">
+                <div className="comparison">
+                  <span>Model result</span>
+                  <strong>{REST_SUPPORT_SIGNALS[result.support.signal]}</strong>
+                  <small>
+                    This signal does not determine your rest needs or readiness.
+                  </small>
+                </div>
+                <div className="comparison">
+                  <span>Model confidence</span>
+                  <strong>Not available</strong>
+                  <small>
+                    Validated confidence is unavailable without labeled data.
+                  </small>
+                </div>
+              </div>
+              <div className="research-next-step" role="status">
+                <h3>What you can do</h3>
+                <p>{REST_SUPPORT_NEXT_STEP[result.support.signal]}</p>
+              </div>
+              <HelpActions sessionId={sessionId} />
+            </>
           )}
-          <div className="two-columns">
-            <div className="comparison">
-              <span>
-                {result.support.presentationSimulation
-                  ? "Presentation result"
-                  : "Model result"}
-              </span>
-              <strong>{REST_SUPPORT_SIGNALS[result.support.signal]}</strong>
-              <small>
-                {result.support.presentationSimulation
-                  ? "A local demo walkthrough, not a measurement result."
-                  : "This signal does not determine your rest needs or readiness."}
-              </small>
-            </div>
-            <div className="comparison">
-              <span>Model confidence</span>
-              <strong>Not available</strong>
-              <small>
-                Validated confidence is unavailable without labeled data.
-              </small>
-            </div>
-          </div>
-          <div className="research-next-step" role="status">
-            <h3>What you can do</h3>
-            <p>
-              {result.support.presentationSimulation
-                ? "Demo scenario: a worker chooses to request additional rest. Select Request additional rest to continue the walkthrough."
-                : REST_SUPPORT_NEXT_STEP[result.support.signal]}
-            </p>
-          </div>
-          <HelpActions sessionId={sessionId} />
-          <p className="fine-print">
-            {result.support.presentationSimulation
-              ? "Demo mode is showing a labelled walkthrough because the camera evidence was incomplete."
-              : result.support.syntheticDemo
+          {!result.support.presentationSimulation && (
+            <p className="fine-print">
+              {result.support.syntheticDemo
                 ? "Local synthetic-model theory demo — trained on fabricated research records; this output is unvalidated."
                 : "Descriptive research rule — no trained-model result is available for this check-in."}
-          </p>
-          <div className="limitations">
-            <h3>Uncertainty: {result.support.uncertainty.level}</h3>
-            {result.support.uncertainty.reasons.length ? (
-              result.support.uncertainty.reasons.map((text, index) => (
-                <p key={index}>{text}</p>
-              ))
-            ) : (
-              <p>Uncertainty was not supplied by the model.</p>
-            )}
-          </div>
-          <div className="limitations">
-            <h3>Evidence</h3>
-            <p>
-              Source: {result.support.evidence.source ?? "Unavailable"} ·
-              Duration:{" "}
-              {result.support.evidence.durationSeconds === null
-                ? "Unavailable"
-                : `${number(result.support.evidence.durationSeconds)} seconds`}
             </p>
-            <RestSupportEvidence evidence={result.support.evidence} />
-            <h3>Evidence issues</h3>
-            {result.support.evidence.issues.length ? (
-              result.support.evidence.issues.map((text, index) => (
-                <p key={index}>{text}</p>
-              ))
-            ) : (
-              <p>No evidence issues reported.</p>
-            )}
-          </div>
-          <p className="fine-print">
-            Model version: {result.support.modelVersion}
-          </p>
-          <p className="fine-print">{result.support.disclaimer}</p>
+          )}
+          <details className="flow-details research-details">
+            <summary>Research details and actual camera evidence</summary>
+            <div className="limitations">
+              <h3>Uncertainty: {result.support.uncertainty.level}</h3>
+              {result.support.uncertainty.reasons.length ? (
+                result.support.uncertainty.reasons.map((text, index) => (
+                  <p key={index}>{text}</p>
+                ))
+              ) : (
+                <p>Uncertainty was not supplied by the model.</p>
+              )}
+            </div>
+            <div className="limitations">
+              <h3>Evidence</h3>
+              <p>
+                Source: {result.support.evidence.source ?? "Unavailable"} ·
+                Duration:{" "}
+                {result.support.evidence.durationSeconds === null
+                  ? "Unavailable"
+                  : `${number(result.support.evidence.durationSeconds)} seconds`}
+              </p>
+              <RestSupportEvidence evidence={result.support.evidence} />
+              <h3>Evidence issues</h3>
+              {result.support.evidence.issues.length ? (
+                result.support.evidence.issues.map((text, index) => (
+                  <p key={index}>{text}</p>
+                ))
+              ) : (
+                <p>No evidence issues reported.</p>
+              )}
+            </div>
+            <p className="fine-print">
+              Model version: {result.support.modelVersion}
+            </p>
+            <p className="fine-print">{result.support.disclaimer}</p>
+          </details>
         </>
       )}
       <p className="fine-print">
-        You choose whether to request additional rest. Use “Request additional
-        rest” below at any time; this estimate does not change your protected
-        breaks.
+        You choose what support to request. Protected breaks stay unchanged.
       </p>
     </section>
   );

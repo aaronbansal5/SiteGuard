@@ -33,6 +33,20 @@ override shows a labelled presentation scenario with no model score. The
 scenario is a walkthrough, not a model prediction. Actual readings are never
 invented or filled in.
 
+## Role-play different outcomes
+
+On a labelled presentation result, select **Shuffle demo scenario** to choose a
+different fictional walkthrough. Or select **Rest**, **Recheck**, or **Support**
+directly to rehearse a specific flow. The same controls work on the phone web
+summary. Reloading returns to the initial Rest scenario.
+
+Shuffling only updates the local preview. It never fabricates vitals, changes
+model predictions or confidence, writes session records, or sends requests.
+**Request additional rest** and **Request assistance** still use the real app
+workflow when submitted. Research details and actual camera evidence are
+expandable below the role-play card. Random scenario controls never appear on
+non-presentation research results.
+
 If the API restarts during measurement, the old session is completed as
 interrupted. The web and phone screens check session status and open its summary;
 start a fresh camera check-in to record again. If completion fails, its error is
