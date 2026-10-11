@@ -499,7 +499,10 @@ export class PresageBridge {
           limitInputPixels: MAX_JPEG_DIMENSION * MAX_JPEG_DIMENSION,
           failOn: "error",
         })
-          .ensureAlpha()
+          // The vendor's custom-input quickstart specifies compact RGB frames.
+          // Keeping browser frames RGB avoids an unnecessary alpha channel and
+          // reduces the native SDK's per-frame copy by 25%.
+          .removeAlpha()
           .raw()
           .toBuffer({ resolveWithObject: true });
         if (
@@ -507,7 +510,7 @@ export class PresageBridge {
           decoded.info.height < 240 ||
           decoded.info.width > MAX_JPEG_DIMENSION ||
           decoded.info.height > MAX_JPEG_DIMENSION ||
-          decoded.info.channels !== 4
+          decoded.info.channels !== 3
         )
           throw new Error("Unexpected frame dimensions");
         frame = decoded.data;
@@ -527,7 +530,14 @@ export class PresageBridge {
           "INVALID_FRAME",
           "Expected 480x360 RGBA frame",
         );
-      frame = Buffer.concat(chunks);
+      // The legacy raw endpoint is RGBA. Convert it once at the boundary so
+      // every custom-input frame given to Presage has the documented RGB shape.
+      frame = await sharp(Buffer.concat(chunks), {
+        raw: { width: FRAME_WIDTH, height: FRAME_HEIGHT, channels: 4 },
+      })
+        .removeAlpha()
+        .raw()
+        .toBuffer();
     }
     // Browser uploads can complete out of order when a frame is encoded while
     // another request is still in flight. SmartSpectra requires strictly

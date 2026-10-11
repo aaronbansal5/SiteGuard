@@ -15,6 +15,7 @@ export function CheckIn() {
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
     [source, setSource] = useState<"mock" | "presage">("mock"),
+    [cameraInput, setCameraInput] = useState<"browser" | "native">("browser"),
     [sourceSelected, setSourceSelected] = useState(false);
   const health = useResource<{
     checkInTestMode?: boolean;
@@ -126,7 +127,7 @@ export function CheckIn() {
                 ...(breakId ? { breakId } : {}),
                 onDemand,
                 source,
-                ...(source === "presage" && browserCamera
+                ...(source === "presage" && cameraInput === "browser"
                   ? { input: "custom" as const }
                   : {}),
                 consentVersion: localTest ? "local-test" : "v1",
@@ -134,7 +135,7 @@ export function CheckIn() {
                 context: { workload: null, temperatureC: null },
               });
               navigate(
-                `/sessions/${result.session.id}/measure${source === "presage" && browserCamera ? "?camera=browser" : ""}`,
+                `/sessions/${result.session.id}/measure${source === "presage" && cameraInput === "browser" ? "?camera=browser" : ""}`,
               );
             });
           }}
@@ -176,6 +177,40 @@ export function CheckIn() {
               ? ", including camera warm-up before readings count."
               : "."}
           </p>
+          {source === "presage" && browserCamera && (
+            <fieldset className="camera-input-choice">
+              <legend>Camera connection</legend>
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="camera-input"
+                  checked={cameraInput === "browser"}
+                  onChange={() => setCameraInput("browser")}
+                />
+                <span>
+                  <strong>This browser</strong>
+                  <small>
+                    Live preview from Chrome, processed locally by Presage.
+                  </small>
+                </span>
+              </label>
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="camera-input"
+                  checked={cameraInput === "native"}
+                  onChange={() => setCameraInput("native")}
+                />
+                <span>
+                  <strong>This Mac via Presage</strong>
+                  <small>
+                    Use the local Presage camera pipeline if browser capture is
+                    interrupted.
+                  </small>
+                </span>
+              </label>
+            </fieldset>
+          )}
           <p className="fine-print">
             No workload or temperature questions are required. The before/after
             reading windows and your eligible history are handled automatically.

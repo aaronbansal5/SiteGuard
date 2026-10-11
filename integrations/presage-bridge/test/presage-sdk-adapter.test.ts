@@ -23,6 +23,7 @@ function fakeModule(
     cameras?: number;
     failStart?: boolean;
     noRunningEvent?: boolean;
+    frameError?: { code: number; message: string };
     validationCodes?: SmartSpectraModule["ValidationCode"];
   } = {},
 ) {
@@ -61,6 +62,11 @@ function fakeModule(
       _timestampUs: number,
     ) {
       calls.push(`sendFrame:${width}:${height}:${stride}:${format}`);
+      if (opts.frameError)
+        throw Object.assign(
+          new Error(opts.frameError.message),
+          opts.frameError,
+        );
       return true;
     }
     start() {
@@ -90,9 +96,11 @@ function fakeModule(
       kOk: 0,
       kAuthenticationFailed: 2,
       kInputUnavailable: 7,
+      kTimestampGap: 11,
     },
     CameraSelection: { default: { kind: "default" } },
-    PixelFormat: { kRGBA: 2 },
+    FrameTransform: { kNone: 4 },
+    PixelFormat: { kRGB: 0 },
     decodeMetrics: (buf: Buffer) => JSON.parse(buf.toString()),
   };
   return { mod, calls, handlers, ctorOptions: () => ctorOptions };
@@ -353,7 +361,7 @@ describe("PresageSdkAdapter (fake SDK)", () => {
     }
   });
 
-  test("custom input accepts browser RGBA frames without opening a host camera", async () => {
+  test("custom input accepts browser RGB frames without opening a host camera", async () => {
     const f = fakeModule({ cameras: 0 });
     const a = new PresageSdkAdapter(clock, env, async () => f.mod);
     expect((await a.probe("custom")).ready).toBe(true);
@@ -362,14 +370,33 @@ describe("PresageSdkAdapter (fake SDK)", () => {
       "custom",
     );
     cap.sendFrame?.(
-      Buffer.alloc(480 * 360 * 4),
+      Buffer.alloc(480 * 360 * 3),
       480,
       360,
       1_700_000_000_000_000,
     );
     expect(f.calls).toContain("useCustomInput");
     expect(f.calls).not.toContain("useCamera");
-    expect(f.calls).toContain("sendFrame:480:360:1920:2");
+    expect(f.calls).toContain("sendFrame:480:360:1440:0");
+    await cap.close();
+  });
+
+  test("custom input includes the vendor error code when a frame is rejected", async () => {
+    const f = fakeModule({
+      frameError: { code: 11, message: "timestamps are too far apart" },
+    });
+    const cap = await new PresageSdkAdapter(clock, env, async () => f.mod).open(
+      { onSample() {}, onStatus() {}, onError() {} },
+      "custom",
+    );
+    expect(() =>
+      cap.sendFrame?.(
+        Buffer.alloc(480 * 360 * 3),
+        480,
+        360,
+        1_700_000_000_000_000,
+      ),
+    ).toThrow(/kTimestampGap/);
     await cap.close();
   });
 });

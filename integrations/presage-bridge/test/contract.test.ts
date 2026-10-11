@@ -73,7 +73,7 @@ describe("transport and auth", () => {
         return {
           async close() {},
           sendFrame(frame, width, height) {
-            expect(frame.length).toBe(width * height * 4);
+            expect(frame.length).toBe(width * height * 3);
             delivered.push([width, height, frame.length]);
           },
         };

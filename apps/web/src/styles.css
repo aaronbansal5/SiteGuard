@@ -922,6 +922,45 @@ input[type="checkbox"] {
   border-top: 1px solid #e9eedf;
   margin-bottom: 23px;
 }
+.camera-input-choice {
+  margin: 18px 0;
+  padding: 0;
+  border: 0;
+}
+.camera-input-choice legend {
+  margin-bottom: 8px;
+  color: #4b6046;
+  font-size: 11px;
+  font-weight: 600;
+}
+.radio-option {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 11px 12px;
+  border: 1px solid #dce4d5;
+  border-radius: 10px;
+  background: #fcfdf9;
+  cursor: pointer;
+}
+.radio-option input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 2px 0 0;
+  accent-color: #467455;
+}
+.radio-option span {
+  display: grid;
+  gap: 3px;
+}
+.radio-option small {
+  color: #60715a;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+}
 .fine-print {
   color: #505f42;
   font-size: 9px;
