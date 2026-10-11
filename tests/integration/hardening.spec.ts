@@ -4,11 +4,13 @@ test.beforeEach(async ({ page }) => {
   await page.request.post("/api/demo/login", { data: { role: "supervisor" } });
   const reset = await page.request.post("/api/demo/reset", { data: {} });
   expect(reset.ok()).toBe(true);
+  await page.request.post("/api/auth/logout", { data: {} });
 });
 test("stale coverage proposal cannot overwrite a newer worker need", async ({
   page,
   browser,
 }) => {
+  await page.request.post("/api/demo/login", { data: { role: "supervisor" } });
   await page.goto("/supervisor");
   await page.getByRole("button", { name: "Preview coverage proposal" }).click();
   await expect(

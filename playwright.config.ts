@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/integration",
+  testIgnore: "**/*.test.ts",
   timeout: 90000,
   fullyParallel: false,
   workers: 1,
@@ -20,9 +21,11 @@ export default defineConfig({
     env: {
       SQLITE_PATH: ".data/e2e.sqlite",
       DATABASE_URL: "",
+      SITEGUARD_ALLOW_SQLITE: "true",
       COOKIE_SECRET: "e2e-cookie-secret-at-least-thirty-two-characters",
       MEASUREMENT_TOKEN: "e2e-internal-token",
       DEMO_MODE: "true",
+      CHECK_IN_TEST_MODE: "false",
       HOSTED: "false",
       GEMINI_API_KEY: "",
       GEMINI_MODEL: "",

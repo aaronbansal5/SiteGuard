@@ -83,7 +83,7 @@ class ServerTests(unittest.TestCase):
     def fall(self, track, start):
         for index in range(5):
             self.runtime.frame([Observation(track, (200, 60, 260, 200))], start + index / 10, [640, 360])
-        for index in range(21):
+        for index in range(23):
             self.runtime.frame([Observation(track, (160, 150, 300, 200))], start + 0.5 + index / 10, [640, 360])
 
     def test_unresolved_incident_suppresses_repeats_in_same_region(self):
@@ -96,6 +96,59 @@ class ServerTests(unittest.TestCase):
         self.runtime.store.action(incidents[0]['id'], 'false_alarm', 'Person resting on bench')
         self.fall('3', 20)
         self.assertEqual(len(self.runtime.store.list('incidents')), 2)
+
+    def wide_frames(self, observations, start=1):
+        for index in range(21):
+            self.runtime.frame(observations, start + index / 10, [640, 360])
+
+    def test_width_greater_than_height_requires_over_two_seconds(self):
+        wide = Observation('wide', (100, 100, 200, 190))
+        square = Observation('square', (350, 100, 440, 190))
+        self.wide_frames([wide, square])
+        self.assertEqual(self.runtime.store.list('incidents'), [])  # exactly 2 seconds
+        self.runtime.frame([wide, square], 3.1, [640, 360])
+        incidents = self.runtime.store.list('incidents')
+        self.assertEqual([item['trackId'] for item in incidents], ['wide'])
+        self.assertAlmostEqual(incidents[0]['durationSeconds'], 2.1)
+        self.runtime.frame([wide], 3.2, [640, 360])
+        self.assertEqual(len(self.runtime.store.list('incidents')), 1)
+
+    def test_interrupted_down_pose_restarts_two_second_timer(self):
+        wide = Observation('wide', (100, 100, 200, 190))
+        self.wide_frames([wide])
+        self.runtime.frame([], 3.1, [640, 360])
+        self.wide_frames([wide], start=3.2)
+        self.assertEqual(self.runtime.store.list('incidents'), [])
+        self.runtime.frame([wide], 5.3, [640, 360])
+        self.assertEqual(len(self.runtime.store.list('incidents')), 1)
+
+    def test_two_separate_wide_people_both_alert(self):
+        people = [Observation('one', (100, 100, 200, 190)),
+                  Observation('two', (400, 100, 500, 190))]
+        self.wide_frames(people)
+        self.runtime.frame(people, 3.1, [640, 360])
+        self.assertEqual({i['trackId'] for i in self.runtime.store.list('incidents')}, {'one', 'two'})
+
+    def test_report_uses_alert_frame_wall_clock(self):
+        from unittest.mock import patch
+        wide = Observation('wide', (100, 100, 200, 190))
+        self.wide_frames([wide])
+        instant = '2026-10-10T21:03:04.567Z'
+        with patch('fall_detection.runtime.utc_now', return_value=instant):
+            self.runtime.frame([wide], 3.1, [640, 360])
+        self.assertEqual(self.runtime.store.list('incidents')[0]['observedAt'], instant)
+
+    def test_recorded_events_wait_in_outbox_until_delivered(self):
+        wide = Observation('wide', (100, 100, 200, 190))
+        self.wide_frames([wide])
+        self.runtime.frame([wide], 3.1, [640, 360])
+        store = self.runtime.store
+        pending = store.pending()
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(self.runtime.state()['delivery'],
+                         {'configured': False, 'pending': 1, 'error': None})
+        store.delivered(pending[0]['eventId'])
+        self.assertEqual(store.pending(), [])
 
     def test_camera_never_substitutes_synthetic(self):
         self.runtime.source = 'camera'

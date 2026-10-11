@@ -25,7 +25,7 @@ npm run start
 npm run smoke
 ```
 
-Open http://127.0.0.1:3001 . SQLite persists in `.data/siteguard.sqlite`. Stop the API before CLI reset; reset refuses real data and active sessions. The supervisor's local reset control recreates today's fictional schedule if the demo break has expired.
+Put the Tiger Cloud `DATABASE_URL` in the untracked root `.env`, run `npm run db:migrate:postgres` and `npm run db:enable-timescale`, then open http://127.0.0.1:3001. Normal app startup fails closed if Tiger is not configured; SQLite is reserved for isolated automated tests and rehearsals. Stop the API before CLI reset; reset refuses real data and active sessions. The supervisor's local reset control recreates today's fictional schedule if the demo break has expired.
 
 ## Verify
 
@@ -44,7 +44,7 @@ Playwright starts isolated dev servers and `.data/e2e.sqlite`; keep ports 3001/5
 
 Copy `.env.example` to `.env` and configure only the required adapters. Secrets stay server-side.
 
-- PostgreSQL/Tiger Data: `DATABASE_URL`; run `npm run db:migrate:postgres`. Explicit Timescale enable command checks extension presence. No automatic fallback on connection failure.
+- PostgreSQL/Tiger Data: `DATABASE_URL`; run `npm run db:migrate:postgres`. Explicit Timescale enable command checks extension presence. Completed-session reports use TimescaleDB `time_bucket` for ten-second observation evidence when `vital_readings` is a verified hypertable. No automatic fallback on connection failure.
 - Gemini: `GEMINI_API_KEY` and an account-verified `GEMINI_MODEL`. Selects server-approved factual sentences, with deterministic fallback. No schedule/medical decisions.
 - Presage: separately supplied native bridge plus `PRESAGE_BRIDGE_TOKEN`. Local app only. Source remains fixed within each session.
 

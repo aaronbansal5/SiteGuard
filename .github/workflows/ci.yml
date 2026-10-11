@@ -64,6 +64,9 @@ jobs:
             -v /srv/siteguard-data:/data \
             -e COOKIE_SECRET="ci-only-cookie-secret-$(openssl rand -hex 24)" \
             -e MEASUREMENT_TOKEN="ci-only-token-$(openssl rand -hex 16)" \
+            -e SITEGUARD_ALLOW_SQLITE=true \
+            -e SQLITE_PATH=/data/siteguard.sqlite \
+            -e DEMO_MODE=true \
             siteguard:ci
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:3001/api/health && break
@@ -162,6 +165,7 @@ jobs:
           npm run verify:tiger > verify.log 2>&1 || true
           cat verify.log
           grep -q "vital_readings hypertable: yes" verify.log
+          grep -q "10-second time buckets:" verify.log
           grep -q "self_reports" verify.log
           grep -Eq "TLS: +NO" verify.log
       - run: npm run test:postgres

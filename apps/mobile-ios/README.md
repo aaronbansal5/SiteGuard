@@ -4,22 +4,6 @@ A native scaffold for voluntary recurring check-ins measured on the iPhone with 
 
 > **Status:** A prior build ran live on Hitayu's iPhone and showed 38 readings in 51 seconds (30 valid pulse, 1 valid breathing); it uploaded nothing. A newer build with optional local HTTPS upload and worker-name selection was signed, installed and launched. Pairing and a real phone-to-desktop upload have not yet been verified. No Presage key is embedded in the installed build.
 
-## Easiest complete flow: use Safari
-
-For check-in, summary and rest requests in one place, open the demo host's **trusted HTTPS SiteGuard link ending in `/mobile`** on your iPhone. The Mac's `127.0.0.1` address does not work from the phone. Use the host's current network address; both devices must be on the same network. Browser camera measurements require a running Presage bridge with browser-camera support.
-
-1. Choose your worker. Tap **Start check-in** during the worker's protected break. Pairing is only for the separate native app; Safari does not need it.
-2. Review consent and leave summary sharing off unless you want it. No workload or temperature answers are needed. Camera is selected when available; synthetic demo mode is explicitly labeled and uses no camera.
-3. Tap **Begin check-in**, then **Allow** camera access when Safari asks. No microphone access is requested. If access was denied, allow Camera in this site's Safari settings and try again.
-4. Keep your face in the live preview, sit still and stay quiet. Follow the elapsed time and progress bar; pulse and breathing appear as valid readings arrive. Tap **Finish check-in** whenever you want.
-5. Review the summary, then choose **Request additional rest** if you want it. You choose the requested minutes and submit to the supervisor. Rest and assistance requests are also available without a measurement.
-
-No camera images or video are saved. In the Safari flow, frames pass over HTTPS through server and bridge memory for transient Presage processing; normalized pulse and breathing observations are retained. This differs from the native app's on-device processing described below.
-
-Reminder settings and native pairing are optional expandable sections below the main check-in action. A reminder never opens the camera or bypasses consent. **Full summary** opens the same worker summary used on web.
-
-The native app currently measures and optionally uploads observations, but does not send rest requests itself. Use Safari `/mobile` for the complete flow or the native support link to request rest on the web. A native installation is optional for the browser demo.
-
 ## What it does
 
 - A reminder countdown every **60 s** by default (demo interval, configurable). The reminder only prompts and never starts the camera. After the worker opts in, a local alert is scheduled for the next due time; permission is restored on relaunch and a banner can appear while the app is foregrounded.
@@ -55,11 +39,11 @@ Requirements: a recent Xcode with the iOS 17+ SDK (SmartSpectra "Requires iOS 17
 
 1. **Get the code.**
    ```sh
-   cd /Users/mohitunecha/Coding/SiteGuard
+   git fetch && git checkout feature/mobile-app
    cd apps/mobile-ios
    ```
 2. **Choose credentials. Never put a key in source.**
-   - _One personal check-in without embedding the key:_ leave `Config/Secrets.xcconfig` absent. The consent screen offers a secure Presage API key field. Paste the key there; it is held only in app memory for that check-in, cleared when measurement stops, and never stored in the project or app bundle. You must enter it again for the next check-in.
+- _Personal check-ins without embedding the key:_ leave `Config/Secrets.xcconfig` absent. The consent screen offers a secure Presage API key field. Choose **Remember securely on this iPhone** to save it in the device-only Keychain for later check-ins, or switch that off to use it for this check-in only. You can change or forget the saved key from the consent screen. The key is never stored in the project, app bundle, or SiteGuard API.
    - _Development on your own phone (fastest):_
      ```sh
      cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig   # gitignored
@@ -82,7 +66,7 @@ Requirements: a recent Xcode with the iOS 17+ SDK (SmartSpectra "Requires iOS 17
    A local command-line build can also use Xcode automatic provisioning without saving a personal team ID in the project: `xcodebuild -project SiteGuardCheckIn.xcodeproj -scheme SiteGuardCheckIn -destination 'platform=iOS,id=YOUR_DEVICE_ID' -allowProvisioningUpdates DEVELOPMENT_TEAM=YOUR_TEAM_ID CODE_SIGN_STYLE=Automatic build`. On first install, the phone may require you to trust that developer in Settings → General → VPN & Device Management.
 5. **Run tests** (Product → Test, or `xcodebuild test -scheme SiteGuardCheckIn -destination 'platform=iOS Simulator,name=iPhone 16'`). The unit tests need no camera. `ReadingMapperTests` reads `Fixtures/mapped-readings.json` through `#filePath`, so run them from this checkout.
 6. **Run on the iPhone.** Connect it, select it as the destination, and press Run. Trust the developer certificate on the phone if asked (Settings → General → VPN & Device Management). Allow camera access at the first check-in.
-7. **Demo.** On the Mac, open `http://127.0.0.1:3001/mobile`, choose a worker, expand **Using the native iPhone app? Pair it here**, and tap **Get one-time pairing code**. Code issuance is loopback-only; the phone exchange and uploads still require HTTPS. In the native app enter the Mac's current trusted HTTPS origin, tap **Load worker names**, pick the **same worker name**, and enter the code under **Desktop connection**. Pairing refuses a code for a different worker. The iPhone must fully trust the local CA; bypassing a Safari warning is not enough for URLSession. Start a new check-in during that worker's protected break, accept consent, and separately enable **Upload** and (only if desired) **Allow my manager**. Finish after about 90 s. The result screen reports upload success or a retryable error. Open Safari `/mobile` for rest requests, or the worker history for the uploaded summary. On the Mac, enter the supervisor demo and open **Consented check-ins → View detailed readings**. The previous 38-reading check-in cannot be uploaded retroactively.
+7. **Demo.** On the Mac, open `http://127.0.0.1:3001/mobile`, choose a worker and tap **Get one-time pairing code** at the top of the worker page. Code issuance is loopback-only; the phone exchange and uploads still require HTTPS. In the native app enter the Mac's trusted HTTPS origin (currently `https://10.0.0.35:5173`), tap **Load worker names**, pick the **same worker name**, and enter the code under **Desktop connection**. Pairing refuses a code for a different worker. The iPhone must fully trust the local CA; bypassing a Safari warning is not enough for URLSession. The phone remembers the HTTPS origin and pairing in its device-only Keychain. The server keeps only a token hash for 30 days, surviving restarts; a demo reset or expiration requires a new code. Start a new check-in during that worker's protected break, accept consent, and separately enable **Upload** and (only if desired) **Allow my manager**. Finish after about 90 s. The result screen reports upload success or a retryable error. On the Mac, enter the supervisor demo and open **Consented check-ins → View detailed readings**. The previous 38-reading check-in cannot be uploaded retroactively.
 
 ### Settings
 

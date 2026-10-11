@@ -8,62 +8,130 @@ struct ConsentView: View {
     @State private var choices = ConsentChoices()
     @State private var starting = false
     @State private var enteredPresageKey = ""
+    @State private var rememberPresageKey = true
+    @State private var replaceSavedKey = false
+
+    private var needsKeyEntry: Bool {
+        !model.configuration.hasPresageCredentials && (!model.hasSavedPresageKey || replaceSavedKey)
+    }
+
+    private var canBegin: Bool {
+        consented && !starting &&
+        (!needsKeyEntry || !enteredPresageKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Before you begin").font(.title2.bold())
-            VStack(alignment: .leading, spacing: 10) {
-                Text("**Camera, on this phone only.** Presage measures pulse and breathing from the front camera on the device. Frames are not stored or sent by SiteGuard.")
-                Text("**Only normalized observations.** Timestamped pulse, breathing rate, source and quality.")
-                Text("**No identification, no clearance.** Readings cannot show that you have recovered or are fit to return to work.")
-                Text(model.isPaired
-                     ? "**Upload is optional.** Without the upload switch below, readings stay on this phone and are discarded after this screen."
-                     : "**Not uploaded.** This phone is not paired with SiteGuard, so readings stay on this screen and are discarded afterwards.")
-                Text("**Presage needs the internet** to verify the app; telemetry is turned off.")
+        VStack(alignment: .leading, spacing: 18) {
+            Text("BEFORE YOU BEGIN")
+                .font(.caption.bold()).tracking(2).foregroundStyle(SGStyle.muted)
+            Text("A check-in on your terms.")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(SGStyle.ink)
+            Text("Review what happens before the front camera starts.")
+                .font(.callout).foregroundStyle(SGStyle.muted)
+
+            VStack(alignment: .leading, spacing: 16) {
+                consentPoint("camera", "Camera stays on this phone",
+                             "Presage measures pulse and breathing. SiteGuard does not store or send camera frames.")
+                consentPoint("waveform.path.ecg", "Only observations are recorded",
+                             "Readings include time, value, quality and source. They are not a diagnosis or clearance.")
+                consentPoint("lock.shield", model.isPaired ? "You choose what to share" : "Private to this phone",
+                             model.isPaired
+                             ? "Upload and manager access are separate choices below, off by default."
+                             : "No readings are uploaded unless you pair this phone and opt in.")
+                Text("Presage uses the internet to verify the app; telemetry is off.")
+                    .font(.footnote).foregroundStyle(SGStyle.muted)
             }
-            .font(.callout)
-            Toggle("I understand the limitations and voluntarily agree to record this check-in.", isOn: $consented)
-            if model.isPaired {
-                Toggle("Upload this check-in's pulse and breathing readings to SiteGuard", isOn: $choices.uploadToSiteGuard)
-                if choices.uploadToSiteGuard {
-                    Toggle("Allow my manager to view the detailed readings for this check-in", isOn: $choices.shareWithSupervisor)
+            .sgCard()
+
+            VStack(alignment: .leading, spacing: 15) {
+                Text("Your choices").font(.headline).foregroundStyle(SGStyle.ink)
+                Toggle("I voluntarily agree to this check-in", isOn: $consented)
+                Text("Asked every time. You may stop the measurement whenever you want.")
+                    .font(.footnote).foregroundStyle(SGStyle.muted)
+                if model.isPaired {
+                    Divider()
+                    Toggle("Upload this check-in to SiteGuard", isOn: $choices.uploadToSiteGuard)
+                    if choices.uploadToSiteGuard {
+                        Toggle("Allow my manager to view detailed readings", isOn: $choices.shareWithSupervisor)
+                        Text("Only this check-in. You can later withdraw sharing on the worker website.")
+                            .font(.footnote).foregroundStyle(SGStyle.muted)
+                    }
                 }
             }
+            .sgCard()
+
             if !model.configuration.hasPresageCredentials {
-                SecureField("Presage API key", text: $enteredPresageKey)
-                    .textContentType(.password)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textFieldStyle(.roundedBorder)
-                Text("Personal test only. The key stays in memory for this check-in and is not saved in the app or uploaded to SiteGuard.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 9) {
+                    Label("Presage key", systemImage: "key").font(.headline).foregroundStyle(SGStyle.ink)
+                    if model.hasSavedPresageKey && !replaceSavedKey {
+                        Label("Saved securely on this iPhone. You do not need to enter it again.",
+                              systemImage: "checkmark.circle")
+                            .font(.callout).foregroundStyle(SGStyle.primary)
+                        HStack(spacing: 16) {
+                            Button("Change key") { replaceSavedKey = true }
+                            Button("Forget key") { model.forgetPresageKey() }
+                        }
+                        .font(.callout.weight(.semibold))
+                    } else {
+                        SecureField("Enter API key", text: $enteredPresageKey)
+                            .textContentType(.password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textFieldStyle(.roundedBorder)
+                        Toggle("Remember securely on this iPhone", isOn: $rememberPresageKey)
+                        Text("The key stays in this phone's device-only Keychain if you choose to remember it. It is never uploaded to SiteGuard.")
+                            .font(.footnote).foregroundStyle(SGStyle.muted)
+                        if replaceSavedKey {
+                            Button("Keep existing key") {
+                                enteredPresageKey = ""
+                                replaceSavedKey = false
+                            }
+                            .font(.footnote.weight(.semibold))
+                        }
+                    }
+                }
+                .sgCard()
             }
             if let error = model.errorMessage {
-                Text(error).foregroundStyle(.red).font(.callout)
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(SGStyle.warning).sgCard()
             }
             Button {
                 starting = true
                 let key = enteredPresageKey
                 enteredPresageKey = ""
                 Task {
-                    await model.begin(consented: consented, choices: choices, enteredPresageKey: key)
+                    await model.begin(consented: consented, choices: choices,
+                                      enteredPresageKey: key, rememberPresageKey: rememberPresageKey)
                     starting = false
                 }
             } label: {
-                Text(starting ? "Starting…" : "Begin check-in").frame(maxWidth: .infinity, minHeight: 44)
+                Label(starting ? "Starting…" : "Begin check-in", systemImage: "camera")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
-            .disabled(!consented || starting ||
-                (!model.configuration.hasPresageCredentials &&
-                 enteredPresageKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+            .buttonStyle(SGPrimaryButton())
+            .disabled(!canBegin)
+            .opacity(canBegin ? 1 : 0.5)
             Button {
                 model.cancelConsent()
             } label: {
-                Text("Not now").frame(maxWidth: .infinity, minHeight: 44)
+                Text("Not now")
             }
-            .buttonStyle(.bordered).controlSize(.large)
-            Text("Consent version v1 · asked every check-in · you can stop at any time.")
-                .font(.footnote).foregroundStyle(.secondary)
+            .buttonStyle(SGSecondaryButton())
+        }
+    }
+
+    private func consentPoint(_ icon: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(SGStyle.primary)
+                .frame(width: 32, height: 32)
+                .background(SGStyle.soft, in: RoundedRectangle(cornerRadius: 9))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.callout.weight(.semibold)).foregroundStyle(SGStyle.ink)
+                Text(detail).font(.footnote).foregroundStyle(SGStyle.muted)
+            }
         }
     }
 }
@@ -75,73 +143,108 @@ struct MeasuringView: View {
     var body: some View {
         let elapsed = max(0, Int(model.now.timeIntervalSince(startedAt)))
         let target = model.configuration.recommendedCheckInSeconds
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("Checking in").font(.title2.bold())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("LIVE CHECK-IN")
+                        .font(.caption.bold()).tracking(2).foregroundStyle(SGStyle.muted)
+                    Text("Sit comfortably and rest.")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(SGStyle.ink)
+                }
                 Spacer()
-                Text("Presage measurement").font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(.teal.opacity(0.15), in: Capsule())
+                Image(systemName: "waveform.path.ecg")
+                    .foregroundStyle(SGStyle.primary)
+                    .frame(width: 38, height: 38)
+                    .background(SGStyle.soft, in: RoundedRectangle(cornerRadius: 11))
             }
-            if let image = model.preview {
-                // Live positioning preview only; never saved.
-                Image(uiImage: image).resizable().scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 260)
-                    .background(.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .accessibilityLabel("Camera preview for positioning")
-            } else {
-                ContentUnavailableView("Starting front camera", systemImage: "camera")
-                    .frame(maxWidth: .infinity, minHeight: 180)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Front camera preview", systemImage: "camera")
+                        .font(.callout.weight(.semibold)).foregroundStyle(SGStyle.ink)
+                    Spacer()
+                    Text("ON DEVICE").font(.caption2.bold()).tracking(1)
+                        .foregroundStyle(SGStyle.primary)
+                }
+                if let image = model.preview {
+                    // Live positioning preview only; never saved.
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 245)
+                        .background(.black)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .accessibilityLabel("Camera preview for positioning")
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "camera").font(.title)
+                        Text("Starting front camera").font(.callout)
+                    }
+                    .foregroundStyle(SGStyle.muted)
+                    .frame(maxWidth: .infinity, minHeight: 190)
+                    .background(SGStyle.background, in: RoundedRectangle(cornerRadius: 14))
+                }
+                Label(model.guidance ?? "Face the camera and hold still.", systemImage: "info.circle")
+                    .font(.callout).foregroundStyle(SGStyle.muted)
             }
-            Text(model.guidance ?? "Sit still, face the camera and stay quiet.")
-                .font(.callout)
-            Text(formatCountdown(elapsed))
-                .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
-            ProgressView(value: Double(min(elapsed, target)), total: Double(target))
-            Text(
-                elapsed >= target
-                    ? "\(target) seconds reached. Finish when you are ready."
-                    : "Suggested length: \(target) seconds (a data-sufficiency guide, not a medical threshold)."
-            )
-            .font(.footnote).foregroundStyle(.secondary)
+            .sgCard()
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("ELAPSED").font(.caption.bold()).tracking(1.5).foregroundStyle(SGStyle.muted)
+                        Text(formatCountdown(elapsed))
+                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                            .monospacedDigit().foregroundStyle(SGStyle.ink)
+                    }
+                    Spacer()
+                    Text("Suggested: \(target)s").font(.footnote).foregroundStyle(SGStyle.muted)
+                }
+                ProgressView(value: Double(min(elapsed, target)), total: Double(target))
+                    .tint(SGStyle.primary)
+                Text(elapsed >= target
+                     ? "Suggested time reached. Finish whenever you are ready."
+                     : "Time is a data-sufficiency guide, not a medical threshold.")
+                    .font(.footnote).foregroundStyle(SGStyle.muted)
+            }
+            .sgCard()
+
             HStack(spacing: 12) {
-                measurementCard("Pulse", value: model.pulseRateBpm, unit: "bpm")
-                measurementCard("Breathing", value: model.breathingRateBrpm, unit: "brpm")
+                measurementCard("Pulse", icon: "waveform.path.ecg", value: model.pulseRateBpm, unit: "bpm")
+                measurementCard("Breathing", icon: "wind", value: model.breathingRateBrpm, unit: "brpm")
             }
-            Text("Only stable Presage readings are shown. A dash means no valid reading yet.")
-                .font(.footnote).foregroundStyle(.secondary)
-            Text(
-                "\(model.collector.envelopes.count) Presage observations captured · "
-                    + "\(model.collector.validPulseCount) valid pulse · "
-                    + "\(model.collector.validBreathingCount) valid breathing."
-            )
-            .font(.footnote)
-            Text("Rate readings arrive when Presage detects a new event, not for every camera frame. Unstable observations are captured but not called valid.")
-                .font(.footnote).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("\(model.collector.envelopes.count) observations · \(model.collector.validPulseCount) valid pulse · \(model.collector.validBreathingCount) valid breathing")
+                    .font(.callout.weight(.medium)).foregroundStyle(SGStyle.ink)
+                Text("Only stable Presage readings appear above. A dash means no valid value yet.")
+                    .font(.footnote).foregroundStyle(SGStyle.muted)
+            }
+            .sgCard()
             if let error = model.errorMessage {
-                Text(error).foregroundStyle(.red).font(.callout)
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(SGStyle.warning).sgCard()
             }
             Button {
                 Task { await model.finish() }
             } label: {
-                Text("Finish check-in").frame(maxWidth: .infinity, minHeight: 44)
+                Label("Finish check-in", systemImage: "stop.fill")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(SGPrimaryButton())
         }
     }
 
-    private func measurementCard(_ title: String, value: Double?, unit: String) -> some View {
+    private func measurementCard(_ title: String, icon: String, value: Double?, unit: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.callout).foregroundStyle(.secondary)
-            Text(value.map { "\(Int($0.rounded())) \(unit)" } ?? "— \(unit)")
-                .font(.title2.bold()).monospacedDigit()
-                .accessibilityLabel("\(title): \(value.map { "\(Int($0.rounded())) \(unit)" } ?? "no valid reading yet")")
+            Label(title, systemImage: icon).font(.callout.weight(.semibold)).foregroundStyle(SGStyle.ink)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value.map { "\(Int($0.rounded()))" } ?? "—")
+                    .font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
+                Text(unit).font(.caption.weight(.medium))
+            }
+            .foregroundStyle(SGStyle.primary)
+            .accessibilityLabel("\(title): \(value.map { "\(Int($0.rounded())) \(unit)" } ?? "no valid reading yet")")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .sgCard()
     }
 }
 
@@ -150,27 +253,67 @@ struct CompletedView: View {
     let result: CheckInResult
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Thanks for checking in.").font(.title2.bold())
-            Text(
-                "\(Int(result.endedAt.timeIntervalSince(result.startedAt))) seconds · \(result.readingCount) readings (\(result.validPulseCount) valid pulse, \(result.validBreathingCount) valid breathing)."
-            )
-            Text(result.uploadMessage).font(.callout)
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 36)).foregroundStyle(SGStyle.primary)
+                Text("Check-in complete.")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(SGStyle.ink)
+                Text("Thanks for taking a moment to rest. These observations do not establish recovery or fitness for work.")
+                    .font(.callout).foregroundStyle(SGStyle.muted)
+            }
+            .sgCard()
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text("This check-in").font(.headline).foregroundStyle(SGStyle.ink)
+                HStack(spacing: 12) {
+                    resultMetric("DURATION", "\(Int(result.endedAt.timeIntervalSince(result.startedAt)))s")
+                    resultMetric("READINGS", "\(result.readingCount)")
+                }
+                HStack(spacing: 12) {
+                    resultMetric("VALID PULSE", "\(result.validPulseCount)")
+                    resultMetric("VALID BREATHING", "\(result.validBreathingCount)")
+                }
+            }
+            .sgCard()
+
+            VStack(alignment: .leading, spacing: 9) {
+                Label(result.uploadMessage.hasPrefix("Uploaded") ? "Sent to SiteGuard" :
+                      model.canRetryUpload ? "Upload not confirmed" : "Kept on this phone",
+                      systemImage: result.uploadMessage.hasPrefix("Uploaded") ? "checkmark.icloud" :
+                      model.canRetryUpload ? "exclamationmark.icloud" : "iphone")
+                    .font(.headline).foregroundStyle(SGStyle.ink)
+                Text(result.uploadMessage)
+                    .font(.callout)
+                    .foregroundStyle(model.canRetryUpload ? SGStyle.warning : SGStyle.muted)
+                if result.uploadMessage.hasPrefix("Uploaded") {
+                    Text("Open your worker history on the desktop. A manager sees detailed readings only if you chose sharing for this check-in.")
+                        .font(.footnote).foregroundStyle(SGStyle.muted)
+                }
+            }
+            .sgCard()
             if model.canRetryUpload {
                 Button("Retry upload") { Task { await model.retryUpload() } }
-                    .buttonStyle(.bordered).controlSize(.large)
-            }
-            if result.uploadMessage.hasPrefix("Uploaded") {
-                Text("Open the desktop worker history for your summary. A manager can open detailed charts only if you enabled sharing for this check-in.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .buttonStyle(SGSecondaryButton())
             }
             Button {
                 model.leaveResult()
             } label: {
-                Text("Back to check-ins").frame(maxWidth: .infinity, minHeight: 44)
+                Label("Back to check-ins", systemImage: "arrow.left")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(SGPrimaryButton())
         }
+    }
+
+    private func resultMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label).font(.caption2.bold()).tracking(1).foregroundStyle(SGStyle.muted)
+            Text(value).font(.title2.bold()).monospacedDigit().foregroundStyle(SGStyle.ink)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(SGStyle.background, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -180,19 +323,18 @@ struct SupportView: View {
     let webURL: URL?
 
     var body: some View {
-        GroupBox("Need support?") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(
-                    "You never need a measurement to ask for help. This app cannot send requests yet: tell your supervisor directly, or use SiteGuard on the web."
-                )
-                .font(.callout)
-                if let webURL {
-                    Link(destination: webURL.appending(path: "mobile")) {
-                        Text("Open SiteGuard support on the web").frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(.bordered).controlSize(.large)
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Need support?", systemImage: "person.crop.circle.badge.questionmark")
+                .font(.headline).foregroundStyle(SGStyle.ink)
+            Text("You never need a measurement to ask for help. Tell your supervisor directly, or use SiteGuard on the web. This app cannot send support requests yet.")
+                .font(.callout).foregroundStyle(SGStyle.muted)
+            if let webURL {
+                Link(destination: webURL.appending(path: "mobile")) {
+                    Label("Open worker support", systemImage: "arrow.up.right")
                 }
+                .buttonStyle(SGSecondaryButton())
             }
         }
+        .sgCard()
     }
 }

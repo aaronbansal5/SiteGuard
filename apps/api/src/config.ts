@@ -1,10 +1,18 @@
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 export interface Config {
+  checkInTestMode: boolean;
+  authMode: "demo" | "oidc";
+  appOrigin: string;
+  siteId: string;
+  oidcIssuer?: string;
+  oidcClientId?: string;
+  oidcClientSecret?: string;
   host: string;
   port: number;
   sqlitePath: string;
   databaseUrl?: string;
+  allowSqlite: boolean;
   cookieSecret: string;
   measurementToken: string;
   demoMode: boolean;
@@ -26,10 +34,22 @@ export interface Config {
 export function loadConfig(overrides: Partial<Config> = {}): Config {
   const hosted = process.env.HOSTED === "true";
   const c: Config = {
+    checkInTestMode: process.env.CHECK_IN_TEST_MODE === "true",
+    authMode: process.env.AUTH_MODE === "oidc" ? "oidc" : "demo",
+    appOrigin: process.env.APP_ORIGIN || "http://127.0.0.1:3001",
+    siteId: process.env.SITE_ID || "local-demo",
+    oidcIssuer: process.env.OIDC_ISSUER,
+    oidcClientId: process.env.OIDC_CLIENT_ID,
+    oidcClientSecret: process.env.OIDC_CLIENT_SECRET,
     host: process.env.HOST || "127.0.0.1",
     port: Number(process.env.PORT || 3001),
     sqlitePath: resolve(process.env.SQLITE_PATH || ".data/siteguard.sqlite"),
     databaseUrl: process.env.DATABASE_URL || undefined,
+    // SQLite is an isolated test/rehearsal adapter, never an implicit app
+    // fallback. Vitest sets NODE_ENV=test; other harnesses must opt in.
+    allowSqlite:
+      process.env.SITEGUARD_ALLOW_SQLITE === "true" ||
+      process.env.NODE_ENV === "test",
     cookieSecret: process.env.COOKIE_SECRET || randomBytes(32).toString("hex"),
     measurementToken:
       process.env.MEASUREMENT_TOKEN || randomBytes(32).toString("hex"),
@@ -70,6 +90,26 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     throw new Error("CLIENT_IP_HEADER must be a single header name");
   if (!Number.isFinite(c.mockIntervalMs) || c.mockIntervalMs <= 0)
     throw new Error("Mock interval must be positive");
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(c.siteId))
+    throw new Error("SITE_ID must be a simple stable deployment identifier");
+  const origin = new URL(c.appOrigin);
+  if (
+    origin.origin !== c.appOrigin ||
+    origin.username ||
+    origin.password ||
+    !["https:", "http:"].includes(origin.protocol)
+  )
+    throw new Error("APP_ORIGIN must be an HTTP(S) origin");
+  if (c.hosted && c.authMode !== "oidc")
+    throw new Error("Hosted mode requires AUTH_MODE=oidc");
+  if (c.authMode === "oidc") {
+    if (!c.oidcIssuer || !c.oidcClientId)
+      throw new Error("OIDC_ISSUER and OIDC_CLIENT_ID are required");
+    if (new URL(c.oidcIssuer).protocol !== "https:")
+      throw new Error("OIDC_ISSUER must use HTTPS");
+    if (c.hosted && origin.protocol !== "https:")
+      throw new Error("Hosted APP_ORIGIN must use HTTPS");
+  }
   const bridge = new URL(c.bridgeUrl);
   if (
     bridge.protocol !== "http:" ||

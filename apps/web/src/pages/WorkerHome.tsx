@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Coffee, ArrowRight, Activity } from "lucide-react";
+import { Coffee, ArrowRight, Clock, Activity, LockKeyhole } from "lucide-react";
 import type {
   Break,
   Session,
@@ -35,6 +35,7 @@ export function ChooseWorker() {
   );
 }
 function Worker({ workerId }: { workerId: string }) {
+  const health = useResource<{ checkInTestMode?: boolean }>("/health");
   const breaks = useResource<{ breaks: Break[] }>("/breaks", 10000),
     history = useResource<{ sessions: (Session & { summary: Summary })[] }>(
       `/workers/${workerId}/history`,
@@ -44,17 +45,25 @@ function Worker({ workerId }: { workerId: string }) {
     br = breaks.data?.breaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
     ),
+    checkInBreak =
+      br ?? (health.data?.checkInTestMode ? breaks.data?.breaks[0] : undefined),
     active = history.data?.sessions.find((s) => s.status === "active"),
     latest = history.data?.sessions.find((s) => s.status === "completed");
   return (
     <>
       <PageHeading
-        eyebrow="WORKER CHECK-IN"
+        eyebrow="WORKER PORTAL"
         title="Take a moment for yourself."
-        description="Choose a source, record your check-in, then review the results and request rest if you want it."
+        description="Your measurements, your context, and a direct path to support."
         action={<span className="badge">Worker W-{workerId.slice(-2)}</span>}
       />
       <ErrorNotice message={breaks.error || history.error || requests.error} />
+      {health.data?.checkInTestMode && (
+        <p className="notice demo">
+          Local check-in testing enabled: no consent form or scheduled-break
+          time gate.
+        </p>
+      )}
       {breaks.loading ? (
         <Loading />
       ) : (
@@ -67,12 +76,14 @@ function Worker({ workerId }: { workerId: string }) {
               {br ? "YOUR BREAK IS IN PROGRESS" : "YOUR PROTECTED SCHEDULE"}
             </span>
             <h2>
-              {br ? "Ready for a check-in?" : "Your next break is protected."}
+              {br
+                ? "Rest comes first. Check in if you choose."
+                : "Your next break is protected."}
             </h2>
             <p>
               {br
                 ? `${time(br.startsAt)} – ${time(br.endsAt)} · ${br.policyLabel}`
-                : "Check-ins open during a scheduled break. You can request rest or help below at any time."}
+                : "Voluntary measurement is available during a scheduled break. Assistance is always available."}
             </p>
           </div>
           {active ? (
@@ -82,21 +93,63 @@ function Worker({ workerId }: { workerId: string }) {
             >
               Resume check-in <ArrowRight size={17} />
             </Link>
-          ) : br ? (
-            <Link className="button primary" to={`/check-in?breakId=${br.id}`}>
-              Start check-in <ArrowRight size={17} />
+          ) : checkInBreak ? (
+            <Link
+              className="button primary"
+              to={`/check-in?breakId=${checkInBreak.id}`}
+            >
+              Start voluntary check-in <ArrowRight size={17} />
             </Link>
           ) : (
             <span className="badge">No active break</span>
           )}
         </section>
       )}
+      <div className="stats-grid three">
+        <section className="card stat">
+          <span>
+            <LockKeyhole size={18} />
+            Protected rest
+          </span>
+          <strong>
+            {breaks.data?.breaks.filter((b) => b.kind === "protected").length ??
+              "—"}
+            <small>scheduled break</small>
+          </strong>
+          <p>Fictional site policy, preserved by planning</p>
+        </section>
+        <section className="card stat">
+          <span>
+            <Clock size={18} />
+            Your check-ins
+          </span>
+          <strong>
+            {history.data?.sessions.filter((s) => s.status === "completed")
+              .length ?? "—"}
+            <small>recorded sessions</small>
+          </strong>
+          <p>Every session retains its measurement source</p>
+        </section>
+        <section className="card stat">
+          <span>
+            <Activity size={18} />
+            Open requests
+          </span>
+          <strong>
+            {requests.data?.requests.filter(
+              (r) => !["resolved", "declined"].includes(r.status),
+            ).length ?? "—"}
+            <small>awaiting follow-up</small>
+          </strong>
+          <p>Requests are independent of vital readings</p>
+        </section>
+      </div>
       <div className="two-columns">
         <section className="card">
           <div className="card-header">
             <div>
-              <h2>Need more rest or help?</h2>
-              <p>You can ask now, with or without a check-in.</p>
+              <h2>Support, whenever you need it</h2>
+              <p>You do not need a measurement to request help.</p>
             </div>
           </div>
           <HelpActions onSent={() => void requests.refresh()} />
@@ -131,7 +184,7 @@ function Worker({ workerId }: { workerId: string }) {
                 </div>
               </div>
               <Link className="text-link" to={`/sessions/${latest.id}`}>
-                View results <ArrowRight size={15} />
+                Review observations <ArrowRight size={15} />
               </Link>
             </>
           ) : (

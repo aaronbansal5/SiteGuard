@@ -15,7 +15,7 @@ POST /demo/login {role:worker,workerId} or {role:supervisor} → {role,workerId?
 GET /demo/me → current identity (401 before login).
 GET /health → {status,database,measurementSources,insightsMode}.
 POST /devices/pairings {} → 201 {code,expiresAt}. Worker cookie, local demo only; code issuance also works on the Mac's HTTP loopback worker page. Eight-character single-use code, expires in five minutes, at most three open per worker (a fourth replaces the oldest). No phone token or readings use the loopback HTTP exception.
-POST /devices/pair {code} → 201 {deviceToken,workerId,expiresAt}. Same local HTTPS restriction; no cookie, ten invalid attempts per IP per ten minutes. Token returned once, SHA-256 stored in process memory only and expires after 24 hours or server restart. Phone keeps it in device-only Keychain.
+POST /devices/pair {code} → 201 {deviceToken,workerId,expiresAt}. Same local HTTPS restriction; no cookie, ten invalid attempts per IP per ten minutes. Token returned once; only its SHA-256 digest is stored in the local database. It expires after 30 days (or a demo reset), not on API restart. Phone keeps the token in device-only Keychain.
 POST /device/check-ins {id,startedAt,endedAt,consentVersion:v1,shareWithSupervisor,context,readings:ReadingEnvelope[]} → 201 {session,summary}. Device bearer only, local HTTPS demo only. The paired worker and source=presage are fixed by the server; at most 1000 sequential observations, all timestamps within a bounded 10-minute check-in that ended within two minutes of receipt and fits that worker's break. Entire upload is transactional; same ID and payload retry succeeds, conflicting retry 409. No footage. The app asks separately per check-in before upload and manager sharing. This is not production device authentication or SDK attestation.
 GET /workers → {workers} (public fictional roster).
 POST /sessions {breakId,source,input?:camera|custom,consentVersion:v1,shareWithSupervisor,context:{workload,temperatureC}} → 201 {session}. Worker owner, current break, one active session. `input` is only allowed for Presage; custom uses a browser camera and local bridge.
@@ -26,6 +26,7 @@ GET /sessions/:id/readings → {readings}.
 POST /sessions/:id/frame?timestampUs=epoch-microseconds with exact 480×360 RGBA `application/octet-stream` or bounded JPEG `image/jpeg` (up to 1 MiB; bridge validates dimensions 240–960 pixels) → 204. Owning worker and active custom-input Presage session only. Frames are relayed in memory to the loopback bridge, never stored; HTTPS is required by the phone browser camera.
 POST /sessions/:id/complete {} → {session,summary}; idempotent, stops source first.
 GET /sessions/:id/summary → {summary}.
+GET /sessions/:id/timeseries-evidence → {evidence}. Same access rules as the session summary. Returns ten-second observation buckets, valid metric coverage and storage provenance. A verified TimescaleDB hypertable uses `time_bucket`; SQLite or plain PostgreSQL uses the same response contract with application aggregation. Coverage describes data availability, not measurement accuracy or worker safety.
 GET /workers/:id/history?limit=20&before=cursor → {sessions:[Session & {summary}],nextCursor}; worker-only history.
 GET /sessions/:id/personal-insights → {insights:PersonalInsights}. Owning worker only; supervisors 403 even with sharing consent. Experimental, same-source own history only; explicit insufficient_data states.
 POST /sessions/:id/self-report {tiredness:1..5|null} → {selfReport:SelfReport|null}. Owning worker only, completed session only (409 otherwise); null removes. Voluntary; never used for scheduling, approvals or supervisor views.
@@ -43,6 +44,7 @@ POST /schedule/preview {} → {baseRevision,assignments,coverageGaps}.
 POST /schedule/commit {baseRevision,assignments(max500)} → {scheduleRevision,assignments,coverageGaps,auditEventId}; transactional constraints; gaps explicit.
 POST /insights/explain {kind:session,sessionId} or {kind:schedule,auditEventId} → {origin:gemini|deterministic,observations,limitations}. Server fetches facts; no raw vitals/names/symptom notes/footage sent.
 POST /demo/reset {} → {reset:true}; supervisor local demo only, disabled hosted/non-demo.
+POST /demo/fresh-break {workerId:UUID} → 201 {break,scheduleRevision}; supervisor and loopback local demo only. Adds a new 15-minute protected fictional break for a worker only if none overlaps; preserves all earlier breaks, sessions, and readings. Returns 409 for overlap or active check-in. This does not move or shorten a required break.
 
 ## Errors and sample
 
@@ -52,3 +54,11 @@ Example reading: {"timestamp":"2026-10-10T15:00:01.000Z","heartRateBpm":104,"res
 ## Resource limits
 
 Demo login:30 requests/minute/IP; other writes:120/minute/IP; frame writes:2400/minute/IP (IPv6 counted per /64; client address from CLIENT_IP_HEADER only when configured behind a proxy). SSE:6 streams/identity,12/worker,64/process; quotas release on close. Heartbeats revalidate signed identity expiry every5seconds without stopping the underlying measurement source. Native-source transport status is configured/unverified until a successful bridge check-in. Limits are process-local; production ingress/shared quotas require separate deployment validation.
+
+## Local check-in testing
+
+With `CHECK_IN_TEST_MODE=true`, `DEMO_MODE=true`, and `HOSTED=false`, `/health` reports `checkInTestMode:true`. Local test clients omit the consent form and submit `consentVersion:"local-test"`, which is preserved in the session record rather than recording v1 consent. An owned break is still required, but its active-time check is bypassed without editing the break. Normal mode rejects local-test sessions; hosted deployments never enable this bypass. Start/finish remain explicit and sharing remains opt-in.
+
+## Local camera preview
+
+`GET /sessions/:id/preview`: worker owner only, active local Presage sessions only. Returns in-memory JPEG with no-store headers, 204 while waiting or after completion, and 503 if the bridge is unavailable. No images are persisted. The preview uses the existing native capture; it does not open browser camera capture.

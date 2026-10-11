@@ -15,6 +15,18 @@ export async function seed(r: Repository, reset = false) {
         );
       if (sessions.some((s) => s.status === "active"))
         fail(409, "SESSION_ACTIVE", "Stop active sessions before reset");
+      if (
+        (await tx.driver.query("SELECT id FROM auth_accounts LIMIT 1")).length
+      )
+        fail(
+          409,
+          "ACCOUNTS_PRESENT",
+          "Reset refuses to delete a database with authenticated accounts",
+        );
+      await tx.driver.query("DELETE FROM safety_incidents");
+      await tx.driver.query("DELETE FROM safety_events");
+      await tx.driver.query("DELETE FROM auth_demo_sessions");
+      await tx.driver.query("DELETE FROM auth_login_transactions");
       await tx.driver.query("DELETE FROM self_reports");
       await tx.driver.query("DELETE FROM reading_receipts");
       await tx.driver.query("DELETE FROM vital_readings");

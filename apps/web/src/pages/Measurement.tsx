@@ -1,3 +1,5 @@
+import { CameraPreview } from "../components/CameraPreview";
+import { startOrResumeCheckIn } from "../lib/checkin";
 import { useEffect, useRef, useState } from "react";
 import {
   useParams,
@@ -7,7 +9,6 @@ import {
 } from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
 import type { Session } from "@siteguard/contracts";
-import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { api, useResource, useAction } from "../lib/api";
 import { useSessionStream } from "../lib/session-stream";
 import {
@@ -33,15 +34,7 @@ export function Measurement() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
-  const browserCamera =
-    search.get("camera") === "browser" ||
-    (() => {
-      try {
-        return sessionStorage.getItem(`siteguard-camera:${id}`) === "browser";
-      } catch {
-        return false;
-      }
-    })();
+  const browserCamera = search.get("camera") === "browser";
   const s = session.data?.session;
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -55,7 +48,6 @@ export function Measurement() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let busy = false;
     let timestampUs = 0;
-    const controller = new AbortController();
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     const fail = (error: unknown) => {
@@ -64,10 +56,6 @@ export function Measurement() {
         error instanceof Error ? error.message : "Camera capture stopped.",
       );
       setCameraActive(false);
-      stopped = true;
-      controller.abort();
-      clearTimeout(timer);
-      media?.getTracks().forEach((track) => track.stop());
     };
     const capture = async () => {
       if (stopped || busy || !media || !context || !videoRef.current) return;
@@ -101,10 +89,6 @@ export function Measurement() {
             body: frame,
             credentials: "same-origin",
             cache: "no-store",
-            signal: AbortSignal.any([
-              controller.signal,
-              AbortSignal.timeout(15000),
-            ]),
           },
         );
         if (!response.ok)
@@ -118,10 +102,6 @@ export function Measurement() {
     };
     const start = async () => {
       try {
-        if (!context)
-          throw new Error(
-            "Camera processing is unavailable in this browser. Finish this check-in and try another browser.",
-          );
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
           throw new Error("Camera check-in requires HTTPS.");
         media = await navigator.mediaDevices.getUserMedia({
@@ -133,13 +113,9 @@ export function Measurement() {
             frameRate: { ideal: 30 },
           },
         });
-        if (stopped) {
-          media.getTracks().forEach((track) => track.stop());
-          return;
-        }
+        if (stopped) return;
         videoRef.current!.srcObject = media;
         await videoRef.current!.play();
-        if (stopped) return;
         setCameraActive(true);
         void capture();
       } catch (error) {
@@ -149,7 +125,6 @@ export function Measurement() {
     void start();
     return () => {
       stopped = true;
-      controller.abort();
       clearTimeout(timer);
       media?.getTracks().forEach((track) => track.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
@@ -184,7 +159,7 @@ export function Measurement() {
       <div className="card">
         <h1>Check-in completed</h1>
         <Link className="button primary" to={`/sessions/${s.id}`}>
-          View results
+          Review observations
         </Link>
       </div>
     );
@@ -192,18 +167,13 @@ export function Measurement() {
       0,
       Math.floor((now - Date.parse(s.startedAt)) / 1000),
     ),
-    quality = stream.readings.at(-1)?.reading.quality,
-    target = RECOMMENDED_CHECK_IN_SECONDS[s.source];
+    quality = stream.readings.at(-1)?.reading.quality;
   return (
     <>
       <PageHeading
-        eyebrow="STEP 2 OF 3 · MEASUREMENT"
-        title="Your check-in is recording."
-        description={
-          s.source === "mock"
-            ? "Watch the synthetic readings, then finish to see your results."
-            : "Sit still, face the camera in even light, then finish to see your results."
-        }
+        eyebrow="VOLUNTARY CHECK-IN / 02"
+        title="Settle in. Observe the change."
+        description="Stay seated and stationary throughout your check-in."
         action={<SourceBadge source={s.source} />}
       />
       <div className="measurement-layout">
@@ -212,56 +182,79 @@ export function Measurement() {
             <span className="eyebrow">
               {s.source === "mock"
                 ? "SYNTHETIC MEASUREMENT"
-                : "CAMERA CHECK-IN"}
+                : "LOCAL CAMERA CHECK-IN"}
             </span>
             <span className="badge">{quality || "Waiting"}</span>
           </div>
-          <div className="camera-frame">
-            {browserCamera && s.source === "presage" ? (
-              <>
-                <video
-                  ref={videoRef}
-                  muted
-                  playsInline
-                  autoPlay
-                  aria-label="Live camera preview"
-                  style={{
-                    width: "100%",
-                    borderRadius: 12,
-                    transform: "scaleX(-1)",
-                  }}
-                />
-                <strong>
-                  {cameraError
-                    ? "Camera stopped"
-                    : cameraActive
-                      ? "Camera active"
-                      : "Starting camera…"}
-                </strong>
-                <span>
-                  {cameraError ||
-                    "Frames are processed transiently by Presage; no video is saved."}
-                </span>
-              </>
-            ) : (
-              <>
-                <div className="scan-corners" />
-                <div className="head-outline">
-                  <ScanLine size={68} strokeWidth={1} />
-                </div>
-                <strong>
-                  {s.source === "mock"
-                    ? "No camera required"
-                    : "Face the bridge camera"}
-                </strong>
-                <span>
-                  {s.source === "mock"
-                    ? "Synthetic readings demonstrate the complete flow."
-                    : "Use the camera on the laptop running Presage."}
-                </span>
-              </>
-            )}
-          </div>
+          {browserCamera && s.source === "presage" ? (
+            <div className="camera-frame">
+              <video
+                ref={videoRef}
+                muted
+                playsInline
+                autoPlay
+                aria-label="Live camera preview"
+                style={{
+                  width: "100%",
+                  borderRadius: 12,
+                  transform: "scaleX(-1)",
+                }}
+              />
+              <strong>
+                {cameraActive ? "Camera active" : "Starting camera…"}
+              </strong>
+              <span>
+                {cameraError ||
+                  "Frames are processed transiently by Presage; no video is saved."}
+              </span>
+            </div>
+          ) : s.source === "presage" ? (
+            <CameraPreview sessionId={s.id} />
+          ) : (
+            <div className="camera-frame">
+              <div className="scan-corners" />
+              <div className="head-outline">
+                <ScanLine size={68} strokeWidth={1} />
+              </div>
+              <strong>
+                {s.source === "mock"
+                  ? "No camera required"
+                  : "Face the bridge camera"}
+              </strong>
+              <span>
+                {s.source === "mock"
+                  ? "A deterministic stream demonstrates the flow."
+                  : "Camera capture is managed by the local Presage bridge."}
+              </span>
+            </div>
+          )}
+          {s.source === "mock" && (
+            <div className="notice demo">
+              <p>
+                This session uses synthetic values. Your camera is not running.
+              </p>
+              <button
+                className="button secondary full"
+                disabled={a.busy}
+                onClick={() =>
+                  void a.run(async () => {
+                    const result = await startOrResumeCheckIn(s.workerId, {
+                      breakId: s.breakId,
+                      source: "presage",
+                      consentVersion: s.consentVersion,
+                      shareWithSupervisor: s.shareWithSupervisor,
+                      context: s.context,
+                    });
+                    navigate(`/sessions/${result.session.id}/measure`);
+                  })
+                }
+              >
+                {a.busy
+                  ? "Starting camera…"
+                  : "End synthetic session and start camera check-in"}
+              </button>
+            </div>
+          )}
           <div className="connection">
             <span className={`dot ${stream.error ? "amber" : ""}`} />
             {stream.status}
@@ -269,9 +262,8 @@ export function Measurement() {
           <div className="positioning-tip">
             <Info size={16} />
             <p>
-              {s.source === "mock"
-                ? "No positioning needed for the synthetic demo."
-                : "Keep your face in view and stay still while readings arrive."}
+              Rest comfortably. In real mode, face the camera with even lighting
+              and follow bridge positioning instructions.
             </p>
           </div>
           <div className="session-timer">
@@ -282,20 +274,12 @@ export function Measurement() {
             </strong>
             <span>elapsed</span>
           </div>
-          <div className="progress">
-            <span
-              style={{ width: `${Math.min(100, (elapsed / target) * 100)}%` }}
-            />
-          </div>
-          <p className="setup-description" role="status">
-            {elapsed < target
-              ? `About ${target - elapsed} seconds left in the suggested recording.`
-              : "Suggested recording time reached. Finish when you’re ready."}
-          </p>
           <p className="fine-print">
+            No time limit. Keep testing for as long as you need, then select
+            Finish check-in to stop recording.
             {s.source === "presage" &&
-              "Readings may need 30–45 seconds to warm up. "}
-            You can finish early; your summary may show insufficient data.
+              " Positioning and warm-up may delay valid readings."}{" "}
+            Data sufficiency is not a medical threshold.
           </p>
           <button
             className="button primary full"
@@ -308,7 +292,7 @@ export function Measurement() {
             }
           >
             <Square size={14} />
-            {a.busy ? "Preparing results…" : "Finish check-in"}
+            {a.busy ? "Stopping source…" : "Finish check-in"}
           </button>
         </section>
         <div>

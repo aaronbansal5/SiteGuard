@@ -58,7 +58,14 @@ export class Repository {
       "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
     );
     // 002 is the separately-enabled PostgreSQL Timescale migration.
-    for (const version of ["001_initial", "003_self_reports"])
+    for (const version of [
+      "001_initial",
+      "003_self_reports",
+      "003_auth",
+      "004_device_pairings",
+      "004_safety",
+      "005_mobile",
+    ]) {
       await this.transaction(async (r) => {
         const applied = await r.driver.query(
           "SELECT version FROM schema_migrations WHERE version=$1",
@@ -78,6 +85,7 @@ export class Repository {
           [version, new Date().toISOString()],
         );
       });
+    }
   }
   /** Worker-only voluntary self-reports, keyed by session. */
   async selfReports(workerId: string): Promise<SelfReport[]> {
@@ -100,6 +108,7 @@ export class Repository {
       sessionId,
     ]);
   }
+
   async list<K extends keyof Entities>(table: K): Promise<Entities[K][]> {
     return (await this.driver.query(`SELECT payload FROM ${table}`)).map((r) =>
       JSON.parse(r.payload as string),
@@ -309,6 +318,10 @@ function digest(e: ReadingEnvelope) {
   return createHash("sha256").update(JSON.stringify(e)).digest("hex");
 }
 export async function openRepository(config: Config) {
+  if (!config.databaseUrl && !config.allowSqlite)
+    throw new Error(
+      "DATABASE_URL is required. SiteGuard does not fall back to local SQLite; set SITEGUARD_ALLOW_SQLITE=true only for isolated tests or rehearsals.",
+    );
   const r = new Repository(
     config.databaseUrl
       ? await postgresDriver(config.databaseUrl)

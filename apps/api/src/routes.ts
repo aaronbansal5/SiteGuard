@@ -1,3 +1,5 @@
+import { sessionStillValid } from "./auth-service.js";
+import { randomBytes, createHash } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
@@ -26,7 +28,7 @@ import {
 import type { Repository } from "./db/repository.js";
 import type { Config } from "./config.js";
 import type { MeasurementManager } from "./measurement/manager.js";
-import { identity, worker, supervisor } from "./auth.js";
+import { identity, worker, supervisor, resolvedIdentity } from "./auth.js";
 import { fail } from "./errors.js";
 import { sessionSummary } from "./domain/sessions.js";
 import {
@@ -38,6 +40,7 @@ import { audit } from "./domain/requests.js";
 import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
 import { personalInsights, personalTrend } from "./domain/personal.js";
 import { createResearchDemoEvaluator } from "./research/synthetic-demo.js";
+import { timeSeriesEvidence } from "./domain/timeseries-evidence.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
   app: FastifyInstance,
@@ -46,7 +49,7 @@ export async function registerRoutes(
   manager: MeasurementManager,
 ) {
   const explainer = new Explainer(c);
-  const evaluateResearch = createResearchDemoEvaluator(c);
+  const evaluateResearchDemo = createResearchDemoEvaluator(c);
   const identityStreams = new Map<string, number>();
   const workerStreams = new Map<string, number>();
   let totalStreams = 0;
@@ -96,6 +99,7 @@ export async function registerRoutes(
     }
     return {
       status: "ok",
+      checkInTestMode: c.checkInTestMode && c.demoMode && !c.hosted,
       database: r.driver.kind,
       measurementSources: {
         mock: c.demoMode,
@@ -163,17 +167,34 @@ export async function registerRoutes(
     };
   });
   app.get("/api/workers", async (req) => {
-    if (!c.demoMode) supervisor(req);
-    return { workers: await r.list("workers") };
+    const a = resolvedIdentity(req)?.identity;
+    if (!a && !(c.demoMode && c.authMode === "demo" && !c.hosted))
+      identity(req);
+    return {
+      workers: (await r.list("workers")).filter(
+        (w) => !a || a.role === "supervisor" || w.id === a.workerId,
+      ),
+    };
   });
   app.post("/api/demo/login", async (req, reply) => {
-    if (!c.demoMode) fail(403, "DEMO_DISABLED", "Demo login is disabled");
+    if (!c.demoMode || c.hosted || c.authMode !== "demo")
+      fail(403, "DEMO_DISABLED", "Demo login is disabled");
     const a = LoginSchema.parse(req.body);
     if (a.role === "worker" && !(await r.get("workers", a.workerId)))
       fail(404, "NOT_FOUND", "Worker not found");
+    const authToken = randomBytes(32).toString("base64url");
+    const expiresAt = Date.now() + 86400000;
+    await r.driver.query(
+      "INSERT INTO auth_demo_sessions (token_digest,payload,expires_at) VALUES ($1,$2,$3)",
+      [
+        createHash("sha256").update(authToken).digest("hex"),
+        JSON.stringify(a),
+        new Date(expiresAt).toISOString(),
+      ],
+    );
     reply.setCookie(
       "siteguard",
-      JSON.stringify({ identity: a, expiresAt: Date.now() + 86400000 }),
+      JSON.stringify({ identity: a, expiresAt, authToken }),
       {
         signed: true,
         httpOnly: true,
@@ -198,6 +219,9 @@ export async function registerRoutes(
   app.post("/api/sessions", async (req, reply) => {
     const workerId = worker(req);
     const b = StartSessionSchema.parse(req.body);
+    const localTest = c.checkInTestMode && c.demoMode && !c.hosted;
+    if (b.consentVersion === "local-test" && !localTest)
+      fail(403, "TEST_MODE_DISABLED", "Local check-in testing is disabled");
     if (b.source === "mock" && !c.demoMode)
       fail(403, "MOCK_DISABLED", "Synthetic measurements are disabled");
     if (b.source === "presage" && c.hosted)
@@ -209,7 +233,10 @@ export async function registerRoutes(
       const now = Date.now();
       if (!br || br.workerId !== workerId)
         fail(403, "FORBIDDEN", "Break does not belong to worker");
-      if (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
+      if (
+        !localTest &&
+        (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
+      )
         fail(
           409,
           "BREAK_INACTIVE",
@@ -264,6 +291,36 @@ export async function registerRoutes(
   app.get("/api/sessions/:id", async (req) => ({
     session: await access(req, id(req)),
   }));
+  app.get("/api/sessions/:id/preview", async (req, reply) => {
+    worker(req);
+    const session = await access(req, id(req), true);
+    reply.header("Cache-Control", "no-store");
+    if (c.hosted || session.source !== "presage")
+      fail(
+        403,
+        "PREVIEW_LOCAL_ONLY",
+        "Camera preview is only available for your local Presage session",
+      );
+    if (session.status !== "active") return reply.code(204).send();
+    try {
+      const response = await fetch(
+        new URL(`/v1/previews/${session.id}`, c.bridgeUrl),
+        {
+          headers: { Authorization: `Bearer ${c.bridgeToken || ""}` },
+          redirect: "error",
+          signal: AbortSignal.timeout(2000),
+        },
+      );
+      if (response.status === 204) return reply.code(204).send();
+      if (!response.ok || response.headers.get("content-type") !== "image/jpeg")
+        return reply.code(503).send();
+      const frame = Buffer.from(await response.arrayBuffer());
+      if (frame.length > 1_000_000) return reply.code(503).send();
+      return reply.type("image/jpeg").send(frame);
+    } catch {
+      return reply.code(503).send();
+    }
+  });
   app.get("/api/sessions/:id/readings", async (req) => {
     const s = await access(req, id(req));
     return { readings: await r.readings(s.id) };
@@ -341,6 +398,10 @@ export async function registerRoutes(
     const s = await access(req, id(req));
     return { summary: await sessionSummary(r, s.id) };
   });
+  app.get("/api/sessions/:id/timeseries-evidence", async (req) => {
+    const s = await access(req, id(req));
+    return { evidence: await timeSeriesEvidence(r, s) };
+  });
   // Worker-only experimental personal insights (docs/RECOVERY_MODEL.md).
   // worker() rejects supervisors outright, regardless of sharing consent.
   const ownSession = async (req: FastifyRequest) => {
@@ -360,7 +421,7 @@ export async function registerRoutes(
         "Complete the check-in before reviewing rest support",
       );
     const summary = await sessionSummary(r, s.id);
-    return evaluateResearch(summary);
+    return evaluateResearchDemo(summary);
   });
   app.get("/api/sessions/:id/personal-insights", async (req) => {
     const s = await ownSession(req);
@@ -484,15 +545,16 @@ export async function registerRoutes(
       if (replaying) buffered.push(e);
       else send(e);
     });
-    const heartbeat = setInterval(() => {
+    const heartbeat = setInterval(async () => {
       if (reply.raw.writableEnded) return;
       try {
-        identity(req);
+        if (!(await sessionStillValid(r, c, req)))
+          fail(401, "UNAUTHENTICATED", "Session expired");
       } catch {
         write({
           type: "error",
           code: "UNAUTHENTICATED",
-          message: "Demo identity expired. Sign in again.",
+          message: "Session ended. Sign in again.",
           retryable: false,
         });
         reply.raw.end();
@@ -730,7 +792,14 @@ export async function registerRoutes(
       request.revision++;
       request.note = b.note;
       await tx.put("rest_requests", request);
-      await audit(tx, "request_" + b.action, request.id, before, request);
+      await audit(
+        tx,
+        "request_" + b.action,
+        request.id,
+        before,
+        request,
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
+      );
       return { request, scheduleRevision: await tx.bump() };
     });
   });
@@ -788,7 +857,14 @@ export async function registerRoutes(
       request.revision++;
       await tx.put("breaks", br);
       await tx.put("rest_requests", request);
-      await audit(tx, "break_update", br.id, before, br);
+      await audit(
+        tx,
+        "break_update",
+        br.id,
+        before,
+        br,
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
+      );
       return { break: br, scheduleRevision: await tx.bump() };
     });
   });
@@ -881,6 +957,7 @@ export async function registerRoutes(
           protectedBreakCount: s.breaks.filter((x) => x.kind === "protected")
             .length,
         },
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
       );
       return {
         scheduleRevision: await tx.bump(),
@@ -932,5 +1009,62 @@ export async function registerRoutes(
       fail(409, "SESSION_ACTIVE", "Stop active sessions before reset");
     await seed(r, true);
     return { reset: true };
+  });
+  app.post("/api/demo/fresh-break", async (req, reply) => {
+    supervisor(req);
+    const { workerId } = z.strictObject({ workerId: Id }).parse(req.body);
+    if (
+      c.hosted ||
+      !c.demoMode ||
+      !["127.0.0.1", "::1"].includes(c.host) ||
+      !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
+        req.socket.remoteAddress ?? "",
+      )
+    )
+      fail(
+        403,
+        "DEMO_LOCAL_ONLY",
+        "Fresh demo breaks are available only on the local demo",
+      );
+    const result = await r.transaction(async (tx) => {
+      if (!(await tx.get("workers", workerId)))
+        fail(404, "WORKER_NOT_FOUND", "Worker not found");
+      if (
+        (await tx.list("sessions")).some(
+          (s) => s.workerId === workerId && s.status === "active",
+        )
+      )
+        fail(409, "SESSION_ACTIVE", "Finish the active check-in first");
+      const now = Date.now();
+      const ends = now + 15 * 60_000;
+      if (
+        (await tx.list("breaks")).some(
+          (b) =>
+            b.workerId === workerId &&
+            Date.parse(b.startsAt) < ends &&
+            Date.parse(b.endsAt) > now,
+        )
+      )
+        fail(
+          409,
+          "BREAK_OVERLAP",
+          "This worker already has a break in the next 15 minutes",
+        );
+      const br = {
+        id: randomUUID(),
+        workerId,
+        startsAt: new Date(now).toISOString(),
+        endsAt: new Date(ends).toISOString(),
+        kind: "protected" as const,
+        policyLabel: "Fictional local demo · 15 min protected break",
+        revision: 0,
+        requestId: null,
+      };
+      await tx.put("breaks", br);
+      await audit(tx, "demo_fresh_break", br.id, null, br);
+      return { break: br, scheduleRevision: await tx.bump() };
+    });
+    reply.code(201);
+    return result;
   });
 }

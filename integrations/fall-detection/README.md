@@ -2,6 +2,12 @@
 
 Independent of the React/Fastify app, Presage, Tiger Data and Gemini. The synthetic demo needs no packages, keys or camera. This implements the reference project's YOLO person detection + persistent tracking + horizontal bounding-box-duration approach, with extra filters described below. It is an experimental heuristic, not verified fall detection or an emergency monitoring service.
 
+## Current local test rule
+
+The running standalone dashboard uses **bounding-box width > height** and creates a possible-person-down report only after continuous eligible observations for **more than two seconds**. Exactly two seconds does not alert. Missing observations, long gaps or a non-horizontal pose reset the dwell timer. No preceding-upright observation is required in this mode. Confidence, edge and area filters still apply, as do duplicate-region and unresolved-incident suppression. A wider box is a review heuristic, not confirmation that someone fell.
+
+New incidents pulse a red screen border and show a ten-second alert banner. Reduced-motion users get a static border. Existing reports do not flash again on refresh. Detection times are captured when the observation frame is processed, stored in UTC and displayed in America/New_York with the timezone shown. The original configurable sustained-transition engine remains available to callers of Detector; the standalone Runtime explicitly selects the strict two-second dwell rule.
+
 ## Supported Python
 
 | Part                                 | Supported versions | Verified for this change                                                                                                                                 |
@@ -21,7 +27,7 @@ python3 -m unittest discover -s tests -v
 python3 -m fall_detection.server
 ```
 
-Open **http://127.0.0.1:4322**. Click standing upright, then horizontal pose, wait at least 1.5 seconds, and review the resulting incident. Acknowledge it, then resolve with a note. Click upright and try brief bend: it should not generate a new alert. Camera missing clears observed boxes but never resolves incidents. A repeat in the same spot is suppressed while that incident is open or acknowledged, and for 60 seconds after the last alert there (see repeat suppression). Metadata persists in `.data/incidents.sqlite`; stop the server before deleting that database to reset.
+Open **http://127.0.0.1:4322**. Click standing upright, then horizontal pose, hold for over two seconds and review the resulting incident. Acknowledge it, then resolve with a note. A brief bend lasting at most two seconds does not alert. Camera missing clears observed boxes but never resolves incidents. A repeat in the same spot is suppressed while that incident is open or acknowledged, and for 60 seconds after the last alert there (see repeat suppression). Metadata persists in `.data/incidents.sqlite`; stop the server before deleting that database to reset.
 
 ## Camera / local video
 
@@ -75,7 +81,7 @@ The optional camera path uses **Ultralytics (YOLOv8 code and the `yolov8n.pt` we
 
 Reference: https://github.com/rajvratzoom/siteops-final, commit `1ec38502226d6af7073e32644a5363a0738425b4`, particularly `src/fall_detection.py` and `src/main.py`. Method: detect person boxes, retain track IDs, calculate height/width < 1/1.5, and require 1.5 seconds of continuous horizontal observations. Camera tracking uses Ultralytics YOLOv8n and ByteTrack. These parameters are demo defaults, not clinical or operational thresholds.
 
-Original implementation here, without copied reference source. Unlike the reference, first alerts work with timestamps near zero, observation gaps reset candidate timing, repeated episodes work after cooldown, edge/close-up boxes are ignored, an upright-to-horizontal transition is required, and incidents require explicit human closure. No hardcoded fall confidence, no “recovered” claim when tracking disappears, no facial identity, no media recording, and no sponsor credentials.
+The implementation uses a different structure informed by the reference method; [SOURCE_AUDIT.md](SOURCE_AUDIT.md) records the similarity checks and their limits. This is not a clean-room implementation. Unlike the reference, first alerts work with timestamps near zero, observation gaps reset candidate timing, repeated episodes work after cooldown, edge/close-up boxes are ignored, an upright-to-horizontal transition is available in the configurable engine, and incidents require explicit human closure. No hardcoded fall confidence, no “recovered” claim when tracking disappears, no facial identity, no media recording, and no sponsor credentials.
 
 The base synthetic workflow and tests are verified separately from optional camera hardware. Camera/model installation, inference accuracy and real-world suitability require their own verification.
 

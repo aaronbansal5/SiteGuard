@@ -38,7 +38,7 @@ export const SessionSchema = z.strictObject({
   startedAt: ISO,
   endedAt: ISO.nullable(),
   context: ContextSchema,
-  consentVersion: z.literal("v1"),
+  consentVersion: z.enum(["v1", "local-test"]),
   shareWithSupervisor: z.boolean(),
   interruption: z.string().nullable(),
 });
@@ -125,6 +125,35 @@ export const SummarySchema = z.strictObject({
   breathingComparison: ComparisonSchema,
   limitations: z.array(z.string()),
 });
+export const TimeSeriesBucketSchema = z.strictObject({
+  startsAt: ISO,
+  endsAt: ISO,
+  observations: z.number().int().nonnegative(),
+  validPulseObservations: z.number().int().nonnegative(),
+  validBreathingObservations: z.number().int().nonnegative(),
+  averagePulseBpm: z.number().finite().nullable(),
+  averageBreathingBrpm: z.number().finite().nullable(),
+});
+export const TimeSeriesEvidenceSchema = z.strictObject({
+  sessionId: Id,
+  source: SourceSchema,
+  storage: z.strictObject({
+    database: z.enum(["sqlite", "postgres"]),
+    timescaleVersion: z.string().nullable(),
+    hypertable: z.boolean(),
+    aggregation: z.enum(["application_10s", "timescale_time_bucket_10s"]),
+  }),
+  bucketSeconds: z.literal(10),
+  totals: z.strictObject({
+    observations: z.number().int().nonnegative(),
+    validPulseObservations: z.number().int().nonnegative(),
+    validBreathingObservations: z.number().int().nonnegative(),
+    pulseCoveragePercent: z.number().finite(),
+    breathingCoveragePercent: z.number().finite(),
+  }),
+  buckets: z.array(TimeSeriesBucketSchema),
+  limitations: z.array(z.string()),
+});
 export const GapSchema = z.strictObject({
   taskId: Id,
   startsAt: ISO,
@@ -152,6 +181,8 @@ export type RestRequest = z.infer<typeof RequestSchema>;
 export type Symptom = z.infer<typeof SymptomSchema>;
 export type MetricSummary = z.infer<typeof MetricSummarySchema>;
 export type Summary = z.infer<typeof SummarySchema>;
+export type TimeSeriesBucket = z.infer<typeof TimeSeriesBucketSchema>;
+export type TimeSeriesEvidence = z.infer<typeof TimeSeriesEvidenceSchema>;
 export type Comparison = z.infer<typeof ComparisonSchema>;
 export type Gap = z.infer<typeof GapSchema>;
 export type Audit = z.infer<typeof AuditSchema>;

@@ -2,7 +2,7 @@
 // Presage bridge down/unhealthy/stop failure/disconnect, Gemini failures, and
 // database failures. All external services are local fixtures or stubs; no
 // real Presage, Gemini or PostgreSQL service is contacted.
-import { test, expect } from "@playwright/test";
+import { test, expect, describe, beforeEach, afterEach } from "vitest";
 import {
   createServer,
   type IncomingMessage,
@@ -20,6 +20,7 @@ import {
   close,
   client,
   loginAs,
+  loginAccount,
   acceleratedMockSession,
   SESSION_BODY,
   type Harness,
@@ -53,7 +54,7 @@ const PRESAGE = SESSION_BODY({
   context: { workload: "heavy", temperatureC: 26 },
 });
 
-test.describe("Presage bridge failures", () => {
+describe("Presage bridge failures", () => {
   test("bridge down: session stays presage, is interrupted, completes with insufficient data and no synthetic substitution", async () => {
     const h = await boot({
       bridgeUrl: await closedPort(),
@@ -62,7 +63,7 @@ test.describe("Presage bridge failures", () => {
     try {
       expect(
         (await client(h).get("/api/health")).body.measurementSources,
-      ).toEqual({ mock: true, presage: true });
+      ).toEqual({ mock: true, presage: true, browserCamera: false });
       const w = client(h, await loginAs(h, "worker"));
       const begin = await w.post("/api/sessions", PRESAGE);
       expect(begin.status).toBe(201);
@@ -242,7 +243,14 @@ test.describe("Presage bridge failures", () => {
     process.env.MEASUREMENT_TOKEN = "hosted-fixture-internal-token";
     let h: Harness;
     try {
-      h = await boot({ hosted: true, bridgeToken: "fixture-bridge-token" });
+      h = await boot({
+        hosted: true,
+        authMode: "oidc",
+        appOrigin: "https://siteguard.example",
+        oidcIssuer: "https://identity.example",
+        oidcClientId: "test-client",
+        bridgeToken: "fixture-bridge-token",
+      });
     } finally {
       for (const [k, v] of Object.entries(saved))
         if (v === undefined) delete process.env[k];
@@ -250,7 +258,7 @@ test.describe("Presage bridge failures", () => {
     }
     try {
       // Hosted cookies are Secure; inject over HTTP still carries them.
-      const w = client(h, await loginAs(h, "worker"));
+      const w = client(h, await loginAccount(h, "worker"));
       const res = await w.post("/api/sessions", PRESAGE);
       expect(res.status).toBe(403);
       expect(res.body.error.code).toBe("REAL_LOCAL_ONLY");
@@ -263,11 +271,11 @@ test.describe("Presage bridge failures", () => {
   });
 });
 
-test.describe("Gemini failures fall back to deterministic facts", () => {
+describe("Gemini failures fall back to deterministic facts", () => {
   const realFetch = globalThis.fetch;
   let geminiCalls: { url: string; body: string }[] = [];
   let respond: () => Promise<Response>;
-  test.beforeEach(() => {
+  beforeEach(() => {
     geminiCalls = [];
     globalThis.fetch = (async (
       input: RequestInfo | URL,
@@ -281,7 +289,7 @@ test.describe("Gemini failures fall back to deterministic facts", () => {
       return realFetch(input, init);
     }) as typeof fetch;
   });
-  test.afterEach(() => {
+  afterEach(() => {
     globalThis.fetch = realFetch;
   });
 
@@ -415,7 +423,7 @@ test.describe("Gemini failures fall back to deterministic facts", () => {
   });
 });
 
-test.describe("database failures", () => {
+describe("database failures", () => {
   test("unreachable PostgreSQL refuses to start instead of falling back to SQLite", async () => {
     const dir = mkdtempSync(join(tmpdir(), "siteguard-dbfail-"));
     const sqlitePath = join(dir, "should-not-exist.sqlite");

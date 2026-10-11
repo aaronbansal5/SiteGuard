@@ -1,0 +1,366 @@
+{
+  "baselineCommit": "6a89962a26f0f81899355beb0990367e17626476",
+  "frames": 12000,
+  "cases": [
+    {
+      "seed": 0,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 0,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "ebebe3875c5461c955eb9637a489af2fbd8e371ea1aaceaa672f7b3f2e1ac030",
+        "alerts": 1,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 1,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 0,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "a061601e0171cb02ee020d8d590d268c7851db3186daa59b606a844c2fc99070",
+        "alerts": 5,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 2,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 0,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "637508c2ec41f6923993a2f48d577195fd2c969b83596aa04e569e96f08ad8af",
+        "alerts": 5,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 3,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 5,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "41ce9dd1de22dc95c64b4985bb4d38a4c2470e9b4e11aec7868ed3604ccf1da7",
+        "alerts": 1,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 4,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 5,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "3ffd0adc5c96f448d79d3377683161f8b2b38500056abc7cf7c2c21e8d3ddae7",
+        "alerts": 4,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 5,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 5,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "c537d07e4f829e45a63047807abe2867c562f31cde3b9e5e9998b4bbc5083dd2",
+        "alerts": 5,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 6,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 60,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "790908316fb61f8a641764ccbc04366e1364eb88ea03fbc753c01b991f8dacd3",
+        "alerts": 3,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 7,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 60,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "c7385dff2a26b1a767c72cdc1d0824c808a6245e81fd390e95bf038ccaa4d12d",
+        "alerts": 3,
+        "suppressed": 1
+      }
+    },
+    {
+      "seed": 8,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 60,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "1776a7f542ad1037aea467155bfcdec17de7aae97698768a8b83c34226df3eca",
+        "alerts": 4,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 9,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 0,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "fc0e984f29007b88170b8dc57593f0941605389d44641f5bb1d2dbfeab271bde",
+        "alerts": 3,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 10,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 0,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "220fb4fd3c231c93b0168bbfbf8124b41f28c4a92031d7e9e482b005ae973f06",
+        "alerts": 4,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 11,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 0,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "d793a7ef682f8307aee7b43dee6051e56792a2de57de128983f829ddf1ab5fda",
+        "alerts": 8,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 12,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 5,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "87cdc1995900fc2fa4a594cc0a6876d07f7a85c3c36a38fe76398c865c0a7768",
+        "alerts": 2,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 13,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 5,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "e699da7b34a57654c727e8040b4437bd8a136cf6272e1a35ea0917c39002ab94",
+        "alerts": 4,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 14,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 5,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "7fa2f944bde040a824995fb81d98c2e788a1884a8d321313c2a01f0ff5e760ce",
+        "alerts": 2,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 15,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 60,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "65788f1f1922da0585983210989277a93f04cc18a2778c47e4b6e18ac2f8464c",
+        "alerts": 0,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 16,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 60,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "7456f0e0c5dc85aa591aaf04683fa03f9da168b716243c4cb353fe6778eadcd2",
+        "alerts": 3,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 17,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 60,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "5c02344658e5f450af5c47993029ec0490144c41d0e74326657775af3967cf3a",
+        "alerts": 6,
+        "suppressed": 1
+      }
+    },
+    {
+      "seed": 18,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 0,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "abe63bfcf11bc245306af413b889f9c1624dd1e638ce077f20e4c7fc60761535",
+        "alerts": 0,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 19,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 0,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "cf39565712026579373192deb0dd68c125bcba12949bf27cf5af747264b74035",
+        "alerts": 1,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 20,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 0,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "a0b582f588d1221b1498fa251cc7cc097af0067d61ada59dfa41ca9d3e1a12e2",
+        "alerts": 6,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 21,
+      "frames": 500,
+      "settings": {
+        "min_duration": 0.7,
+        "cooldown": 0,
+        "region_cooldown": 5,
+        "max_gap": 0.2
+      },
+      "expected": {
+        "digest": "a1b6283f2b98abfbc6e852db2cec2d4f462c14c8d8ad7f153fde828d9092a40f",
+        "alerts": 2,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 22,
+      "frames": 500,
+      "settings": {
+        "min_duration": 1.5,
+        "cooldown": 3,
+        "region_cooldown": 5,
+        "max_gap": 0.5
+      },
+      "expected": {
+        "digest": "cf1174a08c10fcbf836167590a9a68e0573e1de6a203f4e5bbc93a4a3b5cb713",
+        "alerts": 5,
+        "suppressed": 0
+      }
+    },
+    {
+      "seed": 23,
+      "frames": 500,
+      "settings": {
+        "min_duration": 2.4,
+        "cooldown": 10,
+        "region_cooldown": 5,
+        "max_gap": 0.8
+      },
+      "expected": {
+        "digest": "44e891bd071d2f777718aefc8d8c5beeb520ec44f6667c3be8388d5e632d7b2d",
+        "alerts": 5,
+        "suppressed": 0
+      }
+    }
+  ]
+}

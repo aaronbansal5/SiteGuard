@@ -17,7 +17,7 @@ import type {
   Gap,
   Explanation,
 } from "@siteguard/contracts";
-import { useIdentity } from "../App";
+
 import { api, useResource, useAction, time } from "../lib/api";
 import {
   PageHeading,
@@ -28,6 +28,8 @@ import {
   SYMPTOM_LABELS,
 } from "../components/ui";
 import { ScheduleTimeline } from "../components/ScheduleTimeline";
+import { SafetyIncidentsPanel } from "../components/SafetyIncidentsPanel";
+import { InvitationsPanel } from "../components/InvitationsPanel";
 import { IntegrationsPanel } from "../components/IntegrationsPanel";
 type Proposal = {
   baseRevision: number;
@@ -35,30 +37,6 @@ type Proposal = {
   coverageGaps: Gap[];
 };
 export function Supervisor() {
-  const { identity, login } = useIdentity(),
-    a = useAction();
-  if (identity?.role !== "supervisor")
-    return (
-      <section className="card empty-state">
-        <Users size={32} />
-        <h1>Safety operations workspace</h1>
-        <p>
-          Enter the supervisor demo to review requests and coordinate coverage.
-        </p>
-        <ErrorNotice message={a.error} />
-        <button
-          className="button primary"
-          disabled={a.busy}
-          onClick={() =>
-            void a.run(async () => {
-              await login({ role: "supervisor" });
-            })
-          }
-        >
-          Enter supervisor demo <ArrowRight size={17} />
-        </button>
-      </section>
-    );
   return <Operations />;
 }
 function Operations() {
@@ -72,7 +50,8 @@ function Operations() {
     [note, setNote] = useState(""),
     [explanation, setExplanation] = useState<Explanation>(),
     [committed, setCommitted] = useState(false),
-    [reset, setReset] = useState(false);
+    [reset, setReset] = useState(false),
+    [demoWorkerId, setDemoWorkerId] = useState("");
   const o = resource.data;
   const choose = (
     request: RestRequest,
@@ -157,6 +136,8 @@ function Operations() {
         }
       />
       <IntegrationsPanel />
+      <InvitationsPanel />
+      <SafetyIncidentsPanel />
       <ErrorNotice message={resource.error || a.error} />
       {resource.loading && !o ? (
         <Loading />
@@ -608,9 +589,42 @@ function Operations() {
       )}
       {reset && (
         <Modal
-          title="Reset local demonstration"
+          title="Local demonstration controls"
           onClose={() => setReset(false)}
         >
+          <p>
+            If the worker's fictional break has ended, open a new 15-minute
+            protected demo break. Existing sessions and measurements stay
+            intact.
+          </p>
+          <label>
+            Worker
+            <select
+              value={demoWorkerId}
+              onChange={(e) => setDemoWorkerId(e.target.value)}
+            >
+              <option value="">Choose a worker</option>
+              {o?.workers.map((worker) => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="button secondary"
+            disabled={a.busy || !demoWorkerId}
+            onClick={() =>
+              void a.run(async () => {
+                await api("/demo/fresh-break", { workerId: demoWorkerId });
+                setReset(false);
+                setProposal(undefined);
+                await resource.refresh();
+              })
+            }
+          >
+            Open fresh protected demo break
+          </button>
           <p>
             Recreate the fictional workforce, protected schedule, and synthetic
             history. Stop active check-ins first. Real measurements cannot be
