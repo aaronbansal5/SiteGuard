@@ -35,6 +35,20 @@ The exporter must apply the application's valid-reading/window rules and use onl
 
 No dataset is bundled. Keep private datasets and outputs in the already Git-ignored `.data/research/` directory. The script neither exports app data nor creates a dataset for you.
 
+## Sandbox-only synthetic demo
+
+For a UI or pipeline rehearsal only, generate and train the explicitly synthetic demo artifact:
+
+```bash
+python3 scripts/research/generate_demo.py
+python3 scripts/research/train.py \
+  --dataset .data/research/synthetic_demo.csv \
+  --allow-synthetic-demo \
+  --output .data/research/artifacts/demo-run-001
+```
+
+This writes `data_kind=synthetic`, `label_source=synthetic_demo`, `runtime_ready=false`, and `confidence=null`. The artifact must never be loaded into the application or described as evidence from real participants. The very high demo metrics are expected from the constructed sandbox pattern and are not scientific validation.
+
 ## Validate without training
 
 From the SiteGuard repository root:

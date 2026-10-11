@@ -1,4 +1,4 @@
-"""Offline research baseline; no data generation, downloads, or runtime integration."""
+"""Offline research baseline; demo mode is explicitly synthetic and never runtime-ready."""
 
 import argparse
 import csv
@@ -49,7 +49,7 @@ def timestamp(value):
         raise DatasetError("timestamps must be ISO 8601 with a timezone") from error
 
 
-def validate_row(raw, line):
+def validate_row(raw, line, allow_synthetic_demo=False):
     prefix = f"CSV record {line}: "
     if None in raw or any(raw.get(field) is None for field in FIELDS):
         raise DatasetError(prefix + "wrong number of columns")
@@ -59,10 +59,16 @@ def validate_row(raw, line):
     for field in ("participant_id", "session_id", "consent_record_id"):
         if not ID_PATTERN.fullmatch(row[field]):
             raise DatasetError(prefix + f"{field} must be a pseudonymous token")
-    for field, expected in (
+    expected_fields = (
         ("consent_granted", "true"), ("data_kind", "real"),
         ("measurement_source", "presage"), ("label_source", "self_report"),
-    ):
+    )
+    if allow_synthetic_demo:
+        expected_fields = (
+            ("consent_granted", "false"), ("data_kind", "synthetic"),
+            ("measurement_source", "mock"), ("label_source", "synthetic_demo"),
+        )
+    for field, expected in expected_fields:
         if row[field] != expected:
             raise DatasetError(prefix + f"{field} must be {expected}")
     try:
@@ -96,15 +102,15 @@ def validate_row(raw, line):
     return row
 
 
-def load_dataset(path):
+def load_dataset(path, allow_synthetic_demo=False):
     if not path.is_file():
-        raise DatasetError("real labeled dataset file is missing; no fallback is available")
+        raise DatasetError("labeled dataset file is missing; no fallback is available")
     payload = path.read_bytes()
     try:
         reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig")), strict=True)
         if reader.fieldnames is None or len(reader.fieldnames) != len(FIELDS) or set(reader.fieldnames) != set(FIELDS):
             raise DatasetError("CSV header must contain every schema field exactly once, with no extras")
-        rows = [validate_row(raw, index) for index, raw in enumerate(reader, start=2)]
+        rows = [validate_row(raw, index, allow_synthetic_demo) for index, raw in enumerate(reader, start=2)]
     except (UnicodeError, csv.Error) as error:
         raise DatasetError("dataset must be a valid UTF-8 CSV") from error
     if len(rows) < 20:
@@ -198,7 +204,8 @@ def partition_summary(rows):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", type=Path, required=True, help="local consented real labeled CSV")
+    parser.add_argument("--dataset", type=Path, required=True, help="local labeled CSV")
+    parser.add_argument("--allow-synthetic-demo", action="store_true", help="demo only: accept explicitly synthetic rows; never runtime-ready")
     parser.add_argument("--dry-run", action="store_true", help="validate and split only; write nothing")
     parser.add_argument("--output", type=Path, help="new directory for research artifacts; never overwritten")
     parser.add_argument("--seed", type=int, default=20261011)
@@ -216,7 +223,7 @@ def main(argv=None):
             raise DatasetError("learning rate must be finite and in (0, 1]")
         if not math.isfinite(args.l2) or not 0 <= args.l2 <= 1:
             raise DatasetError("l2 must be finite and in [0, 1]")
-        rows, digest = load_dataset(args.dataset)
+        rows, digest = load_dataset(args.dataset, args.allow_synthetic_demo)
         train, validation = split_dataset(rows, args.seed, args.validation_fraction)
         report = {
             "schema_version": SCHEMA_VERSION,
@@ -228,6 +235,7 @@ def main(argv=None):
                 "train": partition_summary(train), "validation": partition_summary(validation),
             },
             "target": "self-reported request for additional rest",
+            "dataset_kind": "synthetic_demo" if args.allow_synthetic_demo else "real_research",
             "experimental": True,
             "runtime_ready": False,
             "confidence": None,
