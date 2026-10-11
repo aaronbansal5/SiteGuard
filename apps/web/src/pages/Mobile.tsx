@@ -1016,7 +1016,14 @@ function MobileMeasuring({
       )}
       {s.source === "presage" && !phoneCamera && (
         <>
-          <CameraPreview sessionId={s.id} />
+          <CameraPreview
+            sessionId={s.id}
+            failure={
+              s.interruption?.startsWith("Measurement source failed to start")
+                ? s.interruption
+                : null
+            }
+          />
           {presentationDemo && (
             <div className="notice demo">
               <p>

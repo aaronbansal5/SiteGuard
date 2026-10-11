@@ -95,14 +95,17 @@ describe("Presage bridge failures", () => {
       const id = begin.body.session.id;
       expect(begin.body.session.source).toBe("presage");
       const stored = (await h.repo.get("sessions", id))!;
-      expect(stored.interruption).toBe("Measurement source failed to start.");
+      expect(stored.interruption).toContain(
+        "Measurement source failed to start.",
+      );
+      expect(stored.interruption).toContain("Check the bridge");
       expect(h.manager.status(id)).toMatchObject({
         type: "error",
         code: "SOURCE_UNAVAILABLE",
         retryable: false,
       });
       expect((h.manager.status(id) as { message: string }).message).toContain(
-        "synthetic mode is a separate check-in",
+        "begin a fresh check-in",
       );
       // No readings at all, and certainly no mock readings, were written.
       await new Promise((r) => setTimeout(r, 1500));

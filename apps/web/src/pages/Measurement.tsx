@@ -42,6 +42,11 @@ export function Measurement() {
   const [cameraActive, setCameraActive] = useState(false);
   const browserCamera = search.get("camera") === "browser";
   const s = session.data?.session;
+  const startupFailure = s?.interruption?.startsWith(
+    "Measurement source failed to start",
+  )
+    ? s.interruption
+    : null;
   const health = useResource<{ presentationDemo?: boolean }>("/health");
   const completion = useCheckInCompletion(s, (sessionId) =>
     navigate(`/sessions/${sessionId}`),
@@ -52,7 +57,8 @@ export function Measurement() {
       !browserCamera ||
       s?.source !== "presage" ||
       s.status !== "active" ||
-      autoCompleting
+      autoCompleting ||
+      startupFailure
     )
       return;
     let stopped = false;
@@ -195,7 +201,7 @@ export function Measurement() {
       if (videoRef.current) videoRef.current.srcObject = null;
       setCameraActive(false);
     };
-  }, [browserCamera, id, s?.source, s?.status, autoCompleting]);
+  }, [browserCamera, id, s?.source, s?.status, autoCompleting, startupFailure]);
   if (!s)
     return (
       <>
@@ -244,7 +250,9 @@ export function Measurement() {
                 ? "SYNTHETIC MEASUREMENT"
                 : "LOCAL CAMERA CHECK-IN"}
             </span>
-            <span className="badge">{quality || "Waiting"}</span>
+            <span className="badge">
+              {startupFailure ? "Camera unavailable" : quality || "Waiting"}
+            </span>
           </div>
           {browserCamera && s.source === "presage" ? (
             <div className="camera-frame">
@@ -261,10 +269,15 @@ export function Measurement() {
                 }}
               />
               <strong>
-                {cameraActive ? "Camera active" : "Starting camera…"}
+                {startupFailure
+                  ? "Camera unavailable"
+                  : cameraActive
+                    ? "Camera active"
+                    : "Starting camera…"}
               </strong>
               <span>
-                {cameraError ||
+                {startupFailure ||
+                  cameraError ||
                   "Frames are processed transiently by Presage; no video is saved."}
               </span>
               {cameraError && (
@@ -281,7 +294,7 @@ export function Measurement() {
             </div>
           ) : s.source === "presage" ? (
             <>
-              <CameraPreview sessionId={s.id} />
+              <CameraPreview sessionId={s.id} failure={startupFailure} />
               {health.data?.presentationDemo && (
                 <div className="notice demo">
                   <p>
@@ -359,7 +372,7 @@ export function Measurement() {
           )}
           <div className="connection">
             <span className={`dot ${stream.error ? "amber" : ""}`} />
-            {stream.status}
+            {startupFailure ? "Camera startup failed" : stream.status}
           </div>
           <div className="positioning-tip">
             <Info size={16} />

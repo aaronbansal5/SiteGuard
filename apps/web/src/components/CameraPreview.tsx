@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
-export function CameraPreview({ sessionId }: { sessionId: string }) {
+export function CameraPreview({
+  sessionId,
+  failure,
+}: {
+  sessionId: string;
+  failure?: string | null;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState(
@@ -15,6 +21,11 @@ export function CameraPreview({ sessionId }: { sessionId: string }) {
       const c = canvas.current;
       if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
     };
+    if (failure) {
+      clear();
+      setMessage(failure);
+      return;
+    }
     const poll = async () => {
       let bitmap: ImageBitmap | undefined;
       try {
@@ -72,7 +83,7 @@ export function CameraPreview({ sessionId }: { sessionId: string }) {
       clearTimeout(timer);
       clear();
     };
-  }, [sessionId]);
+  }, [sessionId, failure]);
   return (
     <div className="live-camera-preview">
       <div className="live-camera-image">

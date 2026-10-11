@@ -6,6 +6,8 @@ import {
   type MeasurementSource,
 } from "@siteguard/contracts";
 import type { Config } from "../config.js";
+export class PresageStartError extends Error {}
+
 export class PresageSource implements MeasurementSource {
   private listeners = new Set<(e: MeasurementEvent) => void>();
   private bridgeSessionId?: string;
@@ -61,12 +63,33 @@ export class PresageSource implements MeasurementSource {
       headers: this.headers(),
       redirect: "error",
       body: JSON.stringify({ appSessionId: id, input: this.input }),
-      // Camera + SDK pipeline startup is slower than a health check (observed
-      // several seconds on macOS with SmartSpectra 3.4.0).
-      signal: AbortSignal.timeout(30000),
+      // The native adapter allows 45 seconds plus cleanup. Do not abandon a
+      // still-starting capture before it can return its session handle.
+      signal: AbortSignal.timeout(55000),
     });
-    if (!response.ok)
-      throw new Error("Presage bridge could not start a camera session");
+    if (!response.ok) {
+      let code: unknown;
+      try {
+        code = (await response.json()).code;
+      } catch {
+        /* status fallback */
+      }
+      const messages: Record<string, string> = {
+        CAMERA_BUSY:
+          "Another check-in holds the camera. Finish it before starting again.",
+        SDK_UNAVAILABLE:
+          "The Presage SDK is unavailable. Check the bridge configuration.",
+        START_FAILED:
+          "Presage could not start camera processing. Restart the camera bridge and begin a fresh check-in.",
+        SESSION_ALREADY_STOPPED:
+          "This camera capture has already stopped. Begin a fresh check-in.",
+      };
+      throw new PresageStartError(
+        typeof code === "string" && Object.hasOwn(messages, code)
+          ? messages[code]
+          : `Presage camera startup failed (HTTP ${response.status}). Begin a fresh check-in.`,
+      );
+    }
     this.bridgeSessionId = BridgeSessionSchema.parse(
       await response.json(),
     ).bridgeSessionId;

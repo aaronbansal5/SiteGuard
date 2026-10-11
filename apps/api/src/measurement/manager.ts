@@ -2,7 +2,7 @@ import type { MeasurementEvent, MeasurementSource } from "@siteguard/contracts";
 import type { Repository } from "../db/repository.js";
 import type { Config } from "../config.js";
 import { MockSource } from "./mock.js";
-import { PresageSource } from "./presage.js";
+import { PresageSource, PresageStartError } from "./presage.js";
 export class MeasurementManager {
   private active = new Map<
     string,
@@ -91,18 +91,21 @@ export class MeasurementManager {
     try {
       state.starting = source.start(id);
       await state.starting;
-    } catch {
+    } catch (error) {
+      const message =
+        error instanceof PresageStartError
+          ? error.message
+          : "Presage could not connect or finish camera startup. Check the bridge and begin a fresh check-in.";
       this.publish(id, {
         type: "error",
         code: "SOURCE_UNAVAILABLE",
-        message:
-          "Presage bridge unavailable. Stop this session; synthetic mode is a separate check-in.",
+        message,
         retryable: false,
       });
       await this.repo.transaction(async (r) => {
         const s = await r.get("sessions", id);
         if (s) {
-          s.interruption = "Measurement source failed to start.";
+          s.interruption = `Measurement source failed to start. ${message}`;
           await r.put("sessions", s);
         }
       });
