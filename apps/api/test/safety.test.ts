@@ -90,6 +90,68 @@ describe("Safety incident integration", () => {
       await h.app.close();
     }
   });
+  test("workers persist scene notes, confirm calls and resolve with revision checks", async () => {
+    const h = await testApp();
+    try {
+      const event = observation();
+      await h.app.inject({
+        method: "POST",
+        url: "/api/safety/events",
+        headers: { authorization: "Bearer internal-test-token" },
+        payload: event,
+      });
+      const cookie = await login(h.app);
+      const update = (action: string, revision: number, note: string) =>
+        h.app.inject({
+          method: "PATCH",
+          url: `/api/safety/incidents/${event.eventId}`,
+          headers: { cookie },
+          payload: { action, revision, note },
+        });
+      expect((await update("add_note", 0, "")).statusCode).toBe(400);
+      expect(
+        (await update("add_note", 0, "Checking the scene now")).statusCode,
+      ).toBe(200);
+      expect((await update("resolve", 0, "Checked")).statusCode).toBe(409);
+      const called = await update(
+        "emergency_called",
+        1,
+        "Called emergency services from my phone",
+      );
+      expect(called.json().incident.status).toBe("open");
+      const closed = await update(
+        "resolve",
+        2,
+        "Scene checked and handed to responders",
+      );
+      expect(closed.json().incident.status).toBe("resolved");
+      expect(closed.json().incident.updates).toHaveLength(3);
+      expect(closed.json().incident.workerId).toBeUndefined();
+      const row = (
+        await h.repo.driver.query(
+          "SELECT payload FROM safety_incidents WHERE id=$1",
+          [event.eventId],
+        )
+      )[0];
+      expect(JSON.parse(row.payload as string).updates[0].note).toBe(
+        "Checking the scene now",
+      );
+      const sync = await h.app.inject({
+        method: "POST",
+        url: "/api/safety/incident-statuses",
+        headers: { authorization: "Bearer internal-test-token" },
+        payload: { ids: [event.eventId] },
+      });
+      expect(sync.json().incidents[0].note).toBe(
+        "Scene checked and handed to responders",
+      );
+      expect(
+        (await update("add_note", 3, "Follow-up after closure")).statusCode,
+      ).toBe(200);
+    } finally {
+      await h.app.close();
+    }
+  });
   test("human association creates assistance, acknowledgment and incident closure never clear planner block", async () => {
     const h = await testApp();
     try {

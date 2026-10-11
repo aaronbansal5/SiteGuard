@@ -47,6 +47,21 @@ test("worker sees shared scene queue and live camera without manager controls", 
   await expect(page.getByRole("button", { name: "Stop camera" })).toHaveCount(
     0,
   );
+  await expect(
+    page.getByRole("textbox", {
+      name: "Scene note (required to save or close)",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save note" })).toBeDisabled();
+  await page
+    .getByRole("textbox", { name: "Scene note (required to save or close)" })
+    .fill("Checking the scene");
+  await expect(
+    page.getByRole("button", { name: "Resolve after check" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("link", { name: "Call emergency services · 911 (US)" }),
+  ).toHaveAttribute("href", "tel:911");
   expect((await page.request.get("/api/fall-detection/preview")).status()).toBe(
     200,
   );
@@ -96,7 +111,7 @@ test("manager sees boxes and commits revision checked scene review", async ({
     page.locator('svg[aria-label="Anonymous person tracking boxes"] rect'),
   ).toHaveCount(1);
   await page
-    .getByRole("textbox", { name: "Follow-up note (required to close)" })
+    .getByRole("textbox", { name: "Scene note (required to save or close)" })
     .fill("Checked scene");
   await page.getByRole("button", { name: "Resolve after check" }).click();
   await expect(page.getByText("resolved", { exact: true })).toBeVisible();

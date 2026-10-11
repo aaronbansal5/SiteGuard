@@ -10,15 +10,18 @@ at `http://127.0.0.1:${PORT:-3001}`. Native camera prerequisites remain in
 Signed-in workers and managers open **Fall detection** in the sidebar. Managers
 can start/stop the camera and see its live preview with anonymous tracking boxes.
 All signed-in users can view the live feed and tracking boxes. Workers see shared
-incident status without worker associations or manager notes; camera controls
-and incident review actions remain manager-only. A valid wider-than-tall person box generates a possible-person-down observation
+incident status without worker associations or manager notes; camera controls remain manager-only. Signed-in users can add shared scene notes,
+acknowledge, resolve after checking, mark false alarms and explicitly confirm
+contact with emergency services. Updates persist with timestamps and role in the
+incident payload and audit log. The 911 (US) link opens a device dialer; it neither
+automatically places a call nor claims that help was dispatched. A valid wider-than-tall person box generates a possible-person-down observation
 **on the first qualifying frame**, without a dwell timer; this does not confirm a fall or injury.
 
 The Scene review queue reads `safety_incidents` in the configured application
 database (PostgreSQL/Tiger Data or explicitly enabled rehearsal SQLite). Local
 SQLite is a durable detector outbox, not the shared queue. Failed delivery remains
 pending and retries; the UI reports missing configuration or pending delivery.
-Stored application reports remain visible if the detector is offline. Manager
+Stored application reports remain visible if the detector is offline. Scene
 review actions use revision-checked, audited `/api/safety/incidents/:id` updates.
 The detector synchronizes those explicit decisions back into its local duplicate
 suppression cache. Incident closure never resolves linked assistance requests.

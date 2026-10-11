@@ -35,10 +35,35 @@ export const SafetyIncidentSchema = SafetyEventSchema.extend({
   workerId: Id.nullable(),
   assistanceRequestId: Id.nullable(),
   revision: z.number().int().nonnegative(),
+  updates: z
+    .array(
+      z.strictObject({
+        id: Id,
+        type: z.enum([
+          "acknowledge",
+          "associate",
+          "resolve",
+          "false_alarm",
+          "add_note",
+          "emergency_called",
+        ]),
+        note: z.string().max(1000),
+        createdAt: ISO,
+        actorRole: z.enum(["worker", "supervisor"]),
+      }),
+    )
+    .default([]),
 });
 export const SafetyActionSchema = z
   .strictObject({
-    action: z.enum(["acknowledge", "associate", "resolve", "false_alarm"]),
+    action: z.enum([
+      "acknowledge",
+      "associate",
+      "resolve",
+      "false_alarm",
+      "add_note",
+      "emergency_called",
+    ]),
     revision: z.number().int().nonnegative(),
     note: z.string().trim().max(1000),
     workerId: Id.optional(),
@@ -57,7 +82,13 @@ export const SafetyActionSchema = z
         message: "Worker is only accepted for association",
       });
     if (
-      ["resolve", "false_alarm", "associate"].includes(value.action) &&
+      [
+        "resolve",
+        "false_alarm",
+        "associate",
+        "add_note",
+        "emergency_called",
+      ].includes(value.action) &&
       !value.note
     )
       ctx.addIssue({

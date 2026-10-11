@@ -92,6 +92,7 @@ export function registerFallRoutes(
         zoneId: record.zoneId,
         durationSeconds: record.durationSeconds,
         revision: record.revision,
+        updates: record.updates.filter((update) => update.type !== "associate"),
         ...(actor.role === "supervisor" ? { note: record.note } : {}),
       }));
     let scene: z.infer<typeof Scene>;

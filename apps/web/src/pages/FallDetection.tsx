@@ -15,6 +15,13 @@ type Incident = {
   durationSeconds: number;
   note?: string | null;
   revision: number;
+  updates?: {
+    id: string;
+    type: string;
+    note: string;
+    createdAt: string;
+    actorRole: string;
+  }[];
 };
 type Scene = {
   source: string;
@@ -317,59 +324,96 @@ function SceneView({ manager }: { manager: boolean }) {
                         : "Camera observation"}
                   </small>
                   {manager && incident.note && <p>{incident.note}</p>}
-                  {manager &&
-                    ["open", "acknowledged"].includes(incident.status) && (
-                      <>
-                        <label className="fall-note">
-                          Follow-up note (required to close)
-                          <textarea
-                            value={notes[incident.id] || ""}
-                            maxLength={1000}
-                            onChange={(e) =>
-                              setNotes({
-                                ...notes,
-                                [incident.id]: e.target.value,
+                  {incident.updates?.map((update) => (
+                    <div key={update.id} className="fall-incident">
+                      <strong>{update.type.replaceAll("_", " ")}</strong>
+                      <small>
+                        {" "}
+                        · {clock.format(new Date(update.createdAt))} ·{" "}
+                        {update.actorRole === "supervisor"
+                          ? "Manager"
+                          : "Worker"}
+                      </small>
+                      <p>{update.note}</p>
+                    </div>
+                  ))}
+                  <a className="button secondary" href="tel:911">
+                    Call emergency services · 911 (US)
+                  </a>
+                  <p>
+                    <small>
+                      Opens your device’s dialer. If calling is unsupported, use
+                      a phone. Confirm below only after you have actually
+                      contacted emergency services.
+                    </small>
+                  </p>
+                  {
+                    <>
+                      <label className="fall-note">
+                        Scene note (required to save or close)
+                        <textarea
+                          value={notes[incident.id] || ""}
+                          maxLength={1000}
+                          onChange={(e) =>
+                            setNotes({
+                              ...notes,
+                              [incident.id]: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <div className="button-row">
+                        {(["open", "acknowledged"].includes(incident.status)
+                          ? [
+                              "add_note",
+                              "acknowledge",
+                              "resolve",
+                              "false_alarm",
+                              "emergency_called",
+                            ]
+                          : ["add_note", "emergency_called"]
+                        ).map((kind) => (
+                          <button
+                            key={kind}
+                            className="button secondary"
+                            disabled={
+                              action.busy ||
+                              (kind !== "acknowledge" &&
+                                !notes[incident.id]?.trim())
+                            }
+                            onClick={() =>
+                              void action.run(async () => {
+                                await api(
+                                  `/safety/incidents/${incident.id}`,
+                                  {
+                                    action: kind,
+                                    revision: incident.revision,
+                                    note: notes[incident.id] || "",
+                                  },
+                                  "PATCH",
+                                );
+                                setNotes((current) => ({
+                                  ...current,
+                                  [incident.id]: "",
+                                }));
+                                await resource.refresh();
                               })
                             }
-                          />
-                        </label>
-                        <div className="button-row">
-                          {["acknowledge", "resolve", "false_alarm"].map(
-                            (kind) => (
-                              <button
-                                key={kind}
-                                className="button secondary"
-                                disabled={
-                                  action.busy ||
-                                  (kind !== "acknowledge" &&
-                                    !notes[incident.id]?.trim())
-                                }
-                                onClick={() =>
-                                  void action.run(async () => {
-                                    await api(
-                                      `/safety/incidents/${incident.id}`,
-                                      {
-                                        action: kind,
-                                        revision: incident.revision,
-                                        note: notes[incident.id] || "",
-                                      },
-                                      "PATCH",
-                                    );
-                                    await resource.refresh();
-                                  })
-                                }
-                              >
-                                {kind === "acknowledge"
-                                  ? "Acknowledge"
-                                  : kind === "resolve"
-                                    ? "Resolve after check"
+                          >
+                            {kind === "acknowledge"
+                              ? "Acknowledge"
+                              : kind === "resolve"
+                                ? "Resolve after check"
+                                : kind === "add_note"
+                                  ? "Save note"
+                                  : kind === "emergency_called"
+                                    ? "Confirm emergency services contacted"
                                     : "Mark false alarm"}
-                              </button>
-                            ),
-                          )}
-                        </div>
-                      </>
-                    )}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  }
                 </article>
               ))}
           </section>
