@@ -43,6 +43,8 @@ export interface BridgeOptions {
   port?: number;
   heartbeatMs?: number;
   replayWindowMs?: number;
+  /** Release a capture when its application event stream disappears. */
+  orphanGraceMs?: number;
   log?: (line: string) => void;
 }
 
@@ -61,6 +63,7 @@ class BridgeSession {
   frameWindowCount = 0;
   lastFrameTimestampUs = 0;
   frameQueue: Promise<void> = Promise.resolve();
+  orphanTimer?: ReturnType<typeof setTimeout>;
   readonly log: EventLog;
   readonly streams = new Set<ServerResponse>();
   constructor(
@@ -100,6 +103,7 @@ export class PresageBridge {
   private readonly clock: Clock;
   private readonly heartbeatMs: number;
   private readonly windowMs: number;
+  private readonly orphanGraceMs: number;
   private readonly tokenDigest: Buffer;
   private readonly sessions = new Map<string, BridgeSession>();
   /** The one session allowed to hold the camera (starting or active). */
@@ -115,6 +119,7 @@ export class PresageBridge {
     this.clock = options.clock ?? systemClock;
     this.heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
     this.windowMs = options.replayWindowMs ?? REPLAY_WINDOW_MS;
+    this.orphanGraceMs = options.orphanGraceMs ?? 10_000;
     this.log = options.log ?? (() => {});
     this.server = createServer((req, res) => {
       this.handle(req, res).catch((e: unknown) => {
@@ -402,6 +407,8 @@ export class PresageBridge {
     if (session.state === "stopped") return;
     if (!session.stopping) {
       session.stopping = (async () => {
+        clearTimeout(session.orphanTimer);
+        session.orphanTimer = undefined;
         await session.starting?.catch(() => {});
         await session.capture?.close();
         session.log.append({ type: "status", state: "stopped", message: null });
@@ -425,6 +432,26 @@ export class PresageBridge {
         `Camera release failed: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
+  }
+
+  /**
+   * The API owns the only event stream for a live capture. If it goes away
+   * (for example after a local API restart), the bridge must not keep the
+   * camera locked forever. A grace period keeps normal SSE reconnects safe.
+   */
+  private scheduleOrphanStop(session: BridgeSession) {
+    if (session.state === "stopped" || session.streams.size) return;
+    clearTimeout(session.orphanTimer);
+    session.orphanTimer = setTimeout(() => {
+      session.orphanTimer = undefined;
+      if (session.state !== "stopped" && !session.streams.size)
+        void this.stopSession(session).catch((error) => {
+          this.log(
+            `orphaned camera release failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    }, this.orphanGraceMs);
+    session.orphanTimer.unref();
   }
 
   private async frame(
@@ -522,14 +549,17 @@ export class PresageBridge {
       await session.frameQueue;
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Presage rejected the camera frame";
+        error instanceof Error
+          ? error.message
+          : "Presage rejected the camera frame";
       // A SmartSpectra invalid-state error is terminal for this SDK instance.
       // Release the camera and close the event stream so clients can start a
       // fresh check-in instead of continuing to post frames into a dead state.
       session.log.append({
         type: "error",
         code: "PRESAGE_FRAME_REJECTED",
-        message: "Presage stopped accepting camera frames. Restart this check-in.",
+        message:
+          "Presage stopped accepting camera frames. Restart this check-in.",
         retryable: false,
       });
       await this.stopSession(session);
@@ -614,13 +644,16 @@ export class PresageBridge {
       () => res.write(": heartbeat\n\n"),
       this.heartbeatMs,
     );
+    clearTimeout(session.orphanTimer);
+    session.orphanTimer = undefined;
     session.streams.add(res);
     const cleanup = () => {
       clearInterval(heartbeat);
       unsubscribe();
       session.streams.delete(res);
+      this.scheduleOrphanStop(session);
     };
     res.on("close", cleanup);
-    req.on("close", cleanup);
+    req.on("aborted", cleanup);
   }
 }
