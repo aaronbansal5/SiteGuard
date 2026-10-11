@@ -261,11 +261,11 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const presageAvailable = Boolean(health.data?.measurementSources.presage);
   const canMeasure =
     Boolean(browserCamera || demoMode || (localTest && presageAvailable)) &&
-    Boolean(checkInBreak);
+    (localTest || Boolean(checkInBreak));
   const blockedReason =
     !browserCamera && !demoMode && !(localTest && presageAvailable)
       ? "Camera check-in needs HTTPS and a running Presage bridge. Synthetic demo mode is also unavailable."
-      : !checkInBreak
+      : !localTest && !checkInBreak
         ? `No scheduled check-in window is available${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
         : "";
 
@@ -663,7 +663,8 @@ function MobileConsent({
       className="mobile-card"
       onSubmit={(e) => {
         e.preventDefault();
-        if ((!localTest && !consent) || !breakId || a.busy) return;
+        if ((!localTest && !consent) || (!localTest && !breakId) || a.busy)
+          return;
         void a.run(async () => {
           let media: MediaStream | undefined;
           if (phoneCamera) {
@@ -687,7 +688,7 @@ function MobileConsent({
           }
           try {
             const result = await startOrResumeCheckIn(workerId, {
-              breakId,
+              ...(breakId ? { breakId } : {}),
               onDemand,
               source,
               ...(phoneCamera ? { input: "custom" as const } : {}),

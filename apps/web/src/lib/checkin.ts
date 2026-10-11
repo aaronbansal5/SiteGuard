@@ -3,13 +3,17 @@ import { api } from "./api";
 
 type Preferences = Pick<
   Session,
-  "breakId" | "source" | "consentVersion" | "shareWithSupervisor" | "context"
+  "source" | "consentVersion" | "shareWithSupervisor" | "context"
 > & { input?: "camera" | "custom"; onDemand?: boolean };
+
+type PreferencesWithOptionalBreak = Omit<Preferences, "breakId"> & {
+  breakId?: Session["breakId"];
+};
 
 /** Called only by an explicit worker start/switch action. Never mix sources. */
 export async function startOrResumeCheckIn(
   workerId: string,
-  preferences: Preferences,
+  preferences: PreferencesWithOptionalBreak,
 ) {
   const history = await api<{ sessions: Session[] }>(
     `/workers/${workerId}/history?limit=20`,

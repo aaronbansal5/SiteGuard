@@ -120,7 +120,7 @@ export function CheckIn() {
             if ((!localTest && !consent) || a.busy) return;
             void a.run(async () => {
               const result = await startOrResumeCheckIn(identity.workerId, {
-                breakId: breakId!,
+                ...(breakId ? { breakId } : {}),
                 onDemand,
                 source,
                 ...(source === "presage" && browserCamera
@@ -203,7 +203,7 @@ export function CheckIn() {
             message={
               a.error ||
               health.error ||
-              (!breakId
+              (!localTest && !breakId
                 ? "Select your active protected break from the worker portal before starting."
                 : "")
             }
@@ -211,7 +211,10 @@ export function CheckIn() {
           <button
             className="button primary full"
             disabled={
-              health.loading || (!localTest && !consent) || a.busy || !breakId
+              health.loading ||
+              (!localTest && !consent) ||
+              a.busy ||
+              (!localTest && !breakId)
             }
           >
             {a.busy
