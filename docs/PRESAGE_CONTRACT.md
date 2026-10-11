@@ -10,8 +10,9 @@ Rates finite and positive when present. Unknown excluded from analytics. Documen
 ## Transport
 
 Listen on 127.0.0.1:4311; backend calls bridge with Authorization: Bearer PRESAGE_BRIDGE_TOKEN, never browser. Do not accept arbitrary bridge URL from user. Hosted demo cannot access a volunteer's local bridge; real demo runs on same laptop.
-GET /v1/health → {protocolVersion:1,source:"presage",status:"ready"|"unavailable",reason:string|null}
-POST /v1/sessions {appSessionId:UUID} → 201 {bridgeSessionId:string}
+GET /v1/health?input=camera|custom → {protocolVersion:1,source:"presage",status:"ready"|"unavailable",reason:string|null}. Custom mode does not require a camera on the bridge host.
+POST /v1/sessions {appSessionId:UUID,input?:"camera"|"custom"} → 201 {bridgeSessionId:string}. Input defaults to camera and is immutable for the session.
+POST /v1/sessions/:id/frame?timestampUs=epoch-microseconds → 204. Custom-input sessions only; exact 480×360 RGBA `application/octet-stream` or JPEG `image/jpeg` (up to 1 MiB, each dimension 240–960 pixels). The bridge preserves JPEG dimensions and decodes to RGBA in memory before calling the SDK. Browser never calls the bridge directly; the owning worker's same-origin API proxies bounded frames without storing them.
 GET /v1/sessions/:id/events?after=sequence → SSE numeric monotonic event IDs.
 Data: {type:"reading",reading:VitalReading}, {type:"status",state:"positioning"|"measuring"|"stopped",message:string|null}, {type:"error",code,message,retryable:boolean}.
 POST /v1/sessions/:id/stop → {status:"stopped"}, idempotent, releases camera.
@@ -22,4 +23,4 @@ Never substitute mock into Presage session. Start failure leaves app session sto
 ## Mock and verification
 
 Mock source uses same control/events; backend seeded one-second readings, explicit invalid/null segments, source=mock. No camera permission required. Preview, if added, cannot imply it generates synthetic readings.
-Presage key stays in bridge; no footage through app. Developer 2 documents SDK version, OS, camera, permissions, output/validity mapping, privacy/telemetry and tested start/stop/reconnect. Deliver fixtures and standalone smoke command. Native SDK work is intentionally not implemented by Developer 1.
+Presage key stays in bridge. In browser custom-input mode, frames pass transiently through the API and bridge memory; no footage is persisted. The local browser path requires trusted HTTPS and is not yet verified with live iPhone vitals. The native Swift app uses its own on-device front-camera SDK path.

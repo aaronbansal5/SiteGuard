@@ -50,6 +50,13 @@ export interface AdapterHandlers {
 export interface AdapterCapture {
   /** Stop measuring and release the camera. Must be idempotent. */
   close(): Promise<void>;
+  /** Only present for explicitly selected custom-input sessions. */
+  sendFrame?(
+    frame: Buffer,
+    width: number,
+    height: number,
+    timestampUs: number,
+  ): void;
 }
 
 export interface AdapterProbe {
@@ -61,9 +68,12 @@ export interface SdkAdapter {
   /** Used for logs and health reasons only. */
   readonly kind: "fixture" | "presage-sdk";
   /** Cheap readiness check (SDK loaded, key configured, camera enumerable). */
-  probe(): Promise<AdapterProbe>;
+  probe(mode?: "camera" | "custom"): Promise<AdapterProbe>;
   /** Acquire the camera and begin measuring. Rejects if it cannot. */
-  open(handlers: AdapterHandlers): Promise<AdapterCapture>;
+  open(
+    handlers: AdapterHandlers,
+    mode?: "camera" | "custom",
+  ): Promise<AdapterCapture>;
 }
 
 export interface Clock {

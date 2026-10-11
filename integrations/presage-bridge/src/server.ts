@@ -7,6 +7,7 @@ import {
 import { randomUUID, timingSafeEqual, createHash } from "node:crypto";
 import { once } from "node:events";
 import { z } from "zod";
+import sharp from "sharp";
 import type { AdapterCapture, Clock, SdkAdapter } from "./adapter.js";
 import { systemClock } from "./adapter.js";
 import {
@@ -24,7 +25,15 @@ import { normalizeSample, type ClockAnchor } from "./normalize.js";
 export const MIN_TOKEN_LENGTH = 16;
 const MAX_BODY_BYTES = 4096;
 const MAX_RETAINED_STOPPED = 20;
-const StartBody = z.strictObject({ appSessionId: z.uuid() });
+const StartBody = z.strictObject({
+  appSessionId: z.uuid(),
+  input: z.enum(["camera", "custom"]).default("camera"),
+});
+const FRAME_WIDTH = 480;
+const FRAME_HEIGHT = 360;
+const FRAME_BYTES = FRAME_WIDTH * FRAME_HEIGHT * 4;
+const MAX_JPEG_BYTES = 1024 * 1024;
+const MAX_JPEG_DIMENSION = 960;
 
 export interface BridgeOptions {
   token: string;
@@ -46,10 +55,13 @@ class BridgeSession {
   anchor?: ClockAnchor;
   starting?: Promise<void>;
   stopping?: Promise<void>;
+  frameWindowStartedAt = 0;
+  frameWindowCount = 0;
   readonly log: EventLog;
   readonly streams = new Set<ServerResponse>();
   constructor(
     readonly appSessionId: string,
+    readonly input: "camera" | "custom",
     windowMs: number,
     clock: Clock,
   ) {
@@ -181,7 +193,13 @@ export class PresageBridge {
     if (parts.length === 2 && parts[1] === "health") {
       if (method !== "GET")
         throw new HttpError(405, "METHOD_NOT_ALLOWED", "GET only");
-      return this.json(res, 200, await this.health());
+      return this.json(
+        res,
+        200,
+        await this.health(
+          url.searchParams.get("input") === "custom" ? "custom" : "camera",
+        ),
+      );
     }
     if (parts[1] !== "sessions")
       throw new HttpError(404, "NOT_FOUND", "Not found");
@@ -204,13 +222,18 @@ export class PresageBridge {
       await this.stopSession(session);
       return this.json(res, 200, { status: "stopped" });
     }
+    if (parts.length === 4 && parts[3] === "frame") {
+      if (method !== "POST")
+        throw new HttpError(405, "METHOD_NOT_ALLOWED", "POST only");
+      return this.frame(session, url, req, res);
+    }
     throw new HttpError(404, "NOT_FOUND", "Not found");
   }
 
-  async health(): Promise<BridgeHealth> {
+  async health(input: "camera" | "custom" = "camera"): Promise<BridgeHealth> {
     let probe;
     try {
-      probe = await this.options.adapter.probe();
+      probe = await this.options.adapter.probe(input);
     } catch (e) {
       probe = { ready: false, reason: `Adapter probe failed: ${String(e)}` };
     }
@@ -242,7 +265,7 @@ export class PresageBridge {
     const parsed = StartBody.safeParse(await this.readBody(req));
     if (!parsed.success)
       throw new HttpError(400, "INVALID_BODY", "Expected {appSessionId: UUID}");
-    const { appSessionId } = parsed.data;
+    const { appSessionId, input } = parsed.data;
     const owner = this.cameraOwner;
     if (owner) {
       if (owner.appSessionId !== appSessionId)
@@ -250,6 +273,12 @@ export class PresageBridge {
           409,
           "CAMERA_BUSY",
           "Another session holds the camera",
+        );
+      if (owner.input !== input)
+        throw new HttpError(
+          409,
+          "INPUT_MISMATCH",
+          "Session input cannot change",
         );
       // Same appSessionId: return the existing session (idempotent start).
       await owner.starting;
@@ -268,14 +297,23 @@ export class PresageBridge {
           "SESSION_ALREADY_STOPPED",
           "This app session was already stopped; begin a new check-in",
         );
-    const health = await this.health();
+    const probe = await this.options.adapter.probe(input);
+    const health = {
+      status: probe.ready ? "ready" : "unavailable",
+      reason: probe.reason,
+    };
     if (health.status !== "ready")
       throw new HttpError(
         503,
         "SDK_UNAVAILABLE",
         health.reason ?? "Bridge unavailable",
       );
-    const session = new BridgeSession(appSessionId, this.windowMs, this.clock);
+    const session = new BridgeSession(
+      appSessionId,
+      input,
+      this.windowMs,
+      this.clock,
+    );
     this.cameraOwner = session;
     session.starting = this.open(session);
     try {
@@ -304,28 +342,31 @@ export class PresageBridge {
       if (session.state === "stopped") return;
       session.log.append(event);
     };
-    const capture = await this.options.adapter.open({
-      onSample: (sample) => {
-        if (
-          !Number.isFinite(sample.monotonicMs) ||
-          sample.monotonicMs < anchor.monotonicMs
-        ) {
-          emit({
-            type: "error",
-            code: "SAMPLE_TIME_INVALID",
-            message:
-              "A sample was dropped because its time preceded the session start.",
-            retryable: true,
-          });
-          return;
-        }
-        for (const reading of normalizeSample(anchor, sample))
-          emit({ type: "reading", reading });
+    const capture = await this.options.adapter.open(
+      {
+        onSample: (sample) => {
+          if (
+            !Number.isFinite(sample.monotonicMs) ||
+            sample.monotonicMs < anchor.monotonicMs
+          ) {
+            emit({
+              type: "error",
+              code: "SAMPLE_TIME_INVALID",
+              message:
+                "A sample was dropped because its time preceded the session start.",
+              retryable: true,
+            });
+            return;
+          }
+          for (const reading of normalizeSample(anchor, sample))
+            emit({ type: "reading", reading });
+        },
+        onStatus: (state, message) => emit({ type: "status", state, message }),
+        onError: (code, message, retryable) =>
+          emit({ type: "error", code, message, retryable }),
       },
-      onStatus: (state, message) => emit({ type: "status", state, message }),
-      onError: (code, message, retryable) =>
-        emit({ type: "error", code, message, retryable }),
-    });
+      session.input,
+    );
     session.capture = capture;
     session.state = "active";
   }
@@ -356,6 +397,102 @@ export class PresageBridge {
         `Camera release failed: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
+  }
+
+  private async frame(
+    session: BridgeSession,
+    url: URL,
+    req: IncomingMessage,
+    res: ServerResponse,
+  ) {
+    if (
+      session.input !== "custom" ||
+      session.state !== "active" ||
+      !session.capture?.sendFrame
+    )
+      throw new HttpError(
+        409,
+        "INPUT_NOT_ACTIVE",
+        "Custom input is not active",
+      );
+    const frameType = req.headers["content-type"];
+    if (frameType !== "application/octet-stream" && frameType !== "image/jpeg")
+      throw new HttpError(
+        415,
+        "UNSUPPORTED_MEDIA_TYPE",
+        "Camera frame required",
+      );
+    const timestampUs = Number(url.searchParams.get("timestampUs"));
+    if (!Number.isSafeInteger(timestampUs) || timestampUs <= 0)
+      throw new HttpError(400, "INVALID_TIMESTAMP", "Invalid frame timestamp");
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      if (size > (frameType === "image/jpeg" ? MAX_JPEG_BYTES : FRAME_BYTES))
+        throw new HttpError(413, "BODY_TOO_LARGE", "Frame too large");
+      chunks.push(chunk as Buffer);
+    }
+    let frame: Buffer;
+    let frameWidth = FRAME_WIDTH;
+    let frameHeight = FRAME_HEIGHT;
+    if (frameType === "image/jpeg") {
+      if (size < 4)
+        throw new HttpError(400, "INVALID_FRAME", "Invalid JPEG frame");
+      try {
+        const decoded = await sharp(Buffer.concat(chunks), {
+          limitInputPixels: MAX_JPEG_DIMENSION * MAX_JPEG_DIMENSION,
+          failOn: "error",
+        })
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        if (
+          decoded.info.width < 240 ||
+          decoded.info.height < 240 ||
+          decoded.info.width > MAX_JPEG_DIMENSION ||
+          decoded.info.height > MAX_JPEG_DIMENSION ||
+          decoded.info.channels !== 4
+        )
+          throw new Error("Unexpected frame dimensions");
+        frame = decoded.data;
+        frameWidth = decoded.info.width;
+        frameHeight = decoded.info.height;
+      } catch {
+        throw new HttpError(
+          400,
+          "INVALID_FRAME",
+          "Expected a camera JPEG frame within 960x960 pixels",
+        );
+      }
+    } else {
+      if (size !== FRAME_BYTES)
+        throw new HttpError(
+          400,
+          "INVALID_FRAME",
+          "Expected 480x360 RGBA frame",
+        );
+      frame = Buffer.concat(chunks);
+    }
+    session.capture.sendFrame(frame, frameWidth, frameHeight, timestampUs);
+    const now = Date.now();
+    if (session.frameWindowCount === 0) {
+      session.frameWindowStartedAt = now;
+      this.log(
+        `camera frame geometry=${frameWidth}x${frameHeight} encodedBytes=${size}`,
+      );
+    }
+    session.frameWindowCount++;
+    const elapsed = now - session.frameWindowStartedAt;
+    if (elapsed >= 5000) {
+      this.log(
+        `camera frame throughput=${(((session.frameWindowCount - 1) * 1000) / elapsed).toFixed(1)}fps over ${elapsed}ms`,
+      );
+      session.frameWindowStartedAt = now;
+      session.frameWindowCount = 1;
+    }
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    res.end();
   }
 
   private retainBounded() {

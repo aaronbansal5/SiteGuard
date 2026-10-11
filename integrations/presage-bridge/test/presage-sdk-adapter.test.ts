@@ -48,6 +48,21 @@ function fakeModule(
       calls.push("useCamera");
       return this;
     }
+    useCustomInput() {
+      calls.push("useCustomInput");
+      return this;
+    }
+    sendFrame(
+      _frame: Buffer,
+      width: number,
+      height: number,
+      stride: number,
+      format: number,
+      _timestampUs: number,
+    ) {
+      calls.push(`sendFrame:${width}:${height}:${stride}:${format}`);
+      return true;
+    }
     start() {
       calls.push("start");
       queueMicrotask(() =>
@@ -77,6 +92,7 @@ function fakeModule(
       kInputUnavailable: 7,
     },
     CameraSelection: { default: { kind: "default" } },
+    PixelFormat: { kRGBA: 2 },
     decodeMetrics: (buf: Buffer) => JSON.parse(buf.toString()),
   };
   return { mod, calls, handlers, ctorOptions: () => ctorOptions };
@@ -220,6 +236,40 @@ describe("PresageSdkAdapter (fake SDK)", () => {
     await cap.close();
   });
 
+  test("a newer breathing clock cannot suppress a later-arriving pulse sample", async () => {
+    const f = fakeModule();
+    const samples: AdapterSample[] = [];
+    const cap = await new PresageSdkAdapter(clock, env, async () => f.mod).open(
+      {
+        onSample: (sample) => samples.push(sample),
+        onStatus() {},
+        onError() {},
+      },
+    );
+    const epochUs = clock.wallMs() * 1000;
+    f.handlers.metrics(
+      packet(null, { value: 16, stable: true, timestamp: epochUs + 2_000_000 }),
+      epochUs + 2_000_000,
+    );
+    f.handlers.metrics(
+      packet({ value: 72, stable: true, timestamp: epochUs + 1_000_000 }, null),
+      epochUs + 2_100_000,
+    );
+    expect(samples).toEqual([
+      {
+        monotonicMs: 3000,
+        pulse: null,
+        breathing: { value: 16, status: "valid" },
+      },
+      {
+        monotonicMs: 2000,
+        pulse: { value: 72, status: "valid" },
+        breathing: null,
+      },
+    ]);
+    await cap.close();
+  });
+
   test("every SDK 3.4.0 ValidationCode maps to fixed SiteGuard guidance", async () => {
     const vendor = await import("@smartspectra/node-sdk")
       .then(
@@ -301,5 +351,25 @@ describe("PresageSdkAdapter (fake SDK)", () => {
       expect(statuses).toEqual([WARM_UP_MESSAGE]);
       await cap.close();
     }
+  });
+
+  test("custom input accepts browser RGBA frames without opening a host camera", async () => {
+    const f = fakeModule({ cameras: 0 });
+    const a = new PresageSdkAdapter(clock, env, async () => f.mod);
+    expect((await a.probe("custom")).ready).toBe(true);
+    const cap = await a.open(
+      { onSample() {}, onStatus() {}, onError() {} },
+      "custom",
+    );
+    cap.sendFrame?.(
+      Buffer.alloc(480 * 360 * 4),
+      480,
+      360,
+      1_700_000_000_000_000,
+    );
+    expect(f.calls).toContain("useCustomInput");
+    expect(f.calls).not.toContain("useCamera");
+    expect(f.calls).toContain("sendFrame:480:360:1920:2");
+    await cap.close();
   });
 });

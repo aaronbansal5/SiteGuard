@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { randomUUID } from "node:crypto";
 import { request } from "node:http";
+import sharp from "sharp";
 import {
   BridgeEventSchema,
   BridgeHealthSchema,
   BridgeSessionSchema,
 } from "../../../packages/contracts/src/index.js";
-import { systemClock } from "../src/adapter.js";
+import { systemClock, type SdkAdapter } from "../src/adapter.js";
 import { PresageSdkAdapter } from "../src/adapters/presage-sdk.js";
 import { FIXTURE_NAMES } from "../src/adapters/fixture.js";
 import { PresageBridge } from "../src/server.js";
@@ -60,6 +61,89 @@ const readings = (events: ReturnType<typeof BridgeEventSchema.parse>[]) =>
   events.flatMap((e) => (e.type === "reading" ? [e.reading] : []));
 
 describe("transport and auth", () => {
+  test("custom-input frame endpoint is session-bound and rejects malformed frames", async () => {
+    const delivered: Array<[number, number, number]> = [];
+    const adapter: SdkAdapter = {
+      kind: "presage-sdk",
+      async probe() {
+        return { ready: true, reason: null };
+      },
+      async open(_handlers, mode) {
+        expect(mode).toBe("custom");
+        return {
+          async close() {},
+          sendFrame(frame, width, height) {
+            expect(frame.length).toBe(width * height * 4);
+            delivered.push([width, height, frame.length]);
+          },
+        };
+      },
+    };
+    const bridge = new PresageBridge({ token: TOKEN, adapter, port: 0 });
+    const port = await bridge.listen();
+    cleanup.push(() => bridge.close());
+    const base = `http://127.0.0.1:${port}`;
+    const auth = { Authorization: `Bearer ${TOKEN}` };
+    const started = await fetch(`${base}/v1/sessions`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ appSessionId: randomUUID(), input: "custom" }),
+    });
+    expect(started.status).toBe(201);
+    const { bridgeSessionId } = BridgeSessionSchema.parse(await started.json());
+    const frameUrl = `${base}/v1/sessions/${bridgeSessionId}/frame?timestampUs=1700000000000000`;
+    const send = (body: Buffer) =>
+      fetch(frameUrl, {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/octet-stream" },
+        body: new Uint8Array(body),
+      });
+    expect((await send(Buffer.alloc(4))).status).toBe(400);
+    expect((await send(Buffer.alloc(480 * 360 * 4))).status).toBe(204);
+    const jpeg = await sharp({
+      create: { width: 480, height: 360, channels: 3, background: "white" },
+    })
+      .jpeg()
+      .toBuffer();
+    const sendJpeg = (body: Buffer) =>
+      fetch(frameUrl, {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "image/jpeg" },
+        body: new Uint8Array(body),
+      });
+    expect((await sendJpeg(jpeg)).status).toBe(204);
+    expect((await sendJpeg(Buffer.from([0xff, 0xd8, 0, 0]))).status).toBe(400);
+    const portrait = await sharp({
+      create: { width: 540, height: 720, channels: 3, background: "white" },
+    })
+      .jpeg()
+      .toBuffer();
+    expect((await sendJpeg(portrait)).status).toBe(204);
+    const wrongSize = await sharp({
+      create: { width: 100, height: 100, channels: 3, background: "white" },
+    })
+      .jpeg()
+      .toBuffer();
+    expect((await sendJpeg(wrongSize)).status).toBe(400);
+    expect(delivered.map(([w, h]) => [w, h])).toEqual([
+      [480, 360],
+      [480, 360],
+      [540, 720],
+    ]);
+    expect(
+      (
+        await fetch(
+          `${base}/v1/sessions/${randomUUID()}/frame?timestampUs=1700000000000000`,
+          { method: "POST", headers: auth },
+        )
+      ).status,
+    ).toBe(404);
+    await fetch(`${base}/v1/sessions/${bridgeSessionId}/stop`, {
+      method: "POST",
+      headers: auth,
+    });
+    expect((await send(Buffer.alloc(480 * 360 * 4))).status).toBe(409);
+  });
   test("binds loopback only, on an ephemeral port in tests", async () => {
     const b = await fixtureBridge("valid-steady");
     const a = b.bridge.address();

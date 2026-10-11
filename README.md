@@ -50,8 +50,8 @@ Copy `.env.example` to `.env` and configure only the required adapters. Secrets 
 
 ## Phones
 
-- Phone web layout: open `/mobile` for reminder-driven voluntary check-ins (60-second demo interval, consent every time, synthetic readings because browsers cannot run the Presage SDK). To try it from a phone on a trusted Wi-Fi network: `HOST=0.0.0.0 npm run dev`, then `http://<laptop-ip>:5173/mobile`.
-- Native iOS scaffold using the SmartSpectra Swift SDK: `apps/mobile-ios` (unbuilt here; no upload yet). Design and proposed phone ingestion contract: [docs/MOBILE_APP.md](docs/MOBILE_APP.md).
+- Phone web layout: open `/mobile` for reminder-driven voluntary check-ins. On trusted HTTPS it can relay consented iPhone-camera frames transiently to the local Presage bridge; synthetic mode remains separately labeled. Plain LAN HTTP cannot access the iPhone camera. Local HTTPS setup and unverified live-measurement status: [docs/MOBILE_APP.md](docs/MOBILE_APP.md).
+- Native iOS scaffold using the SmartSpectra Swift SDK: `apps/mobile-ios` (physical-iOS arm64 build passed; on-device measurement and upload not yet verified). See [docs/MOBILE_APP.md](docs/MOBILE_APP.md).
 
 Real Presage hardware, live Gemini, Tiger Data, and hosted deployment require separate verification; fixture tests are not sponsor-integration evidence.
 
