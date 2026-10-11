@@ -196,19 +196,25 @@ export class PresageSource implements MeasurementSource {
   async stop() {
     this.running = false;
     this.controller?.abort();
+    // Ask the bridge to stop before waiting for the stream task. The bridge
+    // owns the camera lifecycle and closes its SSE response as part of stop;
+    // waiting first can deadlock when the stream is intentionally long-lived.
+    const stopRequest = this.bridgeSessionId
+      ? fetch(
+          this.url(
+            `/v1/sessions/${encodeURIComponent(this.bridgeSessionId)}/stop`,
+          ),
+          {
+            method: "POST",
+            headers: this.headers(),
+            redirect: "error",
+            signal: AbortSignal.timeout(5000),
+          },
+        )
+      : undefined;
     await this.task;
-    if (this.bridgeSessionId) {
-      const r = await fetch(
-        this.url(
-          `/v1/sessions/${encodeURIComponent(this.bridgeSessionId)}/stop`,
-        ),
-        {
-          method: "POST",
-          headers: this.headers(),
-          redirect: "error",
-          signal: AbortSignal.timeout(5000),
-        },
-      );
+    if (stopRequest) {
+      const r = await stopRequest;
       if (!r.ok)
         throw new Error(
           "Bridge stop failed; confirm the camera is stopped before retrying",
