@@ -10,7 +10,7 @@ export async function api<T>(
   const cameraLifecycle =
     method === "POST" &&
     (path === "/sessions" || /^\/sessions\/[^/]+\/complete$/.test(path));
-  const deadline = AbortSignal.timeout(cameraLifecycle ? 45000 : 15000);
+  const deadline = AbortSignal.timeout(cameraLifecycle ? 65000 : 15000);
   let response: Response;
   try {
     response = await fetch("/api" + path, {
