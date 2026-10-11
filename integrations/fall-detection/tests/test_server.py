@@ -77,7 +77,7 @@ class ServerTests(unittest.TestCase):
         self.runtime.detector.ratio_threshold = 0.5
         self.runtime.frame([Observation('1', (100, 100, 200, 160))], 1, [640, 360])
         self.assertFalse(self.runtime.state()['tracks'][0]['horizontal'])
-        self.runtime.frame([Observation('1', (0, 100, 200, 160))], 2, [640, 360])
+        self.runtime.frame([Observation('1', (0, 100, 200, 160), confidence=0.1)], 2, [640, 360])
         self.assertEqual(self.runtime.state()['tracks'][0]['state'], 'ignored')
 
     def fall(self, track, start):
@@ -101,26 +101,26 @@ class ServerTests(unittest.TestCase):
         for index in range(21):
             self.runtime.frame(observations, start + index / 10, [640, 360])
 
-    def test_width_greater_than_height_requires_over_two_seconds(self):
+    def test_width_greater_than_height_flags_first_frame_without_duplicates(self):
         wide = Observation('wide', (100, 100, 200, 190))
         square = Observation('square', (350, 100, 440, 190))
-        self.wide_frames([wide, square])
-        self.assertEqual(self.runtime.store.list('incidents'), [])  # exactly 2 seconds
-        self.runtime.frame([wide, square], 3.1, [640, 360])
+        self.runtime.frame([wide, square], 1, [640, 360])
         incidents = self.runtime.store.list('incidents')
         self.assertEqual([item['trackId'] for item in incidents], ['wide'])
-        self.assertAlmostEqual(incidents[0]['durationSeconds'], 2.1)
-        self.runtime.frame([wide], 3.2, [640, 360])
+        self.assertEqual(incidents[0]['durationSeconds'], 0)
+        self.runtime.frame([wide], 1.1, [640, 360])
         self.assertEqual(len(self.runtime.store.list('incidents')), 1)
 
-    def test_interrupted_down_pose_restarts_two_second_timer(self):
-        wide = Observation('wide', (100, 100, 200, 190))
-        self.wide_frames([wide])
-        self.runtime.frame([], 3.1, [640, 360])
-        self.wide_frames([wide], start=3.2)
+    def test_large_edge_touching_horizontal_box_immediately_enters_queue(self):
+        self.runtime.frame([Observation('close-up', (0, 200, 640, 360))], 1, [640, 360])
+        self.assertEqual(self.runtime.state()['tracks'][0]['state'], 'horizontal')
+        self.assertEqual(self.runtime.store.review_queue()[0]['trackId'], 'close-up')
+        self.assertEqual(len(self.runtime.store.pending()), 1)
+
+    def test_empty_and_upright_frames_do_not_flag(self):
+        self.runtime.frame([], 1, [640, 360])
+        self.runtime.frame([Observation('standing', (100, 100, 180, 280))], 1.1, [640, 360])
         self.assertEqual(self.runtime.store.list('incidents'), [])
-        self.runtime.frame([wide], 5.3, [640, 360])
-        self.assertEqual(len(self.runtime.store.list('incidents')), 1)
 
     def test_two_separate_wide_people_both_alert(self):
         people = [Observation('one', (100, 100, 200, 190)),
@@ -132,7 +132,6 @@ class ServerTests(unittest.TestCase):
     def test_report_uses_alert_frame_wall_clock(self):
         from unittest.mock import patch
         wide = Observation('wide', (100, 100, 200, 190))
-        self.wide_frames([wide])
         instant = '2026-10-10T21:03:04.567Z'
         with patch('fall_detection.runtime.utc_now', return_value=instant):
             self.runtime.frame([wide], 3.1, [640, 360])
@@ -149,6 +148,26 @@ class ServerTests(unittest.TestCase):
                          {'configured': False, 'pending': 1, 'error': None})
         store.delivered(pending[0]['eventId'])
         self.assertEqual(store.pending(), [])
+    def test_configured_token_blocks_direct_detector_access(self):
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'FALL_DETECTION_TOKEN': 'private-local-test-token'}):
+            guarded = ThreadingHTTPServer(('127.0.0.1', 0), handler(self.runtime))
+        runner = threading.Thread(target=guarded.serve_forever, daemon=True)
+        runner.start()
+        url = 'http://127.0.0.1:' + str(guarded.server_port)
+        try:
+            for path in ('/', '/api/state', '/api/preview'):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(url + path)
+                self.assertEqual(error.exception.code, 403)
+            request = urllib.request.Request(url + '/api/state', headers={
+                'Authorization': 'Bearer private-local-test-token'})
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+        finally:
+            guarded.shutdown()
+            guarded.server_close()
+            runner.join()
 
     def test_camera_never_substitutes_synthetic(self):
         self.runtime.source = 'camera'

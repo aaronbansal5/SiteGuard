@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { EmptySchema, Id, type RestRequest } from "@siteguard/contracts";
@@ -9,7 +10,7 @@ import {
 } from "@siteguard/contracts";
 import type { Config } from "../config.js";
 import type { Repository } from "../db/repository.js";
-import { supervisor, resolvedIdentity } from "../auth.js";
+import { supervisor, identity, resolvedIdentity } from "../auth.js";
 import { fail } from "../errors.js";
 
 const digest = (event: SafetyEvent) =>
@@ -62,6 +63,7 @@ async function ingest(r: Repository, c: Config, event: SafetyEvent) {
       workerId: null,
       assistanceRequestId: null,
       revision: 0,
+      updates: [],
     };
     await tx.driver.query(
       "INSERT INTO safety_events (id,camera_id,run_id,sequence,digest,payload) VALUES ($1,$2,$3,$4,$5,$6)",
@@ -97,6 +99,39 @@ export async function registerSafetyRoutes(
     const result = await ingest(r, c, SafetyEventSchema.parse(req.body));
     reply.code(result.duplicate ? 200 : 201);
     return result;
+  });
+  app.post("/api/safety/incident-statuses", async (req) => {
+    const token = req.headers.authorization?.replace(/^Bearer /, "") || "";
+    if (!tokenEqual(token, c.measurementToken))
+      fail(
+        401,
+        "INTERNAL_CREDENTIAL_REQUIRED",
+        "Measurement-service credential required",
+      );
+    const { ids } = z
+      .strictObject({ ids: z.array(z.uuid()).max(100) })
+      .parse(req.body);
+    const incidents = [];
+    for (const id of ids) {
+      const rows = await r.driver.query(
+        "SELECT payload FROM safety_incidents WHERE id=$1",
+        [id],
+      );
+      if (rows.length) {
+        const record = JSON.parse(rows[0].payload as string) as SafetyIncident;
+        incidents.push({
+          id: record.id,
+          status: record.status,
+          note:
+            [...(record.updates || [])]
+              .reverse()
+              .find((update) =>
+                ["resolve", "false_alarm"].includes(update.type),
+              )?.note || record.note,
+        });
+      }
+    }
+    return { incidents };
   });
   app.get("/api/safety/incidents", async (req) => {
     supervisor(req);
@@ -138,7 +173,7 @@ export async function registerSafetyRoutes(
     return result;
   });
   app.patch("/api/safety/incidents/:id", async (req) => {
-    supervisor(req);
+    const actor = identity(req);
     const id = Id.parse((req.params as { id: string }).id),
       body = SafetyActionSchema.parse(req.body);
     return r.transaction(async (tx) => {
@@ -152,10 +187,14 @@ export async function registerSafetyRoutes(
       const incident = JSON.parse(row.payload as string) as SafetyIncident;
       if (incident.revision !== body.revision)
         fail(409, "STALE_REVISION", "Incident changed; refresh and retry");
-      if (["resolved", "false_alarm"].includes(incident.status))
+      if (
+        ["resolved", "false_alarm"].includes(incident.status) &&
+        !["add_note", "emergency_called"].includes(body.action)
+      )
         fail(409, "INCIDENT_CLOSED", "Incident is already closed");
       const before = { ...incident };
       if (body.action === "associate") {
+        supervisor(req);
         if (incident.workerId)
           fail(
             409,
@@ -191,10 +230,21 @@ export async function registerSafetyRoutes(
         await tx.bump();
       } else if (body.action === "acknowledge")
         incident.status = "acknowledged";
-      else
+      else if (["resolve", "false_alarm"].includes(body.action))
         incident.status =
           body.action === "resolve" ? "resolved" : "false_alarm";
-      incident.note = body.note || null;
+      if (actor.role === "supervisor")
+        incident.note = body.note || incident.note;
+      incident.updates = [
+        ...(incident.updates || []),
+        {
+          id: randomUUID(),
+          type: body.action,
+          note: body.note,
+          createdAt: new Date().toISOString(),
+          actorRole: actor.role,
+        },
+      ];
       incident.revision++;
       await tx.driver.query(
         "UPDATE safety_incidents SET worker_id=$1,assistance_request_id=$2,payload=$3 WHERE id=$4",
@@ -208,14 +258,28 @@ export async function registerSafetyRoutes(
       // Incident closure deliberately does not modify linked assistance.
       await tx.put("audit_events", {
         id: randomUUID(),
-        actor: resolvedIdentity(req)?.account?.id || "supervisor-demo",
+        actor:
+          resolvedIdentity(req)?.account?.id ||
+          (actor.role === "worker" ? actor.workerId : "supervisor-demo"),
         action: "safety_" + body.action,
         entityId: id,
         before,
         after: incident,
         createdAt: new Date().toISOString(),
       });
-      return { incident };
+      return {
+        incident:
+          actor.role === "supervisor"
+            ? incident
+            : {
+                id: incident.id,
+                status: incident.status,
+                revision: incident.revision,
+                updates: incident.updates.filter(
+                  (update) => update.type !== "associate",
+                ),
+              },
+      };
     });
   });
 }

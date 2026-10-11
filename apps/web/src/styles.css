@@ -2403,3 +2403,91 @@ textarea::placeholder {
   border-radius: 48%;
   pointer-events: none;
 }
+
+.fall-camera-preview {
+  display: block;
+  width: 100%;
+  max-width: 960px;
+  border-radius: 12px;
+  margin: 16px 0;
+}
+.fall-camera-consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 16px 0;
+}
+.fall-incident {
+  border-top: 1px solid var(--border, #dbe2e8);
+  padding: 18px 0;
+}
+.fall-note {
+  display: block;
+  margin: 14px 0;
+}
+.fall-note textarea {
+  display: block;
+  width: 100%;
+  min-height: 70px;
+  margin-top: 8px;
+}
+.fall-new-alert {
+  position: sticky;
+  top: 12px;
+  z-index: 30;
+  padding: 20px;
+  background: #842637;
+  color: white;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  animation: fall-pulse 1.6s ease-in-out infinite;
+}
+@keyframes fall-pulse {
+  50% {
+    box-shadow: 0 0 0 10px #ff788566;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fall-new-alert {
+    animation: none;
+  }
+}
+
+.fall-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.fall-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fall-incident .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+body.fall-alert-active::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  background: rgba(220, 38, 38, 0.12);
+  box-shadow: inset 0 0 0 8px rgba(220, 38, 38, 0.6);
+  animation: fall-screen-flash 1.6s ease-in-out infinite;
+}
+@keyframes fall-screen-flash {
+  50% {
+    background: rgba(220, 38, 38, 0.25);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.fall-alert-active::before {
+    animation: none;
+  }
+}

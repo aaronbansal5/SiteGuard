@@ -9,6 +9,7 @@ import { seed } from "./db/seed.js";
 import { interruptSessions } from "./domain/sessions.js";
 import { MeasurementManager } from "./measurement/manager.js";
 import { registerRoutes } from "./routes.js";
+import { registerFallRoutes } from "./fall-routes.js";
 import { registerDeviceRoutes } from "./device-routes.js";
 import { registerSafetyRoutes } from "./fall/routes.js";
 import { registerAuth } from "./auth-service.js";
@@ -109,7 +110,7 @@ export async function createApp(
       );
       reply.header(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
       );
     }
     if (
@@ -228,6 +229,7 @@ export async function createApp(
   await registerRoutes(app, r, c, manager);
   registerDeviceRoutes(app, r, c);
   await registerSafetyRoutes(app, r, c);
+  registerFallRoutes(app, c, r);
   if (existsSync(c.webDist)) {
     await app.register(staticFiles, {
       root: c.webDist,

@@ -4,9 +4,9 @@ Independent of the React/Fastify app, Presage, Tiger Data and Gemini. The synthe
 
 ## Current local test rule
 
-The running standalone dashboard uses **bounding-box width > height** and creates a possible-person-down report only after continuous eligible observations for **more than two seconds**. Exactly two seconds does not alert. Missing observations, long gaps or a non-horizontal pose reset the dwell timer. No preceding-upright observation is required in this mode. Confidence, edge and area filters still apply, as do duplicate-region and unresolved-incident suppression. A wider box is a review heuristic, not confirmation that someone fell.
+The running standalone dashboard uses **bounding-box width > height** and creates a possible-person-down report **on the first eligible frame**, without a dwell timer. No preceding-upright observation is required. Confidence and minimum-area filters still apply; the immediate laptop-camera mode accepts large and edge-touching boxes, as do duplicate-region and unresolved-incident suppression. A wider box is a review heuristic, not confirmation that someone fell.
 
-New incidents pulse a red screen border and show a ten-second alert banner. Reduced-motion users get a static border. Existing reports do not flash again on refresh. Detection times are captured when the observation frame is processed, stored in UTC and displayed in America/New_York with the timezone shown. The original configurable sustained-transition engine remains available to callers of Detector; the standalone Runtime explicitly selects the strict two-second dwell rule.
+New incidents pulse a red screen border and show a ten-second alert banner. Reduced-motion users get a static border. Existing reports do not flash again on refresh. Detection times are captured when the observation frame is processed, stored in UTC and displayed in America/New_York with the timezone shown. The original configurable sustained-transition engine remains available to callers of Detector; the standalone Runtime explicitly selects immediate flagging.
 
 ## Supported Python
 
@@ -27,7 +27,7 @@ python3 -m unittest discover -s tests -v
 python3 -m fall_detection.server
 ```
 
-Open **http://127.0.0.1:4322**. Click standing upright, then horizontal pose, hold for over two seconds and review the resulting incident. Acknowledge it, then resolve with a note. A brief bend lasting at most two seconds does not alert. Camera missing clears observed boxes but never resolves incidents. A repeat in the same spot is suppressed while that incident is open or acknowledged, and for 60 seconds after the last alert there (see repeat suppression). Metadata persists in `.data/incidents.sqlite`; stop the server before deleting that database to reset.
+Open **http://127.0.0.1:4322**. Click horizontal pose and review the immediate resulting incident. Acknowledge it, then resolve with a note. A brief horizontal pose can alert in this immediate mode. Camera missing clears observed boxes but never resolves incidents. A repeat in the same spot is suppressed while that incident is open or acknowledged, and for 60 seconds after the last alert there (see repeat suppression). Metadata persists in `.data/incidents.sqlite`; stop the server before deleting that database to reset.
 
 ## Camera / local video
 
