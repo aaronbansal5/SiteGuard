@@ -67,6 +67,7 @@ export async function createApp(
   );
   const writeRates = new Map<string, { count: number; resetsAt: number }>();
   app.addHook("onRequest", async (req, reply) => {
+    const frame = /^\/api\/sessions\/[0-9a-f-]+\/frame(?:\?|$)/i.test(req.url);
     if (["POST", "PATCH", "DELETE"].includes(req.method)) {
       const now = Date.now();
       // Bounded, process-local limits protect the demo. Multi-instance production
@@ -80,9 +81,6 @@ export async function createApp(
         req.url.startsWith("/api/auth/password/");
       // Behind a reverse proxy the socket address is the proxy's, so every
       // client would share one quota unless CLIENT_IP_HEADER is configured.
-      const frame = /^\/api\/sessions\/[0-9a-f-]+\/frame(?:\?|$)/i.test(
-        req.url,
-      );
       const bucket = login ? "login" : frame ? "frame" : "write";
       const key = `${rateLimitKey(clientAddress(req, c.clientIpHeader))}:${bucket}`;
       const old = writeRates.get(key);
@@ -125,15 +123,28 @@ export async function createApp(
       if (
         ![c.appOrigin, ...c.authAdditionalOrigins].includes(
           req.headers.origin || "",
-        ) ||
-        !req.headers["content-type"]?.startsWith("application/json")
+        )
       ) {
         throw new AppError(
           403,
           "ORIGIN_REJECTED",
-          "Authenticated writes require the application origin and JSON",
+          "Authenticated writes require the application origin",
         );
       }
+      const contentType = req.headers["content-type"] || "";
+      if (
+        (!frame && !contentType.startsWith("application/json")) ||
+        (frame &&
+          !contentType.startsWith("image/jpeg") &&
+          !contentType.startsWith("application/octet-stream"))
+      )
+        throw new AppError(
+          403,
+          "ORIGIN_REJECTED",
+          frame
+            ? "Camera frames require JPEG or RGBA content"
+            : "Authenticated writes require JSON",
+        );
     }
     reply.header("Referrer-Policy", "same-origin");
     reply.header("Cache-Control", "no-store");
