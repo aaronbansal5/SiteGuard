@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import type { Identity } from "@siteguard/contracts";
 import { api } from "./lib/api";
+import { GlobalSceneAlert } from "./components/GlobalSceneAlert";
 import { ErrorNotice, Loading } from "./components/ui";
 const Landing = lazy(() =>
   import("./pages/Landing").then((module) => ({ default: module.Landing })),
@@ -229,6 +230,7 @@ function Shell() {
       <AuthContext.Provider
         value={{ identity, login, config, account, refreshIdentity }}
       >
+        {identity && <GlobalSceneAlert />}
         <a className="skip-link" href="#main">
           Skip to content
         </a>
@@ -258,6 +260,7 @@ function Shell() {
     <AuthContext.Provider
       value={{ identity, login, config, account, refreshIdentity }}
     >
+      {identity && <GlobalSceneAlert />}
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -267,12 +270,11 @@ function Shell() {
           className={`sidebar ${menu ? "open" : ""}`}
         >
           <Link to="/" className="brand">
-            <span className="brand-mark">
-              <Shield size={24} />
-            </span>
-            <span>
-              SiteGuard<small>ADAPTIVEBREAK</small>
-            </span>
+            <img
+              className="app-logo sidebar-logo"
+              src="/siteguard-logo.png"
+              alt="SiteGuard"
+            />
           </Link>
           {identity && <div className="workspace-label">WORKSPACE</div>}
           <nav>

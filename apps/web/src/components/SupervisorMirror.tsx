@@ -8,7 +8,6 @@ import {
 } from "@siteguard/contracts";
 import { api, useResource, useAction, time, date } from "../lib/api";
 import { ErrorNotice, Loading, Modal } from "./ui";
-import { SourceBadge } from "./SourceBadge";
 
 const SYMPTOM_LABELS: Record<string, string> = {
   dizzy: "Feeling dizzy",
@@ -84,7 +83,7 @@ export function SupervisorMirror({
                           : "Manager can view this check-in"}
                       </small>
                     </div>
-                    <SourceBadge source={s.source} />
+
                     <button
                       className="button small-button secondary"
                       disabled={a.busy}

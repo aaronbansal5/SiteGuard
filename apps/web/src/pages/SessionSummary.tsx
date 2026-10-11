@@ -22,7 +22,6 @@ import {
   HelpActions,
   SafetyNote,
 } from "../components/ui";
-import { SourceBadge } from "../components/SourceBadge";
 import { VitalChart } from "../components/VitalChart";
 import { PersonalInsightsPanel } from "../components/PersonalInsights";
 import { TimeSeriesEvidencePanel } from "../components/TimeSeriesEvidence";
@@ -88,7 +87,6 @@ export function SessionSummary() {
             eyebrow="CHECK-IN SUMMARY / 03"
             title="Your next step, with context."
             description={`${date(s.startedAt)} · ${time(s.startedAt)} · ${Math.round(v.durationSeconds)} seconds recorded`}
-            action={<SourceBadge source={s.source} />}
           />
           {ownsSession && (
             <ResearchRestSupportCard
@@ -391,7 +389,6 @@ function ResearchRestSupportCard({
           <div className="limitations">
             <h3>Evidence</h3>
             <p>
-              Source: {result.support.evidence.source ?? "Unavailable"} ·
               Duration:{" "}
               {result.support.evidence.durationSeconds === null
                 ? "Unavailable"

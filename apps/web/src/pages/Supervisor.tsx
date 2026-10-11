@@ -173,12 +173,7 @@ function Operations() {
                             {o.workers.find((w) => w.id === session.workerId)
                               ?.displayName ?? session.workerId}
                           </strong>
-                          <p>
-                            {time(session.startedAt)} ·{" "}
-                            {session.source === "presage"
-                              ? "Presage camera"
-                              : "Synthetic demo"}
-                          </p>
+                          <p>{time(session.startedAt)}</p>
                         </div>
                         <Link
                           className="text-link"

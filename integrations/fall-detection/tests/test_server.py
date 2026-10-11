@@ -111,6 +111,32 @@ class ServerTests(unittest.TestCase):
         self.runtime.frame([wide], 1.1, [640, 360])
         self.assertEqual(len(self.runtime.store.list('incidents')), 1)
 
+    def test_acknowledged_region_does_not_block_a_new_down_episode(self):
+        down = Observation('same-person', (100, 100, 240, 190))
+        upright = Observation('same-person', (100, 100, 170, 280))
+        self.runtime.frame([down], 1, [640, 360])
+        original = self.runtime.store.review_queue()[0]
+        self.runtime.store.action(original['id'], 'acknowledge', '')
+        self.runtime.frame([down], 1.1, [640, 360])
+        self.assertEqual(len(self.runtime.store.list('incidents')), 1)
+        self.runtime.frame([upright], 1.2, [640, 360])
+        self.runtime.frame([down], 1.3, [640, 360])
+        records = self.runtime.store.list('incidents')
+        self.assertEqual(len(records), 2)
+        self.assertEqual(sum(record['status'] == 'open' for record in records), 1)
+        self.assertEqual(sum(record['status'] == 'acknowledged' for record in records), 1)
+        self.assertEqual(records[0]['durationSeconds'], 0)
+
+    def test_old_acknowledged_region_does_not_block_new_camera_observation(self):
+        down = Observation('old-track', (100, 100, 240, 190))
+        self.runtime.frame([down], 1, [640, 360])
+        original = self.runtime.store.review_queue()[0]
+        self.runtime.store.action(original['id'], 'acknowledge', '')
+        self.runtime.frame([], 1.1, [640, 360])
+        self.runtime.frame([Observation('new-track', down.bbox)], 1.2, [640, 360])
+        self.assertEqual(len(self.runtime.store.list('incidents')), 2)
+        self.assertEqual(self.runtime.store.review_queue()[0]['status'], 'open')
+
     def test_large_edge_touching_horizontal_box_immediately_enters_queue(self):
         self.runtime.frame([Observation('close-up', (0, 200, 640, 360))], 1, [640, 360])
         self.assertEqual(self.runtime.state()['tracks'][0]['state'], 'horizontal')

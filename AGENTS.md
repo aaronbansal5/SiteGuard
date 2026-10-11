@@ -28,8 +28,10 @@ computer, install it from `anthropics/skills`, path `skills/frontend-design`.
 Follow the user's established SiteGuard direction: clear, practical worker and
 manager screens, plain language, restrained decoration, and accessible controls.
 Preserve all existing routes and features, including Phone check-in and Web
-check-in, unless the user explicitly requests their removal. Keep measurement
-source labels, privacy controls, and incident acknowledgment behavior intact.
+check-in, unless the user explicitly requests their removal. Keep stored
+measurement source metadata, privacy controls, and incident acknowledgment
+behavior intact. New worker check-ins use Presage only. Do not add source
+selectors, source table columns, or demo/Presage badges to the interface.
 
 ## Verification
 

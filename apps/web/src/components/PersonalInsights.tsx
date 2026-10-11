@@ -234,9 +234,8 @@ export function PersonalInsightsPanel({
 
 /** History page card: recent-session trend for one measurement source. */
 export function PersonalTrendCard({ workerId }: { workerId: string }) {
-  const [source, setSource] = useState<"mock" | "presage">("mock");
   const r = useResource<{ trend: PersonalTrend }>(
-    `/workers/${workerId}/personal-trend?source=${source}`,
+    `/workers/${workerId}/personal-trend?source=presage`,
   );
   const t = r.data?.trend;
   return (
@@ -245,19 +244,9 @@ export function PersonalTrendCard({ workerId }: { workerId: string }) {
         <div>
           <h2 id="personal-trend">Your recent sessions</h2>
           <p>
-            <Lock size={12} /> Private to you. Sources are never mixed.
+            <Lock size={12} /> Private to you. Based on your camera check-ins.
           </p>
         </div>
-        <label className="source-select">
-          Source
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value as "mock" | "presage")}
-          >
-            <option value="mock">Synthetic demo sessions</option>
-            <option value="presage">Presage sessions</option>
-          </select>
-        </label>
       </div>
       <ErrorNotice message={r.error} />
       {t && (

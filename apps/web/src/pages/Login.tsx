@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ShieldCheck, Eye, EyeOff, ArrowRight, HardHat } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, HardHat } from "lucide-react";
 import { useIdentity } from "../App";
 import { api, useAction } from "../lib/api";
 import { ErrorNotice } from "../components/ui";
@@ -97,9 +97,11 @@ export function Login() {
   return (
     <section className="auth-layout">
       <div className="auth-intro">
-        <span className="hero-kicker">
-          <ShieldCheck size={18} /> SITEGUARD
-        </span>
+        <img
+          className="app-logo sign-in-logo"
+          src="/siteguard-logo.png"
+          alt="SiteGuard"
+        />
         <h1>
           People first.
           <br />

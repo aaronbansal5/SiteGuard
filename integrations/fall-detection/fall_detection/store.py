@@ -93,13 +93,15 @@ class Store:
             self.db.execute('INSERT INTO actions VALUES (?,?)', (str(uuid.uuid4()), json.dumps(audit)))
             return incident
 
-    def unresolved_regions(self, camera_id):
-        """Normalized regions of open/acknowledged incidents for one camera."""
+    def unresolved_regions(self, camera_id, include_acknowledged=True):
+        """Open regions, optionally including acknowledged records for legacy callers."""
         with self.lock:
             rows = self.db.execute(
                 "SELECT json_extract(payload, '$.evidence.region') FROM incidents"
                 " WHERE json_extract(payload, '$.status') IN (?, ?)"
-                " AND json_extract(payload, '$.cameraId') = ?", UNRESOLVED + (camera_id,)).fetchall()
+                " AND json_extract(payload, '$.cameraId') = ?"
+                " AND (? OR json_extract(payload, '$.status') = 'open')",
+                UNRESOLVED + (camera_id, include_acknowledged)).fetchall()
         return [json.loads(row[0]) for row in rows if row[0]]
 
     def prune(self, retention_days, now=None):

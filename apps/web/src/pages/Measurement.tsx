@@ -18,7 +18,6 @@ import {
   HelpActions,
   SafetyNote,
 } from "../components/ui";
-import { SourceBadge } from "../components/SourceBadge";
 import { VitalChart } from "../components/VitalChart";
 import {
   BROWSER_CAMERA_FPS,
@@ -234,7 +233,6 @@ export function Measurement() {
         eyebrow="VOLUNTARY CHECK-IN / 02"
         title="Settle in. Observe the change."
         description="Stay seated and stationary throughout your check-in."
-        action={<SourceBadge source={s.source} />}
       />
       <div className="measurement-layout">
         <section className="card positioning">

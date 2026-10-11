@@ -89,15 +89,6 @@ function SceneView({ manager }: { manager: boolean }) {
     scene?.incidents.filter((i) => ["open", "acknowledged"].includes(i.status))
       .length || 0;
   const reviewed = (scene?.incidents.length || 0) - unresolved;
-  const unacknowledged =
-    scene?.incidents.filter((incident) => incident.status === "open") || [];
-  const alert = unacknowledged.length
-    ? `${unacknowledged.length} unacknowledged possible person-down observation(s). Check the scene.`
-    : "";
-  useEffect(() => {
-    document.body.classList.toggle("fall-alert-active", !!alert);
-    return () => document.body.classList.remove("fall-alert-active");
-  }, [!!alert]);
   useEffect(() => {
     if (
       !scene?.canViewCamera ||
@@ -166,32 +157,6 @@ function SceneView({ manager }: { manager: boolean }) {
         title="Fall detection"
         description="Watch the scene. Check an alert. Keep your team informed."
       />
-      {alert && (
-        <div className="fall-new-alert" role="alert">
-          <p>{alert}</p>
-          <button
-            className="button secondary"
-            disabled={action.busy}
-            onClick={() =>
-              void action.run(async () => {
-                for (const incident of unacknowledged)
-                  await api(
-                    `/safety/incidents/${incident.id}`,
-                    {
-                      action: "acknowledge",
-                      revision: incident.revision,
-                      note: "",
-                    },
-                    "PATCH",
-                  );
-                await resource.refresh();
-              })
-            }
-          >
-            Acknowledge alerts
-          </button>
-        </div>
-      )}
       <ErrorNotice message={resource.error || action.error} />
       {resource.loading && <Loading />}
       {scene && (
@@ -232,14 +197,7 @@ function SceneView({ manager }: { manager: boolean }) {
               <h2>
                 <Camera size={20} /> Scene monitoring
               </h2>
-              <span className="badge">
-                {scene.source === "synthetic"
-                  ? "Synthetic demo"
-                  : scene.source === "recorded_fixture"
-                    ? "Recorded fixture"
-                    : "Camera heuristic"}{" "}
-                · {scene.status}
-              </span>
+              <span className="badge">{scene.status}</span>
             </div>
             <p className="scene-camera-description">
               Live view shared with your team. Boxes show anonymous person
@@ -418,13 +376,7 @@ function SceneView({ manager }: { manager: boolean }) {
                         ? "Flagged immediately"
                         : "Horizontal posture observed"}
                     </p>
-                    <small>
-                      {incident.source === "synthetic"
-                        ? "Synthetic observation"
-                        : incident.source === "recorded_fixture"
-                          ? "Recorded fixture"
-                          : "Camera observation"}
-                    </small>
+
                     {manager && incident.note && <p>{incident.note}</p>}
                     {incident.updates?.map((update) => (
                       <div key={update.id} className="scene-update">

@@ -1,5 +1,5 @@
 import { startOrResumeCheckIn } from "../lib/checkin";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { ShieldCheck, ArrowRight, LockKeyhole } from "lucide-react";
 import { useIdentity } from "../App";
@@ -14,9 +14,8 @@ export function CheckIn() {
     a = useAction();
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
-    [source, setSource] = useState<"mock" | "presage">("mock"),
-    [cameraInput, setCameraInput] = useState<"browser" | "native">("native"),
-    [sourceSelected, setSourceSelected] = useState(false);
+    [cameraInput, setCameraInput] = useState<"browser" | "native">("native");
+  const source = "presage" as const;
   const health = useResource<{
     checkInTestMode?: boolean;
     measurementSources: {
@@ -51,16 +50,6 @@ export function CheckIn() {
     window.isSecureContext &&
     navigator.mediaDevices?.getUserMedia,
   );
-  useEffect(() => {
-    if (health.data && !sourceSelected) {
-      setSource(
-        browserCamera || (localTest && health.data.measurementSources.presage)
-          ? "presage"
-          : "mock",
-      );
-      setSourceSelected(true);
-    }
-  }, [browserCamera, localTest, health.data, sourceSelected]);
   if (identity?.role !== "worker") return <ChooseWorker />;
   return (
     <>
@@ -112,8 +101,8 @@ export function CheckIn() {
               </div>
             </div>
             <div className="notice demo">
-              Synthetic mode uses no camera. Before real use, verify the Presage
-              bridge's processing and telemetry privacy separately.
+              Your camera supplies the readings through Presage. SiteGuard does
+              not store camera images or video.
             </div>
           </section>
         )}
@@ -153,29 +142,9 @@ export function CheckIn() {
               break. This does not change your break schedule.
             </p>
           )}
-          <label>
-            Measurement source
-            <select
-              value={source}
-              onChange={(e) => setSource(e.target.value as typeof source)}
-            >
-              <option value="mock">Synthetic demo · no camera</option>
-              <option
-                value="presage"
-                disabled={!health.data?.measurementSources.presage}
-              >
-                Presage · local camera bridge
-                {!health.data?.measurementSources.presage
-                  ? " (not configured)"
-                  : ""}
-              </option>
-            </select>
-          </label>
           <p className="fine-print">
-            Recommended check-in: {RECOMMENDED_CHECK_IN_SECONDS[source]} seconds
-            {source === "presage"
-              ? ", including camera warm-up before readings count."
-              : "."}
+            Recommended check-in: {RECOMMENDED_CHECK_IN_SECONDS[source]}{" "}
+            seconds, including camera warm-up before readings count.
           </p>
           {source === "presage" && browserCamera && (
             <fieldset className="camera-input-choice">
@@ -255,13 +224,7 @@ export function CheckIn() {
               (!localTest && !breakId)
             }
           >
-            {a.busy
-              ? "Starting…"
-              : localTest
-                ? source === "presage"
-                  ? "Begin camera check-in"
-                  : "Begin synthetic check-in"
-                : "Begin check-in"}
+            {a.busy ? "Starting…" : "Begin camera check-in"}
             <ArrowRight size={17} />
           </button>
           <Link className="button ghost full" to="/worker">

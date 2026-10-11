@@ -63,8 +63,7 @@ export function SafetyIncidentsPanel() {
                   </strong>
                   <p>
                     {time(incident.observedAt)} · Track {incident.trackId} ·{" "}
-                    {incident.durationSeconds.toFixed(1)} seconds · Source:{" "}
-                    {incident.source}
+                    {incident.durationSeconds.toFixed(1)} seconds
                   </p>
                   <p>
                     Status: {incident.status.replaceAll("_", " ")}{" "}

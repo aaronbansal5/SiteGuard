@@ -19,7 +19,7 @@ class Runtime:
         self.camera_id, self.zone_id = camera_id, zone_id
         self.video_input = video_input
         self.run_id, self.sequence = str(uuid.uuid4()), 0
-        self.detector = Detector(ratio_threshold=1.0, min_duration=0.0, require_upright=False, duration_exclusive=False, edge_margin=0, max_area_fraction=1.0)
+        self.detector = Detector(ratio_threshold=1.0, min_duration=0.0, require_upright=False, duration_exclusive=False, edge_margin=0, max_area_fraction=1.0, cooldown=0, region_cooldown=0)
         self.lock, self.stop = threading.RLock(), threading.Event()
         if source == 'synthetic':
             self.status, self.message = 'starting', None
@@ -52,7 +52,7 @@ class Runtime:
                 self.tracks.append(dict(trackId=sample.track_id, bbox=sample.bbox,
                                         state=pose, horizontal=pose == 'horizontal'))
             self.frame_size = frame_size
-            occupied = self.store.unresolved_regions(self.camera_id) if candidates else []
+            occupied = self.store.unresolved_regions(self.camera_id, include_acknowledged=False) if candidates else []
             for candidate in candidates:
                 footprint = candidate['evidence']['region']
                 already_open = any(regions_overlap(footprint, region, self.detector.region_iou,

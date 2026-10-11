@@ -1,5 +1,4 @@
-// Browser checks that every rendered session carries its source label.
-// Read-only against the shared e2e database (no reset needed).
+// Source metadata remains in records; workers no longer choose or see source badges.
 import { test, expect } from "@playwright/test";
 import { fixtureId } from "@siteguard/mock-data";
 import type { Session } from "@siteguard/contracts";
@@ -10,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("history labels every synthetic session as synthetic", async ({
+test("history retains sessions but has no source column or selector", async ({
   page,
 }) => {
   const sessions: Session[] = (
@@ -22,66 +21,52 @@ test("history labels every synthetic session as synthetic", async ({
   expect(sessions.every((s) => s.source === "mock")).toBe(true);
   await page.goto("/history");
   await expect(
-    page.getByText("Synthetic demo", { exact: true }).first(),
+    page.getByRole("heading", { name: "Session history", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Synthetic demo", { exact: true })).toHaveCount(
+  await expect(
+    page.getByRole("columnheader", { name: "Source", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Source", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".history-scroll tbody tr")).toHaveCount(
     sessions.length,
+  );
+  await expect(page.getByText("Synthetic demo", { exact: true })).toHaveCount(
+    0,
   );
   await expect(
     page.getByText("Presage measurement", { exact: true }),
   ).toHaveCount(0);
 });
 
-test("summary and worker home show the synthetic badge", async ({ page }) => {
-  await page.goto(`/sessions/${fixtureId(1011)}`);
-  await expect(
-    page.getByRole("heading", { name: "Your check-in results." }),
-  ).toBeVisible();
-  await expect(page.getByText("Synthetic demo", { exact: true })).toBeVisible();
-  await page.goto("/worker");
-  await expect(
-    page.getByText("Synthetic demo", { exact: true }).first(),
-  ).toBeVisible();
+test("summary and worker home have no source badges", async ({ page }) => {
+  for (const path of [`/sessions/${fixtureId(1011)}`, "/worker"]) {
+    await page.goto(path);
+    await expect(page.locator("main h1").first()).toBeVisible();
+    await expect(page.getByText("Synthetic demo", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByText("Presage measurement", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator(".badge.source")).toHaveCount(0);
+  }
 });
 
-test("a presage-sourced session renders the real-source badge, never the synthetic one", async ({
+test("recent sessions automatically fetch real camera history without offering demo options", async ({
   page,
 }) => {
-  // The e2e server has no bridge, so rewrite a seeded session's source in
-  // transit. This verifies the UI follows the record's source; it is not
-  // evidence of a real Presage integration.
-  const id = fixtureId(1011);
-  const swap = (value: unknown): unknown =>
-    JSON.parse(
-      JSON.stringify(value).replaceAll('"source":"mock"', '"source":"presage"'),
-    );
-  for (const path of [
-    `**/api/sessions/${id}`,
-    `**/api/sessions/${id}/summary`,
-    `**/api/sessions/${id}/readings`,
-  ])
-    await page.route(path, async (route) => {
-      const response = await route.fetch();
-      await route.fulfill({ response, json: swap(await response.json()) });
-    });
-  await page.route("**/api/insights/explain", (route) =>
-    route.fulfill({
-      status: 503,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: {
-          code: "X",
-          message: "Explanation unavailable",
-          requestId: "x",
-        },
-      }),
-    }),
-  );
-  await page.goto(`/sessions/${id}`);
+  const requested: string[] = [];
+  await page.route("**/api/workers/*/personal-trend?*", (route) => {
+    requested.push(new URL(route.request().url()).searchParams.get("source")!);
+    return route.continue();
+  });
+  await page.goto("/history");
   await expect(
-    page.getByText("Presage measurement", { exact: true }),
+    page.getByRole("heading", { name: "Your recent sessions" }),
   ).toBeVisible();
-  await expect(page.getByText("Synthetic demo", { exact: true })).toHaveCount(
+  await expect.poll(() => requested).toEqual(["presage"]);
+  await expect(page.locator(".source-select")).toHaveCount(0);
+  await expect(page.getByRole("option", { name: /demo|presage/i })).toHaveCount(
     0,
   );
 });
