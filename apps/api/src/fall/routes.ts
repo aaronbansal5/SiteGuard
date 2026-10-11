@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { EmptySchema, Id, type RestRequest } from "@siteguard/contracts";
@@ -97,6 +98,34 @@ export async function registerSafetyRoutes(
     const result = await ingest(r, c, SafetyEventSchema.parse(req.body));
     reply.code(result.duplicate ? 200 : 201);
     return result;
+  });
+  app.post("/api/safety/incident-statuses", async (req) => {
+    const token = req.headers.authorization?.replace(/^Bearer /, "") || "";
+    if (!tokenEqual(token, c.measurementToken))
+      fail(
+        401,
+        "INTERNAL_CREDENTIAL_REQUIRED",
+        "Measurement-service credential required",
+      );
+    const { ids } = z
+      .strictObject({ ids: z.array(z.uuid()).max(100) })
+      .parse(req.body);
+    const incidents = [];
+    for (const id of ids) {
+      const rows = await r.driver.query(
+        "SELECT payload FROM safety_incidents WHERE id=$1",
+        [id],
+      );
+      if (rows.length) {
+        const record = JSON.parse(rows[0].payload as string) as SafetyIncident;
+        incidents.push({
+          id: record.id,
+          status: record.status,
+          note: record.note,
+        });
+      }
+    }
+    return { incidents };
   });
   app.get("/api/safety/incidents", async (req) => {
     supervisor(req);

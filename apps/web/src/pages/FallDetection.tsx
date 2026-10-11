@@ -14,6 +14,7 @@ type Incident = {
   zoneId: string;
   durationSeconds: number;
   note?: string | null;
+  revision: number;
 };
 type Scene = {
   source: string;
@@ -21,6 +22,13 @@ type Scene = {
   cameraActive: boolean;
   canViewCamera: boolean;
   incidents: Incident[];
+  tracks?: {
+    trackId: string;
+    bbox: [number, number, number, number];
+    horizontal: boolean;
+  }[];
+  frameSize?: [number, number];
+  delivery?: { configured: boolean; pending: number; error: string | null };
 };
 const clock = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -162,15 +170,71 @@ function SceneView({ manager }: { manager: boolean }) {
               A valid person box must stay wider than tall for more than two
               seconds. This heuristic does not confirm a fall or injury.
             </p>
+            {scene.status === "unavailable" && (
+              <p role="status">
+                Camera service unavailable. Stored incident reports remain
+                available.
+              </p>
+            )}
+            {scene.delivery &&
+              (!scene.delivery.configured ||
+                scene.delivery.pending > 0 ||
+                scene.delivery.error) && (
+                <p role="status">
+                  {scene.delivery.error ||
+                    (!scene.delivery.configured
+                      ? "Database delivery is not configured."
+                      : `${scene.delivery.pending} observation(s) awaiting database confirmation.`)}
+                </p>
+              )}
             {manager ? (
               <>
                 <ErrorNotice message={previewError} />
                 {preview && (
-                  <img
-                    src={preview}
-                    alt="Manager-only live scene camera feed"
-                    className="fall-camera-preview"
-                  />
+                  <div style={{ position: "relative", maxWidth: 960 }}>
+                    <img
+                      src={preview}
+                      alt="Manager-only live scene camera feed"
+                      style={{ display: "block", width: "100%" }}
+                    />
+                    <svg
+                      viewBox={`0 0 ${scene.frameSize?.[0] || 640} ${scene.frameSize?.[1] || 360}`}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        pointerEvents: "none",
+                      }}
+                      aria-label="Anonymous person tracking boxes"
+                    >
+                      {scene.tracks?.map((track) => (
+                        <g
+                          key={track.trackId}
+                          stroke={track.horizontal ? "#f59e0b" : "#2dd4bf"}
+                          fill="none"
+                        >
+                          <rect
+                            x={track.bbox[0]}
+                            y={track.bbox[1]}
+                            width={Math.max(0, track.bbox[2] - track.bbox[0])}
+                            height={Math.max(0, track.bbox[3] - track.bbox[1])}
+                            strokeWidth={3}
+                          />
+                          <text
+                            x={track.bbox[0]}
+                            y={Math.max(16, track.bbox[1] - 6)}
+                            fill={track.horizontal ? "#f59e0b" : "#2dd4bf"}
+                            stroke="none"
+                            fontSize={16}
+                          >
+                            Person {track.trackId}
+                            {track.horizontal ? " · horizontal" : ""}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                  </div>
                 )}
                 {!scene.cameraActive && (
                   <p>
@@ -278,11 +342,13 @@ function SceneView({ manager }: { manager: boolean }) {
                               onClick={() =>
                                 void action.run(async () => {
                                   await api(
-                                    `/fall-detection/incidents/${incident.id}`,
+                                    `/safety/incidents/${incident.id}`,
                                     {
                                       action: kind,
+                                      revision: incident.revision,
                                       note: notes[incident.id] || "",
                                     },
+                                    "PATCH",
                                   );
                                   await resource.refresh();
                                 })

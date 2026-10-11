@@ -17,6 +17,26 @@ async function setup() {
     hosted: false,
   });
   apps.push(x);
+  await x.app.inject({
+    method: "POST",
+    url: "/api/safety/events",
+    headers: { authorization: "Bearer internal-test-token" },
+    payload: {
+      protocolVersion: 1,
+      eventId: scene.incidents[0].id,
+      cameraId: "cam",
+      zoneId: "yard",
+      detectorRunId: "00000000-0000-4000-8000-000000000002",
+      sequence: 0,
+      trackId: "secret-track",
+      observedAt: new Date().toISOString(),
+      kind: "possible_person_down",
+      source: "camera",
+      method: "bbox-aspect-v1",
+      durationSeconds: 2.1,
+      evidence: { heightWidthRatio: 0.5 },
+    },
+  });
   return x;
 }
 const scene = {
@@ -94,9 +114,8 @@ describe("fall detection role boundary", () => {
       headers: { cookie: manager },
     });
     expect(managerResult.json().canViewCamera).toBe(true);
-    expect(managerResult.json().incidents[0].note).toBe(
-      "Manager follow-up note",
-    );
+    expect(managerResult.json().incidents[0].note).toBeNull();
+    expect(managerResult.json().tracks[0].trackId).toBe("secret-track");
   });
   it("proxies manager preview using a backend-only credential", async () => {
     const { app } = await setup(),
@@ -148,6 +167,60 @@ describe("fall detection role boundary", () => {
           headers: { cookie },
         })
       ).statusCode,
-    ).toBe(503);
+    ).toBe(200);
+  });
+  it("keeps database incidents visible when the camera service fails and shares explicit review changes", async () => {
+    const { app } = await setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw Error("offline");
+      }),
+    );
+    const manager = await login(app, "supervisor"),
+      worker = await login(app);
+    const response = await app.inject({
+      url: "/api/fall-detection/state",
+      headers: { cookie: worker },
+    });
+    expect(response.json().status).toBe("unavailable");
+    expect(response.json().incidents[0].id).toBe(scene.incidents[0].id);
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/safety/incidents/${scene.incidents[0].id}`,
+          headers: { cookie: manager },
+          payload: { action: "resolve", revision: 0, note: "Scene checked" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          url: "/api/fall-detection/state",
+          headers: { cookie: worker },
+        })
+      ).json().incidents[0].status,
+    ).toBe("resolved");
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/safety/incident-statuses",
+          payload: { ids: [scene.incidents[0].id] },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/safety/incident-statuses",
+          headers: { authorization: "Bearer internal-test-token" },
+          payload: { ids: [scene.incidents[0].id] },
+        })
+      ).json().incidents[0].status,
+    ).toBe("resolved");
   });
 });

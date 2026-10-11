@@ -229,7 +229,7 @@ export async function createApp(
   await registerRoutes(app, r, c, manager);
   registerDeviceRoutes(app, r, c);
   await registerSafetyRoutes(app, r, c);
-  registerFallRoutes(app, c);
+  registerFallRoutes(app, c, r);
   if (existsSync(c.webDist)) {
     await app.register(staticFiles, {
       root: c.webDist,

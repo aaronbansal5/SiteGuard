@@ -9,6 +9,15 @@ if (!token || token.length < 32) {
   );
   process.exit(1);
 }
+if (
+  !process.env.MEASUREMENT_TOKEN ||
+  process.env.MEASUREMENT_TOKEN.length < 16
+) {
+  console.error(
+    "Set MEASUREMENT_TOKEN in .env to enable durable database delivery.",
+  );
+  process.exit(1);
+}
 const directory = resolve("integrations/fall-detection");
 const interpreter = resolve(
   directory,
@@ -32,7 +41,12 @@ const child = spawn(
   ["-u", "-m", "fall_detection.server", "--source", "camera", "--port", "4322"],
   {
     cwd: directory,
-    env: { ...environment, FALL_DETECTION_TOKEN: token },
+    env: {
+      ...environment,
+      FALL_DETECTION_TOKEN: token,
+      SITEGUARD_API_ORIGIN: `http://127.0.0.1:${process.env.PORT || "3001"}`,
+      SITEGUARD_MEASUREMENT_TOKEN: process.env.MEASUREMENT_TOKEN,
+    },
     stdio: "inherit",
   },
 );

@@ -2,25 +2,40 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Config } from "./config.js";
 import { identity, supervisor } from "./auth.js";
+import { SafetyIncidentSchema } from "@siteguard/contracts";
+import type { Repository } from "./db/repository.js";
 import { fail } from "./errors.js";
 
-const Incident = z.object({
-  id: z.uuid(),
-  status: z.enum(["open", "acknowledged", "resolved", "false_alarm"]),
-  source: z.enum(["camera", "synthetic", "recorded_fixture"]),
-  observedAt: z.iso.datetime(),
-  cameraId: z.string(),
-  zoneId: z.string(),
-  durationSeconds: z.number().finite().nonnegative(),
-  note: z.string().nullable(),
-});
 const Scene = z.object({
   source: z.enum(["camera", "synthetic", "recorded_fixture"]),
   status: z.string(),
   cameraActive: z.boolean(),
-  incidents: z.array(Incident),
+  tracks: z
+    .array(
+      z.object({
+        trackId: z.string(),
+        bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+        state: z.string().default("unknown"),
+        horizontal: z.boolean().default(false),
+      }),
+    )
+    .default([]),
+  frameSize: z
+    .tuple([z.number().positive(), z.number().positive()])
+    .default([640, 360]),
+  delivery: z
+    .object({
+      configured: z.boolean(),
+      pending: z.number().int().nonnegative(),
+      error: z.string().nullable(),
+    })
+    .optional(),
 });
-export function registerFallRoutes(app: FastifyInstance, config: Config) {
+export function registerFallRoutes(
+  app: FastifyInstance,
+  config: Config,
+  repository: Repository,
+) {
   async function detector(path: string, body?: unknown) {
     if (config.hosted || !config.fallDetectionToken)
       fail(
@@ -57,20 +72,47 @@ export function registerFallRoutes(app: FastifyInstance, config: Config) {
   }
   app.get("/api/fall-detection/state", async (req) => {
     const actor = identity(req);
+    const rows = await repository.driver.query(
+      "SELECT payload FROM safety_incidents ORDER BY received_at DESC,id DESC",
+    );
+    const records = rows.map((row) =>
+      SafetyIncidentSchema.parse(JSON.parse(row.payload as string)),
+    );
+    const incidents = records
+      .filter(
+        (record, index) =>
+          index < 100 || ["open", "acknowledged"].includes(record.status),
+      )
+      .map((record) => ({
+        id: record.id,
+        status: record.status,
+        source: record.source,
+        observedAt: record.observedAt,
+        cameraId: record.cameraId,
+        zoneId: record.zoneId,
+        durationSeconds: record.durationSeconds,
+        revision: record.revision,
+        ...(actor.role === "supervisor" ? { note: record.note } : {}),
+      }));
+    let scene: z.infer<typeof Scene>;
     try {
-      const scene = Scene.parse(await (await detector("/api/state")).json());
-      return {
-        ...scene,
-        canViewCamera: actor.role === "supervisor",
-        incidents: scene.incidents.map(({ note, ...incident }) =>
-          actor.role === "supervisor" ? { ...incident, note } : incident,
-        ),
+      scene = Scene.parse(await (await detector("/api/state")).json());
+    } catch {
+      scene = {
+        source: "camera",
+        status: "unavailable",
+        cameraActive: false,
+        tracks: [],
+        frameSize: [640, 360],
       };
-    } catch (error) {
-      if (error instanceof z.ZodError)
-        fail(503, "DETECTOR_UNAVAILABLE", "Detector returned an invalid state");
-      throw error;
     }
+    const { tracks, frameSize, ...status } = scene;
+    return {
+      ...status,
+      incidents,
+      canViewCamera: actor.role === "supervisor",
+      ...(actor.role === "supervisor" ? { tracks, frameSize } : {}),
+    };
   });
   app.get("/api/fall-detection/preview", async (req, reply) => {
     supervisor(req);
@@ -98,19 +140,16 @@ export function registerFallRoutes(app: FastifyInstance, config: Config) {
   app.post("/api/fall-detection/incidents/:id", async (req) => {
     supervisor(req);
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
-    const body = z
-      .strictObject({
-        action: z.enum(["acknowledge", "resolve", "false_alarm"]),
-        note: z.string().max(1000),
-      })
-      .parse(req.body);
-    if (body.action !== "acknowledge" && !body.note.trim())
-      fail(
-        400,
-        "VALIDATION",
-        "A follow-up note is required to close an incident",
-      );
-    await detector(`/api/incidents/${id}`, body);
-    return { saved: true };
+    const result = await app.inject({
+      method: "PATCH",
+      url: `/api/safety/incidents/${id}`,
+      headers: { ...req.headers, "content-type": "application/json" },
+      payload: req.body as object,
+    });
+    if (result.statusCode >= 400) {
+      const error = result.json().error;
+      fail(result.statusCode, error.code, error.message);
+    }
+    return result.json();
   });
 }

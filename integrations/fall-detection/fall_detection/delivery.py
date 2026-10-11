@@ -33,6 +33,30 @@ class Delivery:
             except Exception:
                 self.last_error = 'Event delivery failed; metadata retained locally for retry. Check API, credential and source policy.'
                 return False
+        # The app owns review decisions; synchronize its explicit actions locally.
+        unresolved = [item for item in self.store.review_queue() if item['status'] in ('open', 'acknowledged')]
+        for offset in range(0, len(unresolved), 100):
+            ids = [item['id'] for item in unresolved[offset:offset + 100]]
+            request = urllib.request.Request(self.url.replace('/events', '/incident-statuses'),
+                data=json.dumps({'ids': ids}).encode(),
+                headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + self.token})
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, *args):
+                    return None
+            try:
+                with urllib.request.build_opener(NoRedirect).open(request, timeout=3) as response:
+                    records = json.load(response)['incidents']
+                for record in records:
+                    if record.get('id') not in ids or record.get('status') not in ('open', 'acknowledged', 'resolved', 'false_alarm'):
+                        raise ValueError('Invalid review synchronization')
+                    status = record['status']
+                    existing = next(item for item in unresolved if item['id'] == record['id'])
+                    if status != existing['status'] and status != 'open':
+                        self.store.action(record['id'], {'acknowledged': 'acknowledge', 'resolved': 'resolve', 'false_alarm': 'false_alarm'}[status], record.get('note') or '')
+                self.last_error = None
+            except Exception:
+                self.last_error = 'Review synchronization unavailable; local observations retained.'
+                return False
         return True
 
 
