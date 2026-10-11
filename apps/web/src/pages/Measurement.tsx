@@ -1,5 +1,6 @@
 import { CameraPreview } from "../components/CameraPreview";
 import { startOrResumeCheckIn } from "../lib/checkin";
+import { useCheckInCompletion } from "../lib/checkin-completion";
 import { useEffect, useRef, useState } from "react";
 import {
   useParams,
@@ -8,11 +9,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
-import {
-  RECOMMENDED_CHECK_IN_SECONDS,
-  type Session,
-} from "@siteguard/contracts";
-import { api, useResource, useAction } from "../lib/api";
+import type { Session } from "@siteguard/contracts";
+import { useResource, useAction } from "../lib/api";
 import { useSessionStream } from "../lib/session-stream";
 import {
   PageHeading,
@@ -33,27 +31,30 @@ import {
 export function Measurement() {
   const { id } = useParams(),
     [search] = useSearchParams(),
-    session = useResource<{ session: Session }>(`/sessions/${id}`);
+    session = useResource<{ session: Session }>(`/sessions/${id}`, 5000);
   const stream = useSessionStream(
       id!,
       session.data?.session.status === "active",
     ),
     a = useAction(),
     navigate = useNavigate();
-  const [now, setNow] = useState(Date.now());
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
-  const autoCompleteStarted = useRef(false);
-  const [autoCompleting, setAutoCompleting] = useState(false);
   const browserCamera = search.get("camera") === "browser";
   const s = session.data?.session;
+  const health = useResource<{ presentationDemo?: boolean }>("/health");
+  const completion = useCheckInCompletion(s, (sessionId) =>
+    navigate(`/sessions/${sessionId}`),
+  );
+  const { targetSeconds, remaining, busy: autoCompleting } = completion;
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  useEffect(() => {
-    if (!browserCamera || s?.source !== "presage" || s.status !== "active")
+    if (
+      !browserCamera ||
+      s?.source !== "presage" ||
+      s.status !== "active" ||
+      autoCompleting
+    )
       return;
     let stopped = false;
     let media: MediaStream | undefined;
@@ -195,41 +196,7 @@ export function Measurement() {
       if (videoRef.current) videoRef.current.srcObject = null;
       setCameraActive(false);
     };
-  }, [browserCamera, id, s?.source, s?.status]);
-  const elapsed = s
-    ? Math.max(0, Math.floor((now - Date.parse(s.startedAt)) / 1000))
-    : 0;
-  const targetSeconds = s ? RECOMMENDED_CHECK_IN_SECONDS[s.source] : 0;
-  useEffect(() => {
-    if (
-      !s ||
-      s.status !== "active" ||
-      elapsed < targetSeconds ||
-      autoCompleteStarted.current
-    )
-      return;
-    autoCompleteStarted.current = true;
-    setAutoCompleting(true);
-    let cancelled = false;
-    void api(`/sessions/${s.id}/complete`, {})
-      .then(() => {
-        if (!cancelled) navigate(`/sessions/${s.id}`);
-      })
-      .catch((error) => {
-        if (!cancelled)
-          a.setError(
-            error instanceof Error
-              ? error.message
-              : "Could not finish check-in",
-          );
-      })
-      .finally(() => {
-        if (!cancelled) setAutoCompleting(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [a, elapsed, navigate, s, targetSeconds]);
+  }, [browserCamera, id, s?.source, s?.status, autoCompleting]);
   if (!s)
     return (
       <>
@@ -305,41 +272,35 @@ export function Measurement() {
               {cameraError && (
                 <button
                   className="button secondary"
-                  disabled={a.busy}
-                  onClick={() =>
-                    void a.run(async () => {
-                      await api(`/sessions/${s.id}/complete`, {});
-                      navigate("/web-check-in");
-                    })
-                  }
+                  disabled={a.busy || autoCompleting}
+                  onClick={() => void completion.finish()}
                 >
-                  {a.busy ? "Restarting…" : "Restart web check-in"}
+                  {autoCompleting
+                    ? "Finishing…"
+                    : "Finish interrupted check-in"}
                 </button>
               )}
             </div>
           ) : s.source === "presage" ? (
             <>
               <CameraPreview sessionId={s.id} />
-              <div className="notice demo">
-                <p>
-                  Camera preview still waiting? Continue the labelled
-                  presentation demo without claiming a camera result.
-                </p>
-                <button
-                  className="button secondary full"
-                  disabled={a.busy || autoCompleting}
-                  onClick={() =>
-                    void a.run(async () => {
-                      await api(`/sessions/${s.id}/complete`, {});
-                      navigate(`/sessions/${s.id}`);
-                    })
-                  }
-                >
-                  {a.busy || autoCompleting
-                    ? "Finishing check-in…"
-                    : "Continue with presentation demo"}
-                </button>
-              </div>
+              {health.data?.presentationDemo && (
+                <div className="notice demo">
+                  <p>
+                    Camera preview still waiting? Continue the labelled
+                    presentation demo without claiming a camera result.
+                  </p>
+                  <button
+                    className="button secondary full"
+                    disabled={a.busy || autoCompleting}
+                    onClick={() => void completion.finish()}
+                  >
+                    {a.busy || autoCompleting
+                      ? "Finishing check-in…"
+                      : "Continue with presentation demo"}
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <div className="camera-frame">
@@ -359,6 +320,18 @@ export function Measurement() {
               </span>
             </div>
           )}
+          {browserCamera &&
+            s.source === "presage" &&
+            cameraError &&
+            health.data?.presentationDemo && (
+              <button
+                className="button secondary full"
+                disabled={autoCompleting}
+                onClick={() => void completion.finish()}
+              >
+                Continue with presentation demo
+              </button>
+            )}
           {s.source === "mock" && (
             <div className="notice demo">
               <p>
@@ -400,14 +373,8 @@ export function Measurement() {
           <div className="session-timer">
             <Clock size={18} />
             <strong>
-              {String(
-                Math.floor(Math.max(0, targetSeconds - elapsed) / 60),
-              ).padStart(2, "0")}
-              :
-              {String(Math.max(0, targetSeconds - elapsed) % 60).padStart(
-                2,
-                "0",
-              )}
+              {String(Math.floor(remaining / 60)).padStart(2, "0")}:
+              {String(remaining % 60).padStart(2, "0")}
             </strong>
             <span>remaining</span>
           </div>
@@ -422,15 +389,12 @@ export function Measurement() {
           <button
             className="button primary full"
             disabled={a.busy || autoCompleting}
-            onClick={() =>
-              void a.run(async () => {
-                await api(`/sessions/${s.id}/complete`, {});
-                navigate(`/sessions/${s.id}`);
-              })
-            }
+            onClick={() => void completion.finish()}
           >
             <Square size={14} />
-            {a.busy || autoCompleting ? "Finishing check-in…" : "Finish early"}
+            {a.busy || autoCompleting
+              ? "Finishing check-in…"
+              : "Finish check-in"}
           </button>
         </section>
         <div>
@@ -446,7 +410,9 @@ export function Measurement() {
           />
         </div>
       </div>
-      <ErrorNotice message={a.error || cameraError || stream.error} />
+      <ErrorNotice
+        message={completion.error || a.error || cameraError || stream.error}
+      />
       <section className="card">
         <div className="card-header">
           <div>

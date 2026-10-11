@@ -31,7 +31,7 @@ export function CameraPreview({ sessionId }: { sessionId: string }) {
           clear();
           setVisible(false);
           setMessage(
-            "Waiting for a fresh camera frame. Follow the positioning instructions below.",
+            "Presage is starting the camera. If this persists, restart the check-in below.",
           );
         } else if (
           response.ok &&

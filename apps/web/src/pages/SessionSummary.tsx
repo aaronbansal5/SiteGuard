@@ -90,6 +90,14 @@ export function SessionSummary() {
             description={`${date(s.startedAt)} · ${time(s.startedAt)} · ${Math.round(v.durationSeconds)} seconds recorded`}
             action={<SourceBadge source={s.source} />}
           />
+          {ownsSession && s.interruption && (
+            <div className="notice demo">
+              <p>{s.interruption}</p>
+              <Link className="button secondary" to="/web-check-in">
+                Start a fresh camera check-in
+              </Link>
+            </div>
+          )}
           {ownsSession && (
             <ResearchRestSupportCard
               key={s.id}
@@ -269,7 +277,7 @@ function isRestSupportResult(value: unknown): value is RestSupportResult {
   );
 }
 
-function ResearchRestSupportCard({
+export function ResearchRestSupportCard({
   sessionId,
   source,
   completed,
@@ -385,7 +393,11 @@ function ResearchRestSupportCard({
           </div>
           <div className="research-next-step" role="status">
             <h3>What you can do</h3>
-            <p>{REST_SUPPORT_NEXT_STEP[result.support.signal]}</p>
+            <p>
+              {result.support.presentationSimulation
+                ? "Demo scenario: a worker chooses to request additional rest. Select Request additional rest to continue the walkthrough."
+                : REST_SUPPORT_NEXT_STEP[result.support.signal]}
+            </p>
           </div>
           <HelpActions sessionId={sessionId} />
           <p className="fine-print">

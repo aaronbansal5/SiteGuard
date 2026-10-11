@@ -2234,6 +2234,14 @@ textarea::placeholder {
   display: grid;
   gap: 14px;
   align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+.mobile-main > .card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mobile-main .card-header > div {
+  min-width: 0;
 }
 .mobile-card {
   background: #fff;
@@ -2447,6 +2455,7 @@ textarea::placeholder {
   grid-area: 1 / 1;
   padding: 24px;
   text-align: center;
+  color: #fff;
 }
 .face-position-guide {
   position: absolute;

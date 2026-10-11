@@ -5,7 +5,12 @@ export async function api<T>(
   method = body === undefined ? "GET" : "POST",
   signal?: AbortSignal,
 ): Promise<T> {
-  const deadline = AbortSignal.timeout(15000);
+  // Presage startup waits for the native camera, and completion drains it.
+  // Both routes have bounded backend work that can exceed a normal read.
+  const cameraLifecycle =
+    method === "POST" &&
+    (path === "/sessions" || /^\/sessions\/[^/]+\/complete$/.test(path));
+  const deadline = AbortSignal.timeout(cameraLifecycle ? 45000 : 15000);
   let response: Response;
   try {
     response = await fetch("/api" + path, {
