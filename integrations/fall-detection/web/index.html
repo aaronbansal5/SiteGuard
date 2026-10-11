@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>SiteGuard · Scene review</title>
     <style>
+      /* Rules below set display (e.g. .camera-banner is flex), which would
+         otherwise override the hidden attribute and show the red camera
+         banner in synthetic mode. */
+      [hidden] {
+        display: none !important;
+      }
       :root {
         font-family:
           Inter,
@@ -178,6 +184,17 @@
         font-size: 14px;
         margin-top: 22px;
       }
+      body.incident-flash::after {
+        content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+        box-shadow: inset 0 0 0 12px #ff7885;
+        animation: incident-pulse 1.4s ease-in-out 2;
+      }
+      @keyframes incident-pulse { 50% { opacity: 0.15; } }
+      .incident-alert { position: sticky; top: 0; z-index: 20; padding: 18px 32px;
+        background: #842637; color: white; font-weight: 700; }
+      @media (prefers-reduced-motion: reduce) {
+        body.incident-flash::after { animation: none; }
+      }
       .error {
         border-color: #ac6970;
         color: #ffced1;
@@ -289,6 +306,37 @@
         margin: 8px 0 0;
         font-size: 13px;
       }
+      .camera-banner {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 32px;
+        background: #6b1f2a;
+        color: #fff1f2;
+        font-weight: 700;
+        border-bottom: 2px solid #ff8f9c;
+      }
+      .camera-banner .dot {
+        background: #ff8f9c;
+      }
+      .camera-banner button {
+        padding: 7px 12px;
+        background: #fff1f2;
+        color: #4a1119;
+        border-color: #fff1f2;
+      }
+      .consent label {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-size: 13px;
+        line-height: 1.5;
+        margin-bottom: 14px;
+      }
       @media (max-width: 900px) {
         main {
           grid-template-columns: 1fr;
@@ -311,6 +359,14 @@
     </style>
   </head>
   <body>
+    <div id="incident-alert" class="incident-alert" role="alert" hidden></div>
+    <div class="camera-banner" id="camera-banner" role="status" hidden>
+      <span
+        ><span class="dot" aria-hidden="true"></span>Camera active · local
+        person detection running · frames not stored</span
+      >
+      <button type="button" id="camera-stop">Stop camera</button>
+    </div>
     <div class="shell">
       <header>
         <div class="brand">
@@ -323,7 +379,7 @@
       </header>
       <h1>Possible person down</h1>
       <p style="margin: 0; max-width: 820px">
-        Review sustained horizontal person observations, check the scene, and
+        Review person observations whose bounding-box width exceeds height, check the scene, and
         record a human response. This prototype does not confirm a fall or
         determine injury.
       </p>
@@ -350,19 +406,35 @@
               id="scene"
               width="960"
               height="600"
-              aria-label="Anonymous person bounding boxes; no camera video displayed"
+              aria-label="Anonymous person bounding-box overlay"
             ></canvas>
             <p class="caption" id="description">
               Synthetic mode has no camera. Camera mode offers a local preview
               without recording.
             </p>
           </div>
+          <div class="controls consent" id="consent" hidden>
+            <h3>Camera is off</h3>
+            <p>
+              Starting the camera runs person detection on this laptop. The live
+              preview is shown only on this loopback dashboard; frames are not
+              stored or uploaded. Tell everyone in view before starting, and
+              stop the camera if anyone objects.
+            </p>
+            <label
+              ><input type="checkbox" id="consent-check" /><span
+                id="consent-text"
+              ></span
+            ></label>
+            <button type="button" class="primary" id="camera-start" disabled>
+              Start camera
+            </button>
+          </div>
           <div class="controls" id="controls">
             <h3>Synthetic scenario controls</h3>
             <p>
               Generated bounding boxes test the workflow. They are not real
-              camera detections. Hold the horizontal pose to trigger an
-              observation.
+              camera detections. A wider-than-tall box must persist for over two seconds to trigger an observation.
             </p>
             <div class="buttons">
               <button data-scenario="upright">Standing upright</button
@@ -384,7 +456,7 @@
                 <div class="symbol" aria-hidden="true">◎</div>
                 <h3>No observations yet</h3>
                 <p>
-                  Observations will appear here when a horizontal pose persists.
+                  Observations appear after a person box stays wider than tall for over two seconds.
                 </p>
               </div>
             </div>
@@ -416,6 +488,29 @@
         busy = false,
         renderSignature = "";
       const drafts = new Map();
+      const seenIncidents = new Set();
+      let incidentsInitialized = false, alertTimer;
+      const observationClock = new Intl.DateTimeFormat("en-US", {
+        dateStyle: "medium", timeStyle: "long", timeZone: "America/New_York",
+      });
+      function notifyIncidents(list) {
+        const fresh = list.filter(i => !seenIncidents.has(i.id) && i.status === "open");
+        for (const incident of list) seenIncidents.add(incident.id);
+        if (incidentsInitialized && fresh.length) {
+          const latest = fresh[0];
+          $("incident-alert").textContent = `${fresh.length} new possible person-down observation(s) · ${observationClock.format(new Date(latest.observedAt))} · Check the scene`;
+          $("incident-alert").hidden = false;
+          document.body.classList.remove("incident-flash");
+          void document.body.offsetWidth;
+          document.body.classList.add("incident-flash");
+          clearTimeout(alertTimer);
+          alertTimer = setTimeout(() => {
+            document.body.classList.remove("incident-flash");
+            $("incident-alert").hidden = true;
+          }, 10000);
+        }
+        incidentsInitialized = true;
+      }
       const labels = {
         synthetic: "Synthetic demo",
         camera: "Camera heuristic",
@@ -477,7 +572,7 @@
         }
         ctx.fillStyle = "#8fa3bb";
         ctx.font = "16px system-ui";
-        ctx.fillText("BOUNDING-BOX OBSERVATIONS · NO VIDEO", 24, 35);
+        ctx.fillText("BOUNDING-BOX OVERLAY · ANONYMOUS TRACKS", 24, 35);
         for (const track of state.tracks || []) {
           const [x1, y1, x2, y2] = track.bbox;
           const x = (x1 / w) * 960,
@@ -519,13 +614,22 @@
         $("description").textContent =
           state.source === "synthetic"
             ? "Synthetic bounding boxes only. No camera access is required."
-            : "Camera preview stays on this laptop over loopback. Frames are not stored.";
+            : state.cameraActive
+              ? "Live preview stays on this laptop over loopback. Frames are not stored."
+              : "Camera is off. No preview or detection until you start it.";
+        $("camera-banner").hidden = !state.cameraActive;
+        $("consent").hidden =
+          state.source === "synthetic" || state.cameraActive;
+        $("consent-text").textContent = state.consentText || "";
         $("preview").hidden =
-          state.source === "synthetic" || state.status !== "running";
+          state.source === "synthetic" ||
+          !state.cameraActive ||
+          state.status !== "running";
         if (!$("preview").hidden)
           $("preview").src = "/api/preview?t=" + Date.now();
         draw(state);
         const list = state.incidents || [];
+        notifyIncidents(list);
         $("count").textContent =
           list.filter((i) => ["open", "acknowledged"].includes(i.status))
             .length + " unresolved";
@@ -538,7 +642,7 @@
           root.append(
             textNode(
               "div",
-              "No observations yet. Try a sustained horizontal pose in synthetic mode.",
+              "No observations yet. A person box must stay wider than tall for over two seconds.",
               "empty",
             ),
           );
@@ -562,7 +666,7 @@
               "p",
               (labels[incident.source] || incident.source) +
                 " · " +
-                new Date(incident.observedAt).toLocaleString(),
+                observationClock.format(new Date(incident.observedAt)),
             ),
           );
           const details = textNode("div", "", "details");
@@ -666,6 +770,32 @@
             button.disabled = false;
           }
         }),
+      );
+      $("consent-check").addEventListener("change", () => {
+        $("camera-start").disabled = !$("consent-check").checked;
+      });
+      async function cameraAction(path, body, button) {
+        if (busy) return;
+        busy = true;
+        button.disabled = true;
+        try {
+          render(await request(path, body));
+          showError("");
+        } catch (e) {
+          showError(e.message);
+        } finally {
+          busy = false;
+          button.disabled =
+            button.id === "camera-start" && !$("consent-check").checked;
+        }
+      }
+      $("camera-start").addEventListener("click", () => {
+        if (!$("consent-check").checked) return;
+        cameraAction("/api/camera/start", { consent: true }, $("camera-start"));
+        $("consent-check").checked = false;
+      });
+      $("camera-stop").addEventListener("click", () =>
+        cameraAction("/api/camera/stop", {}, $("camera-stop")),
       );
       (async function loop() {
         await poll();
