@@ -55,6 +55,9 @@ import { PersonalInsightsPanel } from "../components/PersonalInsights";
 import {
   BROWSER_CAMERA_FPS,
   BROWSER_CAMERA_FRAME_INTERVAL_MS,
+  BROWSER_CAMERA_IDEAL_HEIGHT,
+  BROWSER_CAMERA_IDEAL_WIDTH,
+  BROWSER_CAMERA_MAX_DIMENSION,
 } from "../lib/camera";
 
 type Health = {
@@ -677,8 +680,8 @@ function MobileConsent({
               audio: false,
               video: {
                 facingMode: "user",
-                width: { ideal: 960 },
-                height: { ideal: 720 },
+                width: { ideal: BROWSER_CAMERA_IDEAL_WIDTH },
+                height: { ideal: BROWSER_CAMERA_IDEAL_HEIGHT },
                 frameRate: {
                   ideal: BROWSER_CAMERA_FPS,
                   max: BROWSER_CAMERA_FPS,
@@ -888,7 +891,10 @@ function MobileMeasuring({
           const sourceHeight = videoRef.current.videoHeight;
           if (!sourceWidth || !sourceHeight)
             throw new Error("Camera video has no usable frame size.");
-          const scale = Math.min(1, 640 / Math.max(sourceWidth, sourceHeight));
+          const scale = Math.min(
+            1,
+            BROWSER_CAMERA_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight),
+          );
           const frameWidth = Math.round(sourceWidth * scale);
           const frameHeight = Math.round(sourceHeight * scale);
           if (canvas.width !== frameWidth) canvas.width = frameWidth;
@@ -969,8 +975,8 @@ function MobileMeasuring({
               audio: false,
               video: {
                 facingMode: "user",
-                width: { ideal: 960 },
-                height: { ideal: 720 },
+                width: { ideal: BROWSER_CAMERA_IDEAL_WIDTH },
+                height: { ideal: BROWSER_CAMERA_IDEAL_HEIGHT },
                 frameRate: {
                   ideal: BROWSER_CAMERA_FPS,
                   max: BROWSER_CAMERA_FPS,
