@@ -43,6 +43,19 @@ function summary(): Summary {
 }
 
 describe("local research rest support", () => {
+  it("accepts the canonical rounded delta from full-precision Presage medians", () => {
+    const s = summary();
+    s.pulse.initialMedian = 57.150634765625;
+    s.pulse.finalMedian = 62.761505126953125;
+    s.pulse.delta = 5.61;
+    expect(extractRestSupportFeatures(s).pulse).toMatchObject({
+      initial: 57.150634765625,
+      final: 62.761505126953125,
+      delta: 5.61,
+    });
+    s.pulse.delta = 5.63;
+    expect(extractRestSupportFeatures(s).pulse).toBeNull();
+  });
   it("extracts descriptive features without identifiers or mutating the summary", () => {
     const s = summary();
     const before = structuredClone(s);

@@ -107,7 +107,7 @@ test("worker sees what safety operations can see and stops sharing a check-in", 
   // The worker can still open their own summary.
   await page.goto(`/sessions/${session.id}`);
   await expect(
-    page.getByRole("heading", { name: "Your observations, in context." }),
+    page.getByRole("heading", { name: "Your next step, with context." }),
   ).toBeVisible();
 
   expect((await supervisor.post("/api/demo/reset", { data: {} })).ok()).toBe(

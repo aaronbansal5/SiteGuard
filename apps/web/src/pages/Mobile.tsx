@@ -1,5 +1,7 @@
 import { CameraPreview } from "../components/CameraPreview";
 import { startOrResumeCheckIn } from "../lib/checkin";
+import { useCheckInCompletion } from "../lib/checkin-completion";
+import { ResearchRestSupportCard } from "./SessionSummary";
 // Phone layout for voluntary recurring check-ins (docs/MOBILE_APP.md).
 //
 // Invariants kept here:
@@ -13,7 +15,6 @@ import { startOrResumeCheckIn } from "../lib/checkin";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
-  Shield,
   Bell,
   BellOff,
   Coffee,
@@ -22,7 +23,6 @@ import {
   Activity,
   Wind,
   LockKeyhole,
-  FlaskConical,
 } from "lucide-react";
 import type {
   Break,
@@ -50,7 +50,6 @@ import {
   type ReminderSnapshot,
 } from "../lib/checkin-reminder";
 import { ErrorNotice, HelpActions, Loading } from "../components/ui";
-import { SourceBadge } from "../components/SourceBadge";
 import { PersonalInsightsPanel } from "../components/PersonalInsights";
 import {
   BROWSER_CAMERA_FPS,
@@ -62,6 +61,7 @@ import {
 
 type Health = {
   checkInTestMode?: boolean;
+  presentationDemo?: boolean;
   measurementSources: {
     mock: boolean;
     presage: boolean;
@@ -89,12 +89,11 @@ export function MobileApp() {
     <div className="mobile-app">
       <header className="mobile-header">
         <Link to="/mobile" className="mobile-brand">
-          <span className="brand-mark">
-            <Shield size={20} />
-          </span>
-          <span>
-            SiteGuard<small>CHECK-IN</small>
-          </span>
+          <img
+            className="app-logo phone-logo"
+            src="/siteguard-logo.png"
+            alt="SiteGuard"
+          />
         </Link>
         {identity?.role === "worker" && !choosing && (
           <Link to="/worker" className="button ghost mobile-switch">
@@ -102,10 +101,6 @@ export function MobileApp() {
           </Link>
         )}
       </header>
-      <div className="mobile-demo-strip">
-        <FlaskConical size={14} /> Fictional workforce · camera readings are
-        real only when labeled Presage
-      </div>
       <main id="main" className="mobile-main">
         {identity?.role !== "worker" || choosing ? (
           <p>Sign in with your worker account to continue.</p>
@@ -214,14 +209,13 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const history = useResource<{ sessions: Session[] }>(
     `/workers/${workerId}/history?limit=5`,
   );
-  const demoMode = health.data?.measurementSources.mock;
   const browserCamera = Boolean(
     health.data?.measurementSources.browserCamera &&
     window.isSecureContext &&
     navigator.mediaDevices?.getUserMedia,
   );
   const reminder = useCheckInReminder(
-    demoMode === undefined ? null : defaultReminderInterval(demoMode),
+    health.data ? defaultReminderInterval(false) : null,
   );
   const [stage, setStage] = useState<Stage>({ kind: "home" });
   const resumed = useRef(false);
@@ -235,7 +229,9 @@ function MobileWorker({ workerId }: { workerId: string }) {
   useEffect(() => {
     if (resumed.current || !history.data) return;
     resumed.current = true;
-    const active = history.data.sessions.find((s) => s.status === "active");
+    const active = history.data.sessions.find(
+      (s) => s.status === "active" && s.source === "presage",
+    );
     if (active) setStage({ kind: "measuring", sessionId: active.id });
   }, [history.data]);
   // Pause reminders while the consent screen or a check-in is open.
@@ -263,11 +259,11 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const onDemand = Boolean(checkInBreak && !activeBreak);
   const presageAvailable = Boolean(health.data?.measurementSources.presage);
   const canMeasure =
-    Boolean(browserCamera || demoMode || (localTest && presageAvailable)) &&
+    Boolean(browserCamera || presageAvailable) &&
     (localTest || Boolean(checkInBreak));
   const blockedReason =
-    !browserCamera && !demoMode && !(localTest && presageAvailable)
-      ? "Camera check-in needs HTTPS and a running Presage bridge. Synthetic demo mode is also unavailable."
+    !browserCamera && !presageAvailable
+      ? "Camera check-in needs a running Presage bridge. On a phone, use HTTPS and allow camera access."
       : !localTest && !checkInBreak
         ? `No scheduled check-in window is available${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
         : "";
@@ -282,8 +278,6 @@ function MobileWorker({ workerId }: { workerId: string }) {
           <DevicePairingCard />
           <MobileHome
             reminder={reminder}
-            demoMode={demoMode}
-            browserCamera={browserCamera}
             activeBreak={activeBreak}
             canMeasure={canMeasure}
             blockedReason={blockedReason}
@@ -295,11 +289,9 @@ function MobileWorker({ workerId }: { workerId: string }) {
         <MobileConsent
           workerId={workerId}
           localTest={localTest}
-          presageAvailable={presageAvailable}
           breakId={checkInBreak?.id ?? null}
           onDemand={onDemand}
           browserCamera={browserCamera}
-          demoMode={Boolean(demoMode)}
           canMeasure={canMeasure}
           blockedReason={blockedReason}
           onCancel={() => setStage({ kind: "home" })}
@@ -312,6 +304,7 @@ function MobileWorker({ workerId }: { workerId: string }) {
         <MobileMeasuring
           sessionId={stage.sessionId}
           initialMedia={stage.media}
+          presentationDemo={health.data?.presentationDemo === true}
           onFinished={() =>
             setStage({ kind: "done", sessionId: stage.sessionId })
           }
@@ -396,16 +389,12 @@ function DevicePairingCard() {
 
 function MobileHome({
   reminder,
-  demoMode,
-  browserCamera,
   activeBreak,
   canMeasure,
   blockedReason,
   onStart,
 }: {
   reminder: ReturnType<typeof useCheckInReminder>;
-  demoMode: boolean | undefined;
-  browserCamera: boolean;
   activeBreak: Break | undefined;
   canMeasure: boolean;
   blockedReason: string;
@@ -478,7 +467,6 @@ function MobileHome({
       <section className="mobile-card mobile-reminder" aria-live="off">
         <div className="row-between">
           <h1>Check-in reminders</h1>
-          {demoMode && <span className="badge synthetic">Demo interval</span>}
         </div>
         {!s || !settings ? (
           <Loading />
@@ -522,9 +510,6 @@ function MobileHome({
               </button>
             </form>
             <p className="fine-print">
-              {demoMode
-                ? `Demo interval: ${settings.intervalSeconds} seconds so the cycle is visible in a short demo. `
-                : ""}
               A reminder is a convenience, not a rest or health recommendation.
               It never starts a measurement.
             </p>
@@ -547,11 +532,8 @@ function MobileHome({
       <section className="mobile-card">
         <h2>Check in now</h2>
         <p className="muted">
-          Voluntary, about{" "}
-          {browserCamera
-            ? RECOMMENDED_CHECK_IN_SECONDS.presage
-            : RECOMMENDED_CHECK_IN_SECONDS.mock}{" "}
-          seconds, and you can stop at any time.
+          Voluntary, about {RECOMMENDED_CHECK_IN_SECONDS.presage} seconds, and
+          you can stop at any time.
         </p>
         {blockedReason && <p className="fine-print">{blockedReason}</p>}
         <button
@@ -631,11 +613,9 @@ function NotificationOptIn() {
 function MobileConsent({
   workerId,
   localTest,
-  presageAvailable,
   breakId,
   onDemand,
   browserCamera,
-  demoMode,
   canMeasure,
   blockedReason,
   onCancel,
@@ -643,11 +623,9 @@ function MobileConsent({
 }: {
   workerId: string;
   localTest: boolean;
-  presageAvailable: boolean;
   breakId: string | null;
   onDemand: boolean;
   browserCamera: boolean;
-  demoMode: boolean;
   canMeasure: boolean;
   blockedReason: string;
   onCancel: () => void;
@@ -655,11 +633,9 @@ function MobileConsent({
 }) {
   // Fresh state on every visit: consent is never remembered.
   const [consent, setConsent] = useState(false),
-    [source, setSource] = useState<"presage" | "mock">(
-      browserCamera || (localTest && presageAvailable) ? "presage" : "mock",
-    ),
     [share, setShare] = useState(false);
-  const phoneCamera = source === "presage" && browserCamera;
+  const source = "presage" as const;
+  const phoneCamera = browserCamera;
   const a = useAction();
   return (
     <form
@@ -730,16 +706,11 @@ function MobileConsent({
                 Frames are sent over HTTPS to the SiteGuard server for transient
                 Presage processing. They are not saved. Stop at any time.
               </>
-            ) : source === "presage" ? (
+            ) : (
               <>
                 <strong>The laptop camera is used for this check-in.</strong>{" "}
                 The local Presage bridge processes frames transiently. They are
                 not saved. Stop at any time.
-              </>
-            ) : (
-              <>
-                <strong>Synthetic demo readings.</strong> No camera is used and
-                these are not your pulse or breathing rate.
               </>
             )}
           </li>
@@ -756,29 +727,6 @@ function MobileConsent({
             times and requests. Sharing this summary is optional.
           </li>
         </ul>
-      )}
-      <div className="mobile-source">
-        <SourceBadge source={source} />
-        <span>Measurement source for this check-in</span>
-      </div>
-      {((browserCamera && demoMode) || localTest) && (
-        <label>
-          Check-in mode
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value as "presage" | "mock")}
-          >
-            <option
-              value="presage"
-              disabled={!browserCamera && !presageAvailable}
-            >
-              {browserCamera
-                ? "Browser camera · Presage"
-                : "Presage · laptop camera bridge"}
-            </option>
-            <option value="mock">Synthetic demo · no camera</option>
-          </select>
-        </label>
       )}
       <p className="fine-print">
         No workload or temperature questions are required. SiteGuard handles the
@@ -811,13 +759,7 @@ function MobileConsent({
           className="button primary mobile-big"
           disabled={(!localTest && !consent) || !canMeasure || a.busy}
         >
-          {a.busy
-            ? "Starting…"
-            : localTest
-              ? source === "presage"
-                ? "Begin camera check-in"
-                : "Begin synthetic check-in"
-              : "Begin check-in"}
+          {a.busy ? "Starting…" : "Begin camera check-in"}
           <ArrowRight size={18} />
         </button>
         <button
@@ -843,21 +785,32 @@ function MobileMeasuring({
   sessionId,
   initialMedia,
   onFinished,
+  presentationDemo,
 }: {
   sessionId: string;
   initialMedia?: MediaStream;
   onFinished: () => void;
+  presentationDemo: boolean;
 }) {
-  const session = useResource<{ session: Session }>(`/sessions/${sessionId}`);
+  const session = useResource<{ session: Session }>(
+    `/sessions/${sessionId}`,
+    5000,
+  );
   const s = session.data?.session;
   const stream = useSessionStream(sessionId, s?.status === "active");
-  const a = useAction();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const completion = useCheckInCompletion(s, onFinished);
+  const { targetSeconds, remaining, busy: autoCompleting } = completion;
   const phoneCamera = initialMedia !== undefined;
   useEffect(() => {
-    if (!phoneCamera || s?.source !== "presage" || s.status !== "active")
+    if (
+      !phoneCamera ||
+      s?.source !== "presage" ||
+      s.status !== "active" ||
+      autoCompleting
+    )
       return;
     let stopped = false;
     let media: MediaStream | undefined;
@@ -1007,15 +960,7 @@ function MobileMeasuring({
       media?.getTracks().forEach((track) => track.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
     };
-  }, [s?.source, s?.status, sessionId, initialMedia]);
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    if (s?.status === "completed") onFinished();
-  }, [s?.status, onFinished]);
+  }, [s?.source, s?.status, sessionId, initialMedia, autoCompleting]);
   if (!s)
     return (
       <section className="mobile-card">
@@ -1033,10 +978,6 @@ function MobileMeasuring({
         )}
       </section>
     );
-  const elapsed = Math.max(
-    0,
-    Math.floor((now - Date.parse(s.startedAt)) / 1000),
-  );
   const latest = (pick: "heartRateBpm" | "respiratoryRateBrpm") =>
     stream.readings
       .map((e) => e.reading)
@@ -1047,7 +988,6 @@ function MobileMeasuring({
     <section className="mobile-card">
       <div className="row-between">
         <span className="eyebrow">CHECKING IN</span>
-        <SourceBadge source={s.source} />
       </div>
       <h1>Sit comfortably and rest.</h1>
       {s.source === "presage" && phoneCamera && (
@@ -1075,17 +1015,38 @@ function MobileMeasuring({
         </>
       )}
       {s.source === "presage" && !phoneCamera && (
-        <CameraPreview sessionId={s.id} />
+        <>
+          <CameraPreview sessionId={s.id} />
+          {presentationDemo && (
+            <div className="notice demo">
+              <p>
+                Camera preview still waiting? Continue the labelled presentation
+                demo without claiming a camera result.
+              </p>
+              <button
+                type="button"
+                className="button secondary mobile-big"
+                disabled={autoCompleting}
+                onClick={() => void completion.finish()}
+              >
+                {autoCompleting
+                  ? "Finishing…"
+                  : "Continue with presentation demo"}
+              </button>
+            </div>
+          )}
+        </>
       )}
       <div className="mobile-countdown">
-        <span>Elapsed</span>
+        <span>Remaining</span>
         <strong data-testid="checkin-elapsed">
-          {formatCountdown(elapsed)}
+          {formatCountdown(remaining)}
         </strong>
       </div>
       <p className="fine-print">
-        No time limit. Keep testing for as long as you need, then select Finish
-        check-in to stop recording. Data sufficiency is not a medical threshold.
+        Standard {targetSeconds}-second demo check-in. It will finish
+        automatically; you can finish early. This duration is a demo flow, not a
+        medical threshold.
       </p>
       <div className="mobile-readings">
         <div>
@@ -1111,37 +1072,25 @@ function MobileMeasuring({
           : "Presage measurement."}{" "}
         Latest quality: {quality ?? "waiting"} · {stream.status}
       </p>
-      <ErrorNotice message={a.error || cameraError || stream.error} />
+      <ErrorNotice message={completion.error || cameraError || stream.error} />
       {(cameraError || stream.error) && s.source === "presage" && (
         <button
           type="button"
           className="button secondary mobile-big"
-          disabled={a.busy}
-          onClick={() =>
-            void a.run(async () => {
-              await api(`/sessions/${s.id}/complete`, {});
-              onFinished();
-            })
-          }
+          disabled={autoCompleting}
+          onClick={() => void completion.finish()}
         >
-          {a.busy
-            ? "Resetting camera…"
-            : "Start a fresh browser camera check-in"}
+          {autoCompleting ? "Finishing…" : "Finish interrupted check-in"}
         </button>
       )}
       <button
         type="button"
         className="button primary mobile-big"
-        disabled={a.busy}
-        onClick={() =>
-          void a.run(async () => {
-            await api(`/sessions/${s.id}/complete`, {});
-            onFinished();
-          })
-        }
+        disabled={autoCompleting}
+        onClick={() => void completion.finish()}
       >
         <Square size={16} />
-        {a.busy ? "Stopping…" : "Finish check-in"}
+        {autoCompleting ? "Finishing…" : "Finish check-in"}
       </button>
     </section>
   );
@@ -1187,10 +1136,16 @@ function MobileDone({
   const v = summary.data?.summary;
   return (
     <>
+      {v && (
+        <ResearchRestSupportCard
+          sessionId={sessionId}
+          source={v.source}
+          completed
+        />
+      )}
       <section className="mobile-card">
         <div className="row-between">
           <span className="eyebrow">CHECK-IN COMPLETE</span>
-          {v && <SourceBadge source={v.source} />}
         </div>
         <h1>Thanks for checking in.</h1>
         <ErrorNotice message={summary.error} />

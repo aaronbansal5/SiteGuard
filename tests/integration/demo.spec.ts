@@ -35,7 +35,7 @@ test("real-time mock check-in → summary → request → protected staffing cha
     .toBeGreaterThanOrEqual(60);
   await page.getByRole("button", { name: "Finish check-in" }).click();
   await expect(
-    page.getByRole("heading", { name: "Your observations, in context." }),
+    page.getByRole("heading", { name: "Your next step, with context." }),
   ).toBeVisible();
   await expect(page.getByText("Observed change", { exact: true })).toHaveCount(
     2,

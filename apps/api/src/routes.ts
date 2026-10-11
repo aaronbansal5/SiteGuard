@@ -106,6 +106,11 @@ export async function registerRoutes(
     return {
       status: "ok",
       checkInTestMode: c.checkInTestMode && c.demoMode && !c.hosted,
+      presentationDemo:
+        c.demoMode &&
+        !c.hosted &&
+        c.researchDemoEnabled &&
+        c.researchDemoAllowPresage,
       database: r.driver.kind,
       measurementSources: {
         mock: c.demoMode,

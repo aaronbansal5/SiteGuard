@@ -15,7 +15,6 @@ import {
   Loading,
   SafetyNote,
 } from "../components/ui";
-import { SourceBadge } from "../components/SourceBadge";
 import { SupervisorMirror } from "../components/SupervisorMirror";
 export function WorkerHome() {
   const { identity } = useIdentity();
@@ -137,7 +136,7 @@ function Worker({ workerId }: { workerId: string }) {
               .length ?? "—"}
             <small>recorded sessions</small>
           </strong>
-          <p>Every session retains its measurement source</p>
+          <p>Review your previous check-ins</p>
         </section>
         <section className="card stat">
           <span>
@@ -176,7 +175,6 @@ function Worker({ workerId }: { workerId: string }) {
                 <span className="muted">
                   {date(latest.startedAt)} · {time(latest.startedAt)}
                 </span>
-                <SourceBadge source={latest.source} />
               </div>
               <div className="mini-metrics">
                 <div>

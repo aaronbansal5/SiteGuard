@@ -42,11 +42,16 @@ export class PresageSource implements MeasurementSource {
       );
     if (!this.config.bridgeToken)
       throw new Error("Presage bridge token is not configured");
-    const h = await fetch(this.url("/v1/health"), {
-      headers: this.headers(),
-      redirect: "error",
-      signal: AbortSignal.timeout(5000),
-    });
+    const h = await fetch(
+      this.url(
+        this.input === "custom" ? "/v1/health?input=custom" : "/v1/health",
+      ),
+      {
+        headers: this.headers(),
+        redirect: "error",
+        signal: AbortSignal.timeout(5000),
+      },
+    );
     if (!h.ok) throw new Error("Presage bridge health check failed");
     const health = BridgeHealthSchema.parse(await h.json());
     if (health.status !== "ready")
@@ -249,10 +254,11 @@ export class PresageSource implements MeasurementSource {
           },
         )
       : undefined;
-    await this.task;
-    if (stopRequest) {
-      const r = await stopRequest;
-      if (!r.ok)
+    const [, r] = await Promise.all([this.task, stopRequest]);
+    if (r) {
+      // A restarted bridge no longer owns this capture. An unknown session is
+      // already absent; completion can safely drain our stored observations.
+      if (!r.ok && r.status !== 404)
         throw new Error(
           "Bridge stop failed; confirm the camera is stopped before retrying",
         );

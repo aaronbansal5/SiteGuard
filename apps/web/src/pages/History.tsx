@@ -12,7 +12,6 @@ import {
   Loading,
   SafetyNote,
 } from "../components/ui";
-import { SourceBadge } from "../components/SourceBadge";
 import { PersonalTrendCard } from "../components/PersonalInsights";
 export function HistoryPage() {
   const { identity } = useIdentity();
@@ -55,7 +54,6 @@ function HistoryTable({ workerId }: { workerId: string }) {
                 <thead>
                   <tr>
                     <th>Check-in</th>
-                    <th>Source</th>
                     <th>Context</th>
                     <th>Pulse change</th>
                     <th>Breathing change</th>
@@ -73,9 +71,6 @@ function HistoryTable({ workerId }: { workerId: string }) {
                             ? "Active"
                             : `${Math.round(s.summary.durationSeconds)}s`}
                         </small>
-                      </td>
-                      <td>
-                        <SourceBadge source={s.source} />
                       </td>
                       <td>
                         {s.context.workload || "Not recorded"}

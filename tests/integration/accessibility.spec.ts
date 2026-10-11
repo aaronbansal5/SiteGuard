@@ -54,7 +54,7 @@ test("summary and charts meet automated WCAG AA checks", async ({ page }) => {
     data: { role: "worker", workerId: fixtureId(1) },
   });
   await page.goto(`/sessions/${fixtureId(1001)}`);
-  await page.getByRole("heading", { name: "Your observations, in context." }).waitFor();
+  await page.getByRole("heading", { name: "Your next step, with context." }).waitFor();
   await page
     .getByRole("heading", { name: "Compared with your own usual" })
     .waitFor();

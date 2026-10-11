@@ -43,7 +43,7 @@ test("phone-width journey: explicit consent, synthetic measurement, result, rest
   ).toBeVisible();
   await page.getByRole("button", { name: "Finish check-in" }).click();
   await expect(
-    page.getByRole("heading", { name: "Your observations, in context." }),
+    page.getByRole("heading", { name: "Your next step, with context." }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Research rest support" }),
