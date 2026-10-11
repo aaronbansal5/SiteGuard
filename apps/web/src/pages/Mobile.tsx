@@ -52,6 +52,10 @@ import {
 import { ErrorNotice, HelpActions, Loading } from "../components/ui";
 import { SourceBadge } from "../components/SourceBadge";
 import { PersonalInsightsPanel } from "../components/PersonalInsights";
+import {
+  BROWSER_CAMERA_FPS,
+  BROWSER_CAMERA_FRAME_INTERVAL_MS,
+} from "../lib/camera";
 
 type Health = {
   checkInTestMode?: boolean;
@@ -674,7 +678,10 @@ function MobileConsent({
                 facingMode: "user",
                 width: { ideal: 960 },
                 height: { ideal: 720 },
-                frameRate: { ideal: 30 },
+                frameRate: {
+                  ideal: BROWSER_CAMERA_FPS,
+                  max: BROWSER_CAMERA_FPS,
+                },
               },
             });
           }
@@ -931,7 +938,11 @@ function MobileMeasuring({
         if (!stopped)
           timer = setTimeout(
             () => void capture(),
-            Math.max(0, 33 - (performance.now() - captureStartedAt)),
+            Math.max(
+              0,
+              BROWSER_CAMERA_FRAME_INTERVAL_MS -
+                (performance.now() - captureStartedAt),
+            ),
           );
       } catch (error) {
         encoding = false;
@@ -950,7 +961,10 @@ function MobileMeasuring({
                 facingMode: "user",
                 width: { ideal: 960 },
                 height: { ideal: 720 },
-                frameRate: { ideal: 30 },
+                frameRate: {
+                  ideal: BROWSER_CAMERA_FPS,
+                  max: BROWSER_CAMERA_FPS,
+                },
               },
             });
         if (stopped) {
