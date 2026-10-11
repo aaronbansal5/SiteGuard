@@ -229,6 +229,8 @@ struct MeasuringView: View {
                 Label("Finish check-in", systemImage: "stop.fill")
             }
             .buttonStyle(SGPrimaryButton())
+            .disabled(model.isFinishing)
+            .opacity(model.isFinishing ? 0.6 : 1)
         }
     }
 

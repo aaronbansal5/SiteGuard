@@ -63,6 +63,7 @@ export function Measurement() {
     };
     const capture = async () => {
       if (stopped || busy || !media || !context || !videoRef.current) return;
+      const captureStartedAt = performance.now();
       busy = true;
       try {
         const video = videoRef.current;
@@ -115,7 +116,11 @@ export function Measurement() {
         if (!stopped)
           timer = setTimeout(
             () => void capture(),
-            BROWSER_CAMERA_FRAME_INTERVAL_MS,
+            Math.max(
+              0,
+              BROWSER_CAMERA_FRAME_INTERVAL_MS -
+                (performance.now() - captureStartedAt),
+            ),
           );
       }
     };

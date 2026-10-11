@@ -94,7 +94,9 @@ struct ContentView: View {
         .tint(SGStyle.primary)
         .preferredColorScheme(.light)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { Task { await model.stopForBackground() } }
+            if phase == .background || phase == .inactive {
+                Task { await model.stopForBackground() }
+            }
         }
     }
 }
