@@ -352,12 +352,27 @@ function ResearchRestSupportCard({
         </>
       ) : (
         <>
+          {result.support.presentationSimulation && (
+            <div className="notice demo">
+              <p>
+                Presentation simulation: this is a planned demo scenario because
+                the camera did not provide enough usable evidence. It is not a
+                sensor reading or model prediction.
+              </p>
+            </div>
+          )}
           <div className="two-columns">
             <div className="comparison">
-              <span>Model result</span>
+              <span>
+                {result.support.presentationSimulation
+                  ? "Presentation result"
+                  : "Model result"}
+              </span>
               <strong>{REST_SUPPORT_SIGNALS[result.support.signal]}</strong>
               <small>
-                This signal does not determine your rest needs or readiness.
+                {result.support.presentationSimulation
+                  ? "A local demo walkthrough, not a measurement result."
+                  : "This signal does not determine your rest needs or readiness."}
               </small>
             </div>
             <div className="comparison">
@@ -374,9 +389,11 @@ function ResearchRestSupportCard({
           </div>
           <HelpActions sessionId={sessionId} />
           <p className="fine-print">
-            {result.support.syntheticDemo
-              ? "Local synthetic-model theory demo — trained on fabricated research records; this output is unvalidated."
-              : "Descriptive research rule — no trained-model result is available for this check-in."}
+            {result.support.presentationSimulation
+              ? "Demo mode is showing a labelled walkthrough because the camera evidence was incomplete."
+              : result.support.syntheticDemo
+                ? "Local synthetic-model theory demo — trained on fabricated research records; this output is unvalidated."
+                : "Descriptive research rule — no trained-model result is available for this check-in."}
           </p>
           <div className="limitations">
             <h3>Uncertainty: {result.support.uncertainty.level}</h3>

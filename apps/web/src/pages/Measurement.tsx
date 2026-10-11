@@ -8,7 +8,10 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
-import type { Session } from "@siteguard/contracts";
+import {
+  RECOMMENDED_CHECK_IN_SECONDS,
+  type Session,
+} from "@siteguard/contracts";
 import { api, useResource, useAction } from "../lib/api";
 import { useSessionStream } from "../lib/session-stream";
 import {
@@ -41,6 +44,8 @@ export function Measurement() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const autoCompleteStarted = useRef(false);
+  const [autoCompleting, setAutoCompleting] = useState(false);
   const browserCamera = search.get("camera") === "browser";
   const s = session.data?.session;
   useEffect(() => {
@@ -191,6 +196,40 @@ export function Measurement() {
       setCameraActive(false);
     };
   }, [browserCamera, id, s?.source, s?.status]);
+  const elapsed = s
+    ? Math.max(0, Math.floor((now - Date.parse(s.startedAt)) / 1000))
+    : 0;
+  const targetSeconds = s ? RECOMMENDED_CHECK_IN_SECONDS[s.source] : 0;
+  useEffect(() => {
+    if (
+      !s ||
+      s.status !== "active" ||
+      elapsed < targetSeconds ||
+      autoCompleteStarted.current
+    )
+      return;
+    autoCompleteStarted.current = true;
+    setAutoCompleting(true);
+    let cancelled = false;
+    void api(`/sessions/${s.id}/complete`, {})
+      .then(() => {
+        if (!cancelled) navigate(`/sessions/${s.id}`);
+      })
+      .catch((error) => {
+        if (!cancelled)
+          a.setError(
+            error instanceof Error
+              ? error.message
+              : "Could not finish check-in",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setAutoCompleting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [a, elapsed, navigate, s, targetSeconds]);
   if (!s)
     return (
       <>
@@ -223,11 +262,7 @@ export function Measurement() {
         </Link>
       </div>
     );
-  const elapsed = Math.max(
-      0,
-      Math.floor((now - Date.parse(s.startedAt)) / 1000),
-    ),
-    quality = stream.readings.at(-1)?.reading.quality;
+  const quality = stream.readings.at(-1)?.reading.quality;
   return (
     <>
       <PageHeading
@@ -343,21 +378,28 @@ export function Measurement() {
           <div className="session-timer">
             <Clock size={18} />
             <strong>
-              {String(Math.floor(elapsed / 60)).padStart(2, "0")}:
-              {String(elapsed % 60).padStart(2, "0")}
+              {String(
+                Math.floor(Math.max(0, targetSeconds - elapsed) / 60),
+              ).padStart(2, "0")}
+              :
+              {String(Math.max(0, targetSeconds - elapsed) % 60).padStart(
+                2,
+                "0",
+              )}
             </strong>
-            <span>elapsed</span>
+            <span>remaining</span>
           </div>
           <p className="fine-print">
-            No time limit. Keep testing for as long as you need, then select
-            Finish check-in to stop recording.
+            Standard {targetSeconds}-second demo check-in. It will finish
+            automatically; you can finish early.
             {s.source === "presage" &&
               " Positioning and warm-up may delay valid readings."}{" "}
-            Readings are not medical clearance.
+            This duration is a demo flow, not a medical threshold, and readings
+            are not medical clearance.
           </p>
           <button
             className="button primary full"
-            disabled={a.busy}
+            disabled={a.busy || autoCompleting}
             onClick={() =>
               void a.run(async () => {
                 await api(`/sessions/${s.id}/complete`, {});
@@ -366,7 +408,7 @@ export function Measurement() {
             }
           >
             <Square size={14} />
-            {a.busy ? "Stopping source…" : "Finish check-in"}
+            {a.busy || autoCompleting ? "Finishing check-in…" : "Finish early"}
           </button>
         </section>
         <div>

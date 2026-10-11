@@ -412,9 +412,10 @@ describe("synthetic research route", () => {
       syntheticDemo: true,
       evidence: { source: "presage", synthetic: false },
       modelProvenance: { kind: "synthetic_demo", runtime_ready: false },
-      demoModel: { status: "insufficient_evidence" },
+      presentationSimulation: true,
+      demoModel: { status: "presentation_simulation", score: null },
     });
-    expect(res.json().disclaimer).toContain("Theory demo only");
+    expect(res.json().disclaimer).toContain("Presentation simulation only");
   });
 
   it("authorizes the owner and requires completion before reading any artifact", async () => {

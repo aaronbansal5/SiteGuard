@@ -855,6 +855,8 @@ function MobileMeasuring({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const autoCompleteStarted = useRef(false);
+  const [autoCompleting, setAutoCompleting] = useState(false);
   const phoneCamera = initialMedia !== undefined;
   useEffect(() => {
     if (!phoneCamera || s?.source !== "presage" || s.status !== "active")
@@ -1016,6 +1018,40 @@ function MobileMeasuring({
   useEffect(() => {
     if (s?.status === "completed") onFinished();
   }, [s?.status, onFinished]);
+  const elapsed = s
+    ? Math.max(0, Math.floor((now - Date.parse(s.startedAt)) / 1000))
+    : 0;
+  const targetSeconds = s ? RECOMMENDED_CHECK_IN_SECONDS[s.source] : 0;
+  useEffect(() => {
+    if (
+      !s ||
+      s.status !== "active" ||
+      elapsed < targetSeconds ||
+      autoCompleteStarted.current
+    )
+      return;
+    autoCompleteStarted.current = true;
+    setAutoCompleting(true);
+    let cancelled = false;
+    void api(`/sessions/${s.id}/complete`, {})
+      .then(() => {
+        if (!cancelled) onFinished();
+      })
+      .catch((error) => {
+        if (!cancelled)
+          a.setError(
+            error instanceof Error
+              ? error.message
+              : "Could not finish check-in",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setAutoCompleting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [a, elapsed, onFinished, s, targetSeconds]);
   if (!s)
     return (
       <section className="mobile-card">
@@ -1033,10 +1069,6 @@ function MobileMeasuring({
         )}
       </section>
     );
-  const elapsed = Math.max(
-    0,
-    Math.floor((now - Date.parse(s.startedAt)) / 1000),
-  );
   const latest = (pick: "heartRateBpm" | "respiratoryRateBrpm") =>
     stream.readings
       .map((e) => e.reading)
@@ -1078,14 +1110,15 @@ function MobileMeasuring({
         <CameraPreview sessionId={s.id} />
       )}
       <div className="mobile-countdown">
-        <span>Elapsed</span>
+        <span>Remaining</span>
         <strong data-testid="checkin-elapsed">
-          {formatCountdown(elapsed)}
+          {formatCountdown(Math.max(0, targetSeconds - elapsed))}
         </strong>
       </div>
       <p className="fine-print">
-        No time limit. Keep testing for as long as you need, then select Finish
-        check-in to stop recording. Data sufficiency is not a medical threshold.
+        Standard {targetSeconds}-second demo check-in. It will finish
+        automatically; you can finish early. This duration is a demo flow, not a
+        medical threshold.
       </p>
       <div className="mobile-readings">
         <div>
@@ -1132,7 +1165,7 @@ function MobileMeasuring({
       <button
         type="button"
         className="button primary mobile-big"
-        disabled={a.busy}
+        disabled={a.busy || autoCompleting}
         onClick={() =>
           void a.run(async () => {
             await api(`/sessions/${s.id}/complete`, {});
@@ -1141,7 +1174,7 @@ function MobileMeasuring({
         }
       >
         <Square size={16} />
-        {a.busy ? "Stopping…" : "Finish check-in"}
+        {a.busy || autoCompleting ? "Finishing…" : "Finish early"}
       </button>
     </section>
   );

@@ -59,11 +59,15 @@ export interface RestSupportResult {
       | "inferred"
       | "insufficient_evidence"
       | "unavailable"
-      | "measurement_source_blocked";
+      | "measurement_source_blocked"
+      /** Explicit local presentation scenario, never a model prediction. */
+      | "presentation_simulation";
     /** Uncalibrated logistic output, never a validated confidence or fatigue score. */
     score: number | null;
     target: "self-reported request for additional rest";
   };
+  /** Local walkthrough result used only when the configured theory demo lacks usable sensor evidence. */
+  presentationSimulation?: true;
 }
 
 function extractMetric(
