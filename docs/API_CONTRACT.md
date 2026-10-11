@@ -43,6 +43,7 @@ POST /schedule/preview {} → {baseRevision,assignments,coverageGaps}.
 POST /schedule/commit {baseRevision,assignments(max500)} → {scheduleRevision,assignments,coverageGaps,auditEventId}; transactional constraints; gaps explicit.
 POST /insights/explain {kind:session,sessionId} or {kind:schedule,auditEventId} → {origin:gemini|deterministic,observations,limitations}. Server fetches facts; no raw vitals/names/symptom notes/footage sent.
 POST /demo/reset {} → {reset:true}; supervisor local demo only, disabled hosted/non-demo.
+POST /demo/fresh-break {workerId:UUID} → 201 {break,scheduleRevision}; supervisor and loopback local demo only. Adds a new 15-minute protected fictional break for a worker only if none overlaps; preserves all earlier breaks, sessions, and readings. Returns 409 for overlap or active check-in. This does not move or shorten a required break.
 
 ## Errors and sample
 

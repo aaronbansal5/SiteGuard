@@ -318,6 +318,13 @@ const cases: Case[] = [
     expected: supervisorOnly(404),
   },
   {
+    route: "POST /api/demo/fresh-break",
+    name: "fresh local demo break",
+    url: "/api/demo/fresh-break",
+    payload: { workerId: fixtureId(6) },
+    expected: supervisorOnly(201),
+  },
+  {
     route: "POST /api/demo/reset",
     name: "reset",
     url: "/api/demo/reset",

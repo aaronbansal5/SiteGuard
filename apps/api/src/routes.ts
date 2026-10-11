@@ -904,4 +904,61 @@ export async function registerRoutes(
     await seed(r, true);
     return { reset: true };
   });
+  app.post("/api/demo/fresh-break", async (req, reply) => {
+    supervisor(req);
+    const { workerId } = z.strictObject({ workerId: Id }).parse(req.body);
+    if (
+      c.hosted ||
+      !c.demoMode ||
+      !["127.0.0.1", "::1"].includes(c.host) ||
+      !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
+        req.socket.remoteAddress ?? "",
+      )
+    )
+      fail(
+        403,
+        "DEMO_LOCAL_ONLY",
+        "Fresh demo breaks are available only on the local demo",
+      );
+    const result = await r.transaction(async (tx) => {
+      if (!(await tx.get("workers", workerId)))
+        fail(404, "WORKER_NOT_FOUND", "Worker not found");
+      if (
+        (await tx.list("sessions")).some(
+          (s) => s.workerId === workerId && s.status === "active",
+        )
+      )
+        fail(409, "SESSION_ACTIVE", "Finish the active check-in first");
+      const now = Date.now();
+      const ends = now + 15 * 60_000;
+      if (
+        (await tx.list("breaks")).some(
+          (b) =>
+            b.workerId === workerId &&
+            Date.parse(b.startsAt) < ends &&
+            Date.parse(b.endsAt) > now,
+        )
+      )
+        fail(
+          409,
+          "BREAK_OVERLAP",
+          "This worker already has a break in the next 15 minutes",
+        );
+      const br = {
+        id: randomUUID(),
+        workerId,
+        startsAt: new Date(now).toISOString(),
+        endsAt: new Date(ends).toISOString(),
+        kind: "protected" as const,
+        policyLabel: "Fictional local demo · 15 min protected break",
+        revision: 0,
+        requestId: null,
+      };
+      await tx.put("breaks", br);
+      await audit(tx, "demo_fresh_break", br.id, null, br);
+      return { break: br, scheduleRevision: await tx.bump() };
+    });
+    reply.code(201);
+    return result;
+  });
 }

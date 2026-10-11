@@ -72,7 +72,8 @@ function Operations() {
     [note, setNote] = useState(""),
     [explanation, setExplanation] = useState<Explanation>(),
     [committed, setCommitted] = useState(false),
-    [reset, setReset] = useState(false);
+    [reset, setReset] = useState(false),
+    [demoWorkerId, setDemoWorkerId] = useState("");
   const o = resource.data;
   const choose = (
     request: RestRequest,
@@ -222,7 +223,10 @@ function Operations() {
               <div className="card-header">
                 <div>
                   <h2>Consented check-ins</h2>
-                  <p>Only sessions the worker explicitly shared for this check-in. Measurements are observations, not clearance.</p>
+                  <p>
+                    Only sessions the worker explicitly shared for this
+                    check-in. Measurements are observations, not clearance.
+                  </p>
                 </div>
               </div>
               {o.sharedSessions?.length ? (
@@ -230,17 +234,31 @@ function Operations() {
                   {o.sharedSessions.map((session) => (
                     <article className="request-item" key={session.id}>
                       <div>
-                        <strong>{o.workers.find((w) => w.id === session.workerId)?.displayName ?? session.workerId}</strong>
-                        <p>{time(session.startedAt)} · {session.source === "presage" ? "Presage camera" : "Synthetic demo"}</p>
+                        <strong>
+                          {o.workers.find((w) => w.id === session.workerId)
+                            ?.displayName ?? session.workerId}
+                        </strong>
+                        <p>
+                          {time(session.startedAt)} ·{" "}
+                          {session.source === "presage"
+                            ? "Presage camera"
+                            : "Synthetic demo"}
+                        </p>
                       </div>
-                      <Link className="text-link" to={`/sessions/${session.id}`}>
+                      <Link
+                        className="text-link"
+                        to={`/sessions/${session.id}`}
+                      >
                         View detailed readings <ArrowRight size={14} />
                       </Link>
                     </article>
                   ))}
                 </div>
               ) : (
-                <p className="muted">No completed check-ins have been shared with safety operations.</p>
+                <p className="muted">
+                  No completed check-ins have been shared with safety
+                  operations.
+                </p>
               )}
             </section>
             <div className="two-columns operations-columns">
@@ -591,9 +609,42 @@ function Operations() {
       )}
       {reset && (
         <Modal
-          title="Reset local demonstration"
+          title="Local demonstration controls"
           onClose={() => setReset(false)}
         >
+          <p>
+            If the worker's fictional break has ended, open a new 15-minute
+            protected demo break. Existing sessions and measurements stay
+            intact.
+          </p>
+          <label>
+            Worker
+            <select
+              value={demoWorkerId}
+              onChange={(e) => setDemoWorkerId(e.target.value)}
+            >
+              <option value="">Choose a worker</option>
+              {o?.workers.map((worker) => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="button secondary"
+            disabled={a.busy || !demoWorkerId}
+            onClick={() =>
+              void a.run(async () => {
+                await api("/demo/fresh-break", { workerId: demoWorkerId });
+                setReset(false);
+                setProposal(undefined);
+                await resource.refresh();
+              })
+            }
+          >
+            Open fresh protected demo break
+          </button>
           <p>
             Recreate the fictional workforce, protected schedule, and synthetic
             history. Stop active check-ins first. Real measurements cannot be

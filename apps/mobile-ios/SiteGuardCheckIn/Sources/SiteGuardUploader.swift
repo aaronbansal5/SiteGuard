@@ -39,14 +39,20 @@ struct DeviceCheckIn: Encodable {
     }
 }
 
+private struct APIUploadFailure: Decodable {
+    struct Detail: Decodable { let code: String; let message: String }
+    let error: Detail
+}
+
 enum UploadError: LocalizedError {
-    case notConfigured, notPaired, wrongWorker, rejected(Int), invalidResponse
+    case notConfigured, notPaired, wrongWorker, rejected(Int, String), invalidResponse
     var errorDescription: String? {
         switch self {
         case .notConfigured: return "Set a trusted SiteGuard HTTPS URL in this build before pairing."
         case .notPaired: return "This phone is not paired with SiteGuard. Nothing was uploaded."
         case .wrongWorker: return "That code belongs to a different worker. Select the same name on the web and phone, then get a new code."
-        case .rejected(let status): return "SiteGuard rejected the upload (HTTP \(status)). Nothing was confirmed."
+        case .rejected(let status, let reason):
+            return "SiteGuard rejected the upload (HTTP \(status)): \(reason) Nothing was confirmed."
         case .invalidResponse: return "SiteGuard returned an invalid response. Nothing was confirmed."
         }
     }
@@ -107,7 +113,13 @@ final class LocalHTTPSUploader: SiteGuardUploader {
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw UploadError.invalidResponse }
         if response.statusCode == 401 && bearer != nil { throw UploadError.notPaired }
-        guard response.statusCode == 201 else { throw UploadError.rejected(response.statusCode) }
+        guard response.statusCode == 201 else {
+            let detail = try? JSONDecoder().decode(APIUploadFailure.self, from: data).error
+            // The API provides fixed public errors. Never echo an arbitrary HTML
+            // proxy response or request body into the worker's result screen.
+            let reason = detail.map { "\($0.code) — \($0.message)." } ?? "Check the desktop connection."
+            throw UploadError.rejected(response.statusCode, reason)
+        }
         return data
     }
 
