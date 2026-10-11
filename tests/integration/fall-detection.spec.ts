@@ -16,6 +16,7 @@ test("worker sees shared scene queue and live camera without manager controls", 
   await page.request.post("/api/demo/login", {
     data: { role: "worker", workerId: fixtureId(1) },
   });
+  let workerStatus = "open";
   await page.route("**/api/fall-detection/state", (route) =>
     route.fulfill({
       json: {
@@ -23,7 +24,7 @@ test("worker sees shared scene queue and live camera without manager controls", 
         status: "running",
         cameraActive: true,
         canViewCamera: true,
-        incidents: [incident],
+        incidents: [{ ...incident, status: workerStatus }],
       },
     }),
   );
@@ -36,6 +37,18 @@ test("worker sees shared scene queue and live camera without manager controls", 
       ),
     }),
   );
+  await page.route("**/api/safety/incidents/*", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      action: "acknowledge",
+      revision: 0,
+      note: "",
+    });
+    workerStatus = "acknowledged";
+    await route.fulfill({
+      json: { incident: { ...incident, status: workerStatus, revision: 1 } },
+    });
+  });
+  await page.clock.install();
   await page.goto("/fall-detection");
   await expect(
     page.getByRole("heading", { name: "Scene monitoring" }),
@@ -62,9 +75,15 @@ test("worker sees shared scene queue and live camera without manager controls", 
   await expect(
     page.getByRole("link", { name: "Call emergency services · 911 (US)" }),
   ).toHaveAttribute("href", "tel:911");
-  expect((await page.request.get("/api/fall-detection/preview")).status()).toBe(
-    200,
+  // Camera availability is independent of the signed-in user's permission.
+  expect([200, 503]).toContain(
+    (await page.request.get("/api/fall-detection/preview")).status(),
   );
+  await expect(page.locator("body")).toHaveClass(/fall-alert-active/);
+  await page.clock.fastForward(11000);
+  await expect(page.locator("body")).toHaveClass(/fall-alert-active/);
+  await page.getByRole("button", { name: "Acknowledge alerts" }).click();
+  await expect(page.locator("body")).not.toHaveClass(/fall-alert-active/);
 });
 test("manager sees boxes and commits revision checked scene review", async ({
   page,

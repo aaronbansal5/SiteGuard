@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Camera, ShieldAlert } from "lucide-react";
 import { useIdentity } from "../App";
@@ -61,31 +61,18 @@ function SceneView({ manager }: { manager: boolean }) {
     action = useAction();
   const [consent, setConsent] = useState(false),
     [preview, setPreview] = useState("");
-  const [previewError, setPreviewError] = useState(""),
-    [alert, setAlert] = useState("");
+  const [previewError, setPreviewError] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const seen = useRef<Set<string> | null>(null);
-  const alertTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  useEffect(() => () => clearTimeout(alertTimer.current), []);
   const scene = resource.data;
+  const unacknowledged =
+    scene?.incidents.filter((incident) => incident.status === "open") || [];
+  const alert = unacknowledged.length
+    ? `${unacknowledged.length} unacknowledged possible person-down observation(s). Check the scene.`
+    : "";
   useEffect(() => {
-    if (!scene) return;
-    const fresh = scene.incidents.filter(
-      (i) => i.status === "open" && seen.current && !seen.current.has(i.id),
-    );
-    seen.current = new Set([
-      ...(seen.current || []),
-      ...scene.incidents.map((i) => i.id),
-    ]);
-    if (!fresh.length) return;
-    setAlert(
-      `${fresh.length} new possible person-down observation(s). Check the scene.`,
-    );
-    clearTimeout(alertTimer.current);
-    alertTimer.current = setTimeout(() => setAlert(""), 10000);
-  }, [scene]);
+    document.body.classList.toggle("fall-alert-active", !!alert);
+    return () => document.body.classList.remove("fall-alert-active");
+  }, [!!alert]);
   useEffect(() => {
     if (
       !scene?.canViewCamera ||
@@ -156,7 +143,28 @@ function SceneView({ manager }: { manager: boolean }) {
       />
       {alert && (
         <div className="fall-new-alert" role="alert">
-          {alert}
+          <p>{alert}</p>
+          <button
+            className="button secondary"
+            disabled={action.busy}
+            onClick={() =>
+              void action.run(async () => {
+                for (const incident of unacknowledged)
+                  await api(
+                    `/safety/incidents/${incident.id}`,
+                    {
+                      action: "acknowledge",
+                      revision: incident.revision,
+                      note: "",
+                    },
+                    "PATCH",
+                  );
+                await resource.refresh();
+              })
+            }
+          >
+            Acknowledge alerts
+          </button>
         </div>
       )}
       <ErrorNotice message={resource.error || action.error} />
