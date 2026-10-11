@@ -312,6 +312,7 @@ async function apiSetup(overrides: Partial<Config> = {}) {
   const ctx = await createApp({
     sqlitePath: ":memory:",
     databaseUrl: undefined,
+    allowSqlite: true,
     cookieSecret: "test-secret-at-least-thirty-two-characters",
     measurementToken: "internal-test-token",
     bridgeToken: undefined,

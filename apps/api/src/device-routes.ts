@@ -126,10 +126,16 @@ export function registerDeviceRoutes(
     }
     const token = randomBytes(32).toString("base64url");
     const expiresAt = now + 30 * 24 * 60 * 60_000;
-    await r.driver.query("DELETE FROM device_pairings WHERE expires_at<=$1", [new Date(now).toISOString()]);
+    await r.driver.query("DELETE FROM device_pairings WHERE expires_at<=$1", [
+      new Date(now).toISOString(),
+    ]);
     await r.driver.query(
       "INSERT INTO device_pairings (token_digest,worker_id,expires_at) VALUES ($1,$2,$3)",
-      [createHash("sha256").update(token).digest("hex"), pairing.workerId, new Date(expiresAt).toISOString()],
+      [
+        createHash("sha256").update(token).digest("hex"),
+        pairing.workerId,
+        new Date(expiresAt).toISOString(),
+      ],
     );
     pairings.delete(code);
     failures.delete(key);

@@ -78,16 +78,23 @@ describe("local iPhone upload", () => {
       first = await createApp(options);
       const cookie = await login(first.app, "worker", fixtureId(1));
       const issued = await first.app.inject({
-        method: "POST", url: "/api/devices/pairings", headers: { cookie }, payload: {},
+        method: "POST",
+        url: "/api/devices/pairings",
+        headers: { cookie },
+        payload: {},
       });
       expect(issued.statusCode).toBe(201);
       const paired = await first.app.inject({
-        method: "POST", url: "/api/devices/pair", headers: tls,
+        method: "POST",
+        url: "/api/devices/pair",
+        headers: tls,
         payload: { code: issued.json().code },
       });
       expect(paired.statusCode).toBe(201);
       const token = paired.json().deviceToken as string;
-      const digestRows = await first.repo.driver.query("SELECT token_digest FROM device_pairings");
+      const digestRows = await first.repo.driver.query(
+        "SELECT token_digest FROM device_pairings",
+      );
       expect(digestRows).toHaveLength(1);
       expect(digestRows[0].token_digest).not.toBe(token);
       await first.app.close();
@@ -95,14 +102,19 @@ describe("local iPhone upload", () => {
 
       second = await createApp(options);
       const uploaded = await second.app.inject({
-        method: "POST", url: "/api/device/check-ins",
+        method: "POST",
+        url: "/api/device/check-ins",
         headers: { ...tls, authorization: `Bearer ${token}` },
         payload: payload(true),
       });
       expect(uploaded.statusCode).toBe(201);
-      await second.repo.driver.query("UPDATE device_pairings SET expires_at=$1", [new Date(0).toISOString()]);
+      await second.repo.driver.query(
+        "UPDATE device_pairings SET expires_at=$1",
+        [new Date(0).toISOString()],
+      );
       const expired = await second.app.inject({
-        method: "POST", url: "/api/device/check-ins",
+        method: "POST",
+        url: "/api/device/check-ins",
         headers: { ...tls, authorization: `Bearer ${token}` },
         payload: payload(true),
       });
