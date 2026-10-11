@@ -40,6 +40,8 @@ export interface AdapterSample {
 }
 
 export interface AdapterHandlers {
+  /** Optional in-memory JPEG preview from the same capture; never a reading. */
+  onPreview?(jpeg: Buffer): void;
   onSample(sample: AdapterSample): void;
   /** "stopped" is owned by the bridge and is emitted on stop, not by adapters. */
   onStatus(state: "positioning" | "measuring", message: string | null): void;

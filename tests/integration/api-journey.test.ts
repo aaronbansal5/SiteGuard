@@ -1,6 +1,6 @@
 // Full worker → supervisor journey at API level (in-process, no browser).
 // The real-time browser version lives in demo.spec.ts.
-import { test, expect } from "@playwright/test";
+import { test, expect, describe, beforeEach, afterEach } from "vitest";
 import { fixtureId, fixtures } from "@siteguard/mock-data";
 import {
   SummarySchema,
@@ -20,10 +20,10 @@ import {
 } from "./support/in-process";
 
 let h: Harness;
-test.beforeEach(async () => {
+beforeEach(async () => {
   h = await boot();
 });
-test.afterEach(async () => close(h));
+afterEach(async () => close(h));
 
 test("API journey: check-in → summary → rest request → approval → protected coverage → explanations", async () => {
   const workerCookie = await loginAs(h, "worker");

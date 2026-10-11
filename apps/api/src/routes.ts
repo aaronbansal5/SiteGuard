@@ -1,3 +1,5 @@
+import { sessionStillValid } from "./auth-service.js";
+import { randomBytes, createHash } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
@@ -26,7 +28,7 @@ import {
 import type { Repository } from "./db/repository.js";
 import type { Config } from "./config.js";
 import type { MeasurementManager } from "./measurement/manager.js";
-import { identity, worker, supervisor } from "./auth.js";
+import { identity, worker, supervisor, resolvedIdentity } from "./auth.js";
 import { fail } from "./errors.js";
 import { sessionSummary } from "./domain/sessions.js";
 import {
@@ -95,6 +97,7 @@ export async function registerRoutes(
     }
     return {
       status: "ok",
+      checkInTestMode: c.checkInTestMode && c.demoMode && !c.hosted,
       database: r.driver.kind,
       measurementSources: {
         mock: c.demoMode,
@@ -162,17 +165,34 @@ export async function registerRoutes(
     };
   });
   app.get("/api/workers", async (req) => {
-    if (!c.demoMode) supervisor(req);
-    return { workers: await r.list("workers") };
+    const a = resolvedIdentity(req)?.identity;
+    if (!a && !(c.demoMode && c.authMode === "demo" && !c.hosted))
+      identity(req);
+    return {
+      workers: (await r.list("workers")).filter(
+        (w) => !a || a.role === "supervisor" || w.id === a.workerId,
+      ),
+    };
   });
   app.post("/api/demo/login", async (req, reply) => {
-    if (!c.demoMode) fail(403, "DEMO_DISABLED", "Demo login is disabled");
+    if (!c.demoMode || c.hosted || c.authMode !== "demo")
+      fail(403, "DEMO_DISABLED", "Demo login is disabled");
     const a = LoginSchema.parse(req.body);
     if (a.role === "worker" && !(await r.get("workers", a.workerId)))
       fail(404, "NOT_FOUND", "Worker not found");
+    const authToken = randomBytes(32).toString("base64url");
+    const expiresAt = Date.now() + 86400000;
+    await r.driver.query(
+      "INSERT INTO auth_demo_sessions (token_digest,payload,expires_at) VALUES ($1,$2,$3)",
+      [
+        createHash("sha256").update(authToken).digest("hex"),
+        JSON.stringify(a),
+        new Date(expiresAt).toISOString(),
+      ],
+    );
     reply.setCookie(
       "siteguard",
-      JSON.stringify({ identity: a, expiresAt: Date.now() + 86400000 }),
+      JSON.stringify({ identity: a, expiresAt, authToken }),
       {
         signed: true,
         httpOnly: true,
@@ -197,6 +217,9 @@ export async function registerRoutes(
   app.post("/api/sessions", async (req, reply) => {
     const workerId = worker(req);
     const b = StartSessionSchema.parse(req.body);
+    const localTest = c.checkInTestMode && c.demoMode && !c.hosted;
+    if (b.consentVersion === "local-test" && !localTest)
+      fail(403, "TEST_MODE_DISABLED", "Local check-in testing is disabled");
     if (b.source === "mock" && !c.demoMode)
       fail(403, "MOCK_DISABLED", "Synthetic measurements are disabled");
     if (b.source === "presage" && c.hosted)
@@ -208,7 +231,10 @@ export async function registerRoutes(
       const now = Date.now();
       if (!br || br.workerId !== workerId)
         fail(403, "FORBIDDEN", "Break does not belong to worker");
-      if (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
+      if (
+        !localTest &&
+        (now < Date.parse(br.startsAt) || now >= Date.parse(br.endsAt))
+      )
         fail(
           409,
           "BREAK_INACTIVE",
@@ -263,6 +289,36 @@ export async function registerRoutes(
   app.get("/api/sessions/:id", async (req) => ({
     session: await access(req, id(req)),
   }));
+  app.get("/api/sessions/:id/preview", async (req, reply) => {
+    worker(req);
+    const session = await access(req, id(req), true);
+    reply.header("Cache-Control", "no-store");
+    if (c.hosted || session.source !== "presage")
+      fail(
+        403,
+        "PREVIEW_LOCAL_ONLY",
+        "Camera preview is only available for your local Presage session",
+      );
+    if (session.status !== "active") return reply.code(204).send();
+    try {
+      const response = await fetch(
+        new URL(`/v1/previews/${session.id}`, c.bridgeUrl),
+        {
+          headers: { Authorization: `Bearer ${c.bridgeToken || ""}` },
+          redirect: "error",
+          signal: AbortSignal.timeout(2000),
+        },
+      );
+      if (response.status === 204) return reply.code(204).send();
+      if (!response.ok || response.headers.get("content-type") !== "image/jpeg")
+        return reply.code(503).send();
+      const frame = Buffer.from(await response.arrayBuffer());
+      if (frame.length > 1_000_000) return reply.code(503).send();
+      return reply.type("image/jpeg").send(frame);
+    } catch {
+      return reply.code(503).send();
+    }
+  });
   app.get("/api/sessions/:id/readings", async (req) => {
     const s = await access(req, id(req));
     return { readings: await r.readings(s.id) };
@@ -483,15 +539,16 @@ export async function registerRoutes(
       if (replaying) buffered.push(e);
       else send(e);
     });
-    const heartbeat = setInterval(() => {
+    const heartbeat = setInterval(async () => {
       if (reply.raw.writableEnded) return;
       try {
-        identity(req);
+        if (!(await sessionStillValid(r, c, req)))
+          fail(401, "UNAUTHENTICATED", "Session expired");
       } catch {
         write({
           type: "error",
           code: "UNAUTHENTICATED",
-          message: "Demo identity expired. Sign in again.",
+          message: "Session ended. Sign in again.",
           retryable: false,
         });
         reply.raw.end();
@@ -729,7 +786,14 @@ export async function registerRoutes(
       request.revision++;
       request.note = b.note;
       await tx.put("rest_requests", request);
-      await audit(tx, "request_" + b.action, request.id, before, request);
+      await audit(
+        tx,
+        "request_" + b.action,
+        request.id,
+        before,
+        request,
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
+      );
       return { request, scheduleRevision: await tx.bump() };
     });
   });
@@ -787,7 +851,14 @@ export async function registerRoutes(
       request.revision++;
       await tx.put("breaks", br);
       await tx.put("rest_requests", request);
-      await audit(tx, "break_update", br.id, before, br);
+      await audit(
+        tx,
+        "break_update",
+        br.id,
+        before,
+        br,
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
+      );
       return { break: br, scheduleRevision: await tx.bump() };
     });
   });
@@ -880,6 +951,7 @@ export async function registerRoutes(
           protectedBreakCount: s.breaks.filter((x) => x.kind === "protected")
             .length,
         },
+        resolvedIdentity(req)?.account?.id ?? "supervisor-demo",
       );
       return {
         scheduleRevision: await tx.bump(),

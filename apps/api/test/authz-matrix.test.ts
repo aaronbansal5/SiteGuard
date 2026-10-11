@@ -64,6 +64,12 @@ const sessionBody = {
 };
 const cases: Case[] = [
   {
+    route: "GET /api/sessions/:id/preview",
+    name: "synthetic sessions have no camera preview",
+    url: `/api/sessions/${UNSHARED}/preview`,
+    expected: { anonymous: 401, workerA: 403, workerB: 403, supervisor: 403 },
+  },
+  {
     route: "GET /api/health",
     name: "health",
     url: "/api/health",
@@ -401,7 +407,9 @@ describe("authorization matrix", () => {
         ? await ctx.app.listen({ host: "127.0.0.1", port: 0 })
         : undefined;
       const actual: Partial<Record<Role, number>> = {};
-      for (const role of ROLES)
+      for (const role of c.route === "POST /api/demo/reset"
+        ? (["anonymous", "workerB", "workerA", "supervisor"] as Role[])
+        : ROLES)
         actual[role] = await statusFor(ctx, c, cookies[role], base);
       expect(actual).toEqual(c.expected);
     } finally {

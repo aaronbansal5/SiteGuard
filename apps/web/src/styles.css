@@ -2240,3 +2240,36 @@ textarea::placeholder {
   align-items: center;
   justify-content: center;
 }
+
+.live-camera-image {
+  position: relative;
+  min-height: 220px;
+  background: #101b2d;
+  border-radius: 16px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.live-camera-image canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: scaleX(-1);
+  grid-area: 1 / 1;
+}
+.live-camera-image > p {
+  grid-area: 1 / 1;
+  padding: 24px;
+  text-align: center;
+}
+.face-position-guide {
+  position: absolute;
+  top: 15%;
+  left: 33%;
+  width: 34%;
+  height: 68%;
+  border: 2px dashed rgba(255, 255, 255, 0.85);
+  border-radius: 48%;
+  pointer-events: none;
+}

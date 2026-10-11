@@ -1,3 +1,5 @@
+import { CameraPreview } from "../components/CameraPreview";
+import { startOrResumeCheckIn } from "../lib/checkin";
 import { useEffect, useRef, useState } from "react";
 import {
   useParams,
@@ -7,7 +9,6 @@ import {
 } from "react-router-dom";
 import { ScanLine, Clock, Square, Info } from "lucide-react";
 import type { Session } from "@siteguard/contracts";
-import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { api, useResource, useAction } from "../lib/api";
 import { useSessionStream } from "../lib/session-stream";
 import {
@@ -166,8 +167,7 @@ export function Measurement() {
       0,
       Math.floor((now - Date.parse(s.startedAt)) / 1000),
     ),
-    quality = stream.readings.at(-1)?.reading.quality,
-    target = RECOMMENDED_CHECK_IN_SECONDS[s.source];
+    quality = stream.readings.at(-1)?.reading.quality;
   return (
     <>
       <PageHeading
@@ -186,48 +186,75 @@ export function Measurement() {
             </span>
             <span className="badge">{quality || "Waiting"}</span>
           </div>
-          <div className="camera-frame">
-            {browserCamera && s.source === "presage" ? (
-              <>
-                <video
-                  ref={videoRef}
-                  muted
-                  playsInline
-                  autoPlay
-                  aria-label="Live camera preview"
-                  style={{
-                    width: "100%",
-                    borderRadius: 12,
-                    transform: "scaleX(-1)",
-                  }}
-                />
-                <strong>
-                  {cameraActive ? "Camera active" : "Starting camera…"}
-                </strong>
-                <span>
-                  {cameraError ||
-                    "Frames are processed transiently by Presage; no video is saved."}
-                </span>
-              </>
-            ) : (
-              <>
-                <div className="scan-corners" />
-                <div className="head-outline">
-                  <ScanLine size={68} strokeWidth={1} />
-                </div>
-                <strong>
-                  {s.source === "mock"
-                    ? "No camera required"
-                    : "Face the bridge camera"}
-                </strong>
-                <span>
-                  {s.source === "mock"
-                    ? "A deterministic stream demonstrates the flow."
-                    : "Camera capture is managed by the local Presage bridge."}
-                </span>
-              </>
-            )}
-          </div>
+          {browserCamera && s.source === "presage" ? (
+            <div className="camera-frame">
+              <video
+                ref={videoRef}
+                muted
+                playsInline
+                autoPlay
+                aria-label="Live camera preview"
+                style={{
+                  width: "100%",
+                  borderRadius: 12,
+                  transform: "scaleX(-1)",
+                }}
+              />
+              <strong>
+                {cameraActive ? "Camera active" : "Starting camera…"}
+              </strong>
+              <span>
+                {cameraError ||
+                  "Frames are processed transiently by Presage; no video is saved."}
+              </span>
+            </div>
+          ) : s.source === "presage" ? (
+            <CameraPreview sessionId={s.id} />
+          ) : (
+            <div className="camera-frame">
+              <div className="scan-corners" />
+              <div className="head-outline">
+                <ScanLine size={68} strokeWidth={1} />
+              </div>
+              <strong>
+                {s.source === "mock"
+                  ? "No camera required"
+                  : "Face the bridge camera"}
+              </strong>
+              <span>
+                {s.source === "mock"
+                  ? "A deterministic stream demonstrates the flow."
+                  : "Camera capture is managed by the local Presage bridge."}
+              </span>
+            </div>
+          )}
+          {s.source === "mock" && (
+            <div className="notice demo">
+              <p>
+                This session uses synthetic values. Your camera is not running.
+              </p>
+              <button
+                className="button secondary full"
+                disabled={a.busy}
+                onClick={() =>
+                  void a.run(async () => {
+                    const result = await startOrResumeCheckIn(s.workerId, {
+                      breakId: s.breakId,
+                      source: "presage",
+                      consentVersion: s.consentVersion,
+                      shareWithSupervisor: s.shareWithSupervisor,
+                      context: s.context,
+                    });
+                    navigate(`/sessions/${result.session.id}/measure`);
+                  })
+                }
+              >
+                {a.busy
+                  ? "Starting camera…"
+                  : "End synthetic session and start camera check-in"}
+              </button>
+            </div>
+          )}
           <div className="connection">
             <span className={`dot ${stream.error ? "amber" : ""}`} />
             {stream.status}
@@ -247,15 +274,11 @@ export function Measurement() {
             </strong>
             <span>elapsed</span>
           </div>
-          <div className="progress">
-            <span
-              style={{ width: `${Math.min(100, (elapsed / target) * 100)}%` }}
-            />
-          </div>
           <p className="fine-print">
-            {s.source === "mock"
-              ? `Demo walkthrough: ${target} seconds.`
-              : `Recommended: ${target} seconds. Readings need about 30–45 seconds of warm-up before they count.`}{" "}
+            No time limit. Keep testing for as long as you need, then select
+            Finish check-in to stop recording.
+            {s.source === "presage" &&
+              " Positioning and warm-up may delay valid readings."}{" "}
             Data sufficiency is not a medical threshold.
           </p>
           <button

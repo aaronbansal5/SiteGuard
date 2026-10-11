@@ -17,7 +17,7 @@ import type {
   Gap,
   Explanation,
 } from "@siteguard/contracts";
-import { useIdentity } from "../App";
+
 import { api, useResource, useAction, time } from "../lib/api";
 import {
   PageHeading,
@@ -28,6 +28,8 @@ import {
   SYMPTOM_LABELS,
 } from "../components/ui";
 import { ScheduleTimeline } from "../components/ScheduleTimeline";
+import { SafetyIncidentsPanel } from "../components/SafetyIncidentsPanel";
+import { InvitationsPanel } from "../components/InvitationsPanel";
 import { IntegrationsPanel } from "../components/IntegrationsPanel";
 type Proposal = {
   baseRevision: number;
@@ -35,30 +37,6 @@ type Proposal = {
   coverageGaps: Gap[];
 };
 export function Supervisor() {
-  const { identity, login } = useIdentity(),
-    a = useAction();
-  if (identity?.role !== "supervisor")
-    return (
-      <section className="card empty-state">
-        <Users size={32} />
-        <h1>Safety operations workspace</h1>
-        <p>
-          Enter the supervisor demo to review requests and coordinate coverage.
-        </p>
-        <ErrorNotice message={a.error} />
-        <button
-          className="button primary"
-          disabled={a.busy}
-          onClick={() =>
-            void a.run(async () => {
-              await login({ role: "supervisor" });
-            })
-          }
-        >
-          Enter supervisor demo <ArrowRight size={17} />
-        </button>
-      </section>
-    );
   return <Operations />;
 }
 function Operations() {
@@ -158,6 +136,8 @@ function Operations() {
         }
       />
       <IntegrationsPanel />
+      <InvitationsPanel />
+      <SafetyIncidentsPanel />
       <ErrorNotice message={resource.error || a.error} />
       {resource.loading && !o ? (
         <Loading />

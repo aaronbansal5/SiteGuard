@@ -3,7 +3,8 @@
 // isolated in-memory SQLite database and talks to it through Fastify inject.
 // No browser, Vite server or network listener is used, so these specs are
 // independent of the Playwright webServer ports.
-import { expect } from "@playwright/test";
+import { expect } from "vitest";
+import { createAccountSession } from "../../../apps/api/src/auth-service.js";
 import { createApp } from "../../../apps/api/src/app.js";
 import type { Config } from "../../../apps/api/src/config.js";
 import { fixtureId, mockReading } from "@siteguard/mock-data";
@@ -53,7 +54,11 @@ export function client(h: Harness, cookie?: string) {
     const res = await h.app.inject({
       method,
       url,
-      headers: { ...(cookie ? { cookie } : {}), ...headers },
+      headers: {
+        ...(cookie ? { cookie } : {}),
+        ...(h.config.authMode === "oidc" ? { origin: h.config.appOrigin } : {}),
+        ...headers,
+      },
       ...(payload === undefined ? {} : { payload: payload as object }),
     });
     let body: any = null;
@@ -135,4 +140,28 @@ export async function close(h: Harness) {
   } catch {
     /* a test may have deliberately closed the database underneath */
   }
+}
+
+/** Provisioned test account; does not bypass deployed authentication routes. */
+export async function loginAccount(
+  h: Harness,
+  role: "worker" | "supervisor",
+  workerId = fixtureId(1),
+) {
+  const id = crypto.randomUUID();
+  await h.repo.driver.query(
+    "INSERT INTO auth_accounts (id,issuer,subject,email,site_id,role,worker_id,disabled,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+    [
+      id,
+      h.config.oidcIssuer,
+      id,
+      `${id}@example.com`,
+      h.config.siteId,
+      role,
+      role === "worker" ? workerId : null,
+      0,
+      new Date().toISOString(),
+    ],
+  );
+  return `siteguard_session=${await createAccountSession(h.repo, id)}`;
 }

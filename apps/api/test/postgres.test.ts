@@ -51,8 +51,11 @@ it.skipIf(!databaseUrl)(
         ),
       ).toEqual([
         { version: "001_initial" },
+        { version: "003_auth" },
         { version: "003_self_reports" },
         { version: "004_device_pairings" },
+        { version: "004_safety" },
+        { version: "005_mobile" },
       ]);
 
       const s = await populatedSession(repo);

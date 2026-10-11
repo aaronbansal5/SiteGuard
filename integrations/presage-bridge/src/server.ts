@@ -52,6 +52,8 @@ class BridgeSession {
   readonly bridgeSessionId = randomUUID();
   state: SessionState = "starting";
   capture?: AdapterCapture;
+  preview?: Buffer;
+  previewAt = 0;
   anchor?: ClockAnchor;
   starting?: Promise<void>;
   stopping?: Promise<void>;
@@ -201,6 +203,24 @@ export class PresageBridge {
         ),
       );
     }
+    if (parts.length === 3 && parts[1] === "previews" && method === "GET") {
+      const session = [...this.sessions.values()].find(
+        (s) => s.appSessionId === parts[2],
+      );
+      res.setHeader("Cache-Control", "no-store");
+      if (
+        !session ||
+        session.state !== "active" ||
+        !session.preview ||
+        this.clock.monotonicMs() - session.previewAt > 2000
+      ) {
+        res.writeHead(204);
+        return res.end();
+      }
+      res.setHeader("Content-Type", "image/jpeg");
+      res.writeHead(200);
+      return res.end(session.preview);
+    }
     if (parts[1] !== "sessions")
       throw new HttpError(404, "NOT_FOUND", "Not found");
     if (parts.length === 2) {
@@ -344,6 +364,11 @@ export class PresageBridge {
     };
     const capture = await this.options.adapter.open(
       {
+        onPreview: (jpeg) => {
+          if (session.state === "stopped" || jpeg.length > 1_000_000) return;
+          session.preview = jpeg;
+          session.previewAt = this.clock.monotonicMs();
+        },
         onSample: (sample) => {
           if (
             !Number.isFinite(sample.monotonicMs) ||
@@ -379,6 +404,7 @@ export class PresageBridge {
         await session.capture?.close();
         session.log.append({ type: "status", state: "stopped", message: null });
         session.state = "stopped";
+        session.preview = undefined;
         if (this.cameraOwner === session) this.cameraOwner = undefined;
         for (const r of session.streams) r.end();
       })();

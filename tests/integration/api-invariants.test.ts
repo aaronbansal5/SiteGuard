@@ -1,5 +1,5 @@
 // Safety and privacy invariants at API level (in-process, no browser).
-import { test, expect } from "@playwright/test";
+import { test, expect, describe, beforeEach, afterEach } from "vitest";
 import { fixtureId } from "@siteguard/mock-data";
 import type { Assignment, RestRequest } from "@siteguard/contracts";
 import {
@@ -14,14 +14,14 @@ import {
 } from "./support/in-process";
 
 let h: Harness;
-test.beforeEach(async () => {
+beforeEach(async () => {
   h = await boot();
 });
-test.afterEach(async () => close(h));
+afterEach(async () => close(h));
 
 const minutes = (m: number) => new Date(Date.now() + m * 60000).toISOString();
 
-test.describe("consent restrictions", () => {
+describe("consent restrictions", () => {
   test("supervisor cannot read, stream, explain or complete an unshared session", async () => {
     const w = await loginAs(h, "worker");
     const sup = client(h, await loginAs(h, "supervisor"));
@@ -113,7 +113,7 @@ test.describe("consent restrictions", () => {
   });
 });
 
-test.describe("assistance without measurement", () => {
+describe("assistance without measurement", () => {
   test("assistance and symptoms work with no session and no readings", async () => {
     const worker = client(h, await loginAs(h, "worker", fixtureId(3)));
     const sup = client(h, await loginAs(h, "supervisor"));
@@ -179,7 +179,7 @@ test.describe("assistance without measurement", () => {
   });
 });
 
-test.describe("protected and required breaks", () => {
+describe("protected and required breaks", () => {
   test("protected breaks cannot move, shrink or extend through the API", async () => {
     const sup = client(h, await loginAs(h, "supervisor"));
     const before = await protectedBreaks(h);
@@ -310,7 +310,7 @@ test.describe("protected and required breaks", () => {
   });
 });
 
-test.describe("unresolved assistance", () => {
+describe("unresolved assistance", () => {
   test("acknowledgment and scheduling never clear assistance; only explicit resolve does", async () => {
     const worker = client(h, await loginAs(h, "worker", fixtureId(2)));
     const sup = client(h, await loginAs(h, "supervisor"));
@@ -413,7 +413,7 @@ test.describe("unresolved assistance", () => {
   });
 });
 
-test.describe("stale schedule commits", () => {
+describe("stale schedule commits", () => {
   test("a commit based on an old revision is rejected and changes nothing", async () => {
     const sup = client(h, await loginAs(h, "supervisor"));
     const worker = client(h, await loginAs(h, "worker", fixtureId(4)));
