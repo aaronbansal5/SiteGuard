@@ -15,7 +15,7 @@ export function CheckIn() {
   const [consent, setConsent] = useState(false),
     [share, setShare] = useState(false),
     [source, setSource] = useState<"mock" | "presage">("mock"),
-    [cameraInput, setCameraInput] = useState<"browser" | "native">("browser"),
+    [cameraInput, setCameraInput] = useState<"browser" | "native">("native"),
     [sourceSelected, setSourceSelected] = useState(false);
   const health = useResource<{
     checkInTestMode?: boolean;
@@ -184,13 +184,14 @@ export function CheckIn() {
                 <input
                   type="radio"
                   name="camera-input"
-                  checked={cameraInput === "browser"}
-                  onChange={() => setCameraInput("browser")}
+                  checked={cameraInput === "native"}
+                  onChange={() => setCameraInput("native")}
                 />
                 <span>
-                  <strong>This browser</strong>
+                  <strong>This Mac via Presage · recommended</strong>
                   <small>
-                    Live preview from Chrome, processed locally by Presage.
+                    Uses Presage’s local camera pipeline for the most reliable
+                    desktop check-in.
                   </small>
                 </span>
               </label>
@@ -198,14 +199,13 @@ export function CheckIn() {
                 <input
                   type="radio"
                   name="camera-input"
-                  checked={cameraInput === "native"}
-                  onChange={() => setCameraInput("native")}
+                  checked={cameraInput === "browser"}
+                  onChange={() => setCameraInput("browser")}
                 />
                 <span>
-                  <strong>This Mac via Presage</strong>
+                  <strong>This browser</strong>
                   <small>
-                    Use the local Presage camera pipeline if browser capture is
-                    interrupted.
+                    Live preview from Chrome, processed locally by Presage.
                   </small>
                 </span>
               </label>
