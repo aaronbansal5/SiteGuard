@@ -9,6 +9,19 @@ import { seed } from "../src/db/seed.js";
 import { fixtureId, mockReading } from "@siteguard/mock-data";
 import { testApp, populatedSession } from "./helpers.js";
 describe("persistence and ingestion", () => {
+  it("requires Tiger/PostgreSQL unless SQLite is explicitly allowed", async () => {
+    await expect(
+      createApp({
+        sqlitePath: ":memory:",
+        databaseUrl: undefined,
+        allowSqlite: false,
+        cookieSecret: "test-secret-at-least-thirty-two-characters",
+        measurementToken: "internal-test-token",
+        webDist: "/nonexistent/siteguard-web",
+      }),
+    ).rejects.toThrow("DATABASE_URL is required");
+  });
+
   it("deduplicates replay and rolls back an invalid batch", async () => {
     const { app, repo } = await testApp();
     try {

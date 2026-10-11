@@ -8,7 +8,7 @@ COPY packages/mock-data/package.json packages/mock-data/package.json
 RUN npm ci
 COPY . .
 RUN npm run build
-ENV HOST=0.0.0.0 PORT=3001 SQLITE_PATH=/data/siteguard.sqlite NODE_ENV=production HOSTED=true
+ENV HOST=0.0.0.0 PORT=3001 NODE_ENV=production HOSTED=true DEMO_MODE=false
 # Persistent volumes on Fly.io/Render are mounted root-owned. The entrypoint
 # fixes /data ownership as root, then drops to the unprivileged node user.
 COPY deploy/docker-entrypoint.sh /usr/local/bin/siteguard-entrypoint

@@ -25,7 +25,7 @@ npm run start
 npm run smoke
 ```
 
-Open http://127.0.0.1:3001 . SQLite persists in `.data/siteguard.sqlite`. Stop the API before CLI reset; reset refuses real data and active sessions. The supervisor's local reset control recreates today's fictional schedule if the demo break has expired.
+Put the Tiger Cloud `DATABASE_URL` in the untracked root `.env`, run `npm run db:migrate:postgres` and `npm run db:enable-timescale`, then open http://127.0.0.1:3001. Normal app startup fails closed if Tiger is not configured; SQLite is reserved for isolated automated tests and rehearsals. Stop the API before CLI reset; reset refuses real data and active sessions. The supervisor's local reset control recreates today's fictional schedule if the demo break has expired.
 
 ## Verify
 
