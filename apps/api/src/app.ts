@@ -43,6 +43,7 @@ export async function createApp(
   try {
     if (
       c.hosted &&
+      c.demoMode &&
       (await r.list("sessions")).some((session) => session.source === "presage")
     )
       throw new Error(

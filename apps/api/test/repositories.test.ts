@@ -134,6 +134,67 @@ describe("persistence and ingestion", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it("allows hosted production to use existing Presage sessions but protects hosted demo mode", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "siteguard-hosted-")),
+      path = join(dir, "db.sqlite");
+    let setup: Awaited<ReturnType<typeof createApp>> | undefined,
+      production: typeof setup;
+    try {
+      setup = await createApp({
+        sqlitePath: path,
+        databaseUrl: undefined,
+        demoMode: true,
+        hosted: false,
+        webDist: "/nonexistent",
+      });
+      await setup.repo.put("sessions", {
+        id: fixtureId(9100),
+        workerId: fixtureId(1),
+        breakId: fixtureId(101),
+        source: "presage",
+        status: "completed",
+        startedAt: new Date(Date.now() - 60_000).toISOString(),
+        endedAt: new Date().toISOString(),
+        context: { workload: "moderate", temperatureC: 22 },
+        consentVersion: "v1",
+        shareWithSupervisor: true,
+        interruption: null,
+      });
+      await setup.app.close();
+      setup = undefined;
+
+      const hosted = {
+        sqlitePath: path,
+        databaseUrl: undefined,
+        hosted: true,
+        authMode: "supabase" as const,
+        supabaseUrl: "https://example.supabase.co",
+        supabasePublishableKey: "test-publishable-key",
+        appOrigin: "https://siteguard.example",
+        cookieSecret: "test-secret-at-least-thirty-two-characters",
+        measurementToken: "internal-test-token",
+        webDist: "/nonexistent",
+      };
+      production = await createApp({ ...hosted, demoMode: false });
+      expect(
+        (await production.repo.list("sessions")).some(
+          (session) => session.source === "presage",
+        ),
+      ).toBe(true);
+      await production.app.close();
+      production = undefined;
+
+      await expect(
+        createApp({ ...hosted, demoMode: true }),
+      ).rejects.toThrow(
+        "Hosted demo refuses a database containing real measurement sessions",
+      );
+    } finally {
+      await setup?.app.close();
+      await production?.app.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it("resets the demo reproducibly with relational integrity", async () => {
     const r = await openRepository(
       loadConfig({ sqlitePath: ":memory:", databaseUrl: undefined }),
