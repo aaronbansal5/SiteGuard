@@ -831,6 +831,22 @@ main {
   font-size: 20px;
   line-height: 1.4;
 }
+.research-next-step {
+  margin: 18px 0 0;
+  padding: 16px 18px;
+  border: 1px solid #d8e7d1;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f0f7e9, #fff);
+}
+.research-next-step h3 {
+  margin: 0 0 5px;
+  font-size: 14px;
+}
+.research-next-step p {
+  margin: 0;
+  color: #485d43;
+  line-height: 1.55;
+}
 .rest-next-step .help-actions > .button:first-child {
   background: #42593e;
   border-color: #42593e;
