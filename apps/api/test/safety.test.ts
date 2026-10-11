@@ -15,7 +15,7 @@ const observation = () => ({
   kind: "possible_person_down",
   source: "synthetic",
   method: "bbox-aspect-v1",
-  durationSeconds: 1.7,
+  durationSeconds: 2.1,
   evidence: { heightWidthRatio: 0.4 },
 });
 describe("Safety incident integration", () => {
@@ -85,6 +85,9 @@ describe("Safety incident integration", () => {
         "synthetic",
         "synthetic",
       ]);
+      expect(
+        incidents.map((i: { durationSeconds: number }) => i.durationSeconds),
+      ).toEqual([2.1, 2.1]);
       expect(incidents[0].workerId).toBeNull();
     } finally {
       await h.app.close();

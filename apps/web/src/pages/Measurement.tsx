@@ -96,7 +96,10 @@ export function Measurement() {
           },
         );
         if (!response.ok) {
-          let detail = `Camera frame rejected (${response.status}).`;
+          let detail =
+            response.status === 409
+              ? "This check-in is no longer active. Restart the web check-in."
+              : `Camera frame rejected (${response.status}).`;
           try {
             const body = (await response.json()) as { message?: string };
             if (body.message) detail = body.message;
@@ -226,6 +229,20 @@ export function Measurement() {
                 {cameraError ||
                   "Frames are processed transiently by Presage; no video is saved."}
               </span>
+              {cameraError && (
+                <button
+                  className="button secondary"
+                  disabled={a.busy}
+                  onClick={() =>
+                    void a.run(async () => {
+                      await api(`/sessions/${s.id}/complete`, {});
+                      navigate("/web-check-in");
+                    })
+                  }
+                >
+                  {a.busy ? "Restarting…" : "Restart web check-in"}
+                </button>
+              )}
             </div>
           ) : s.source === "presage" ? (
             <CameraPreview sessionId={s.id} />

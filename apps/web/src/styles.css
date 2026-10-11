@@ -2614,3 +2614,166 @@ body.fall-alert-active::before {
     padding: 24px;
   }
 }
+
+/* Product polish: keep the existing palette, but give the workspace a clearer
+   hierarchy and a more confident demo-ready surface. */
+:root {
+  --site-ink: #193b35;
+  --site-muted: #60736a;
+  --site-border: #dce7df;
+  --site-lime: #c9e9a8;
+  --site-shadow: 0 18px 45px rgba(24, 59, 48, 0.07);
+}
+
+body {
+  background:
+    radial-gradient(
+      circle at 82% -10%,
+      rgba(201, 233, 168, 0.23),
+      transparent 32rem
+    ),
+    #f5f8f6;
+  color: var(--site-ink);
+}
+
+.sidebar {
+  background: linear-gradient(180deg, #0e302c 0%, #123b34 100%);
+  box-shadow: 12px 0 34px rgba(16, 46, 43, 0.08);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(14px);
+}
+
+main {
+  padding-top: 48px;
+}
+
+.page-heading {
+  margin-bottom: 34px;
+}
+
+.page-heading h1 {
+  color: var(--site-ink);
+  font-size: clamp(32px, 3vw, 46px);
+  letter-spacing: -1.8px;
+}
+
+.page-heading p {
+  max-width: 560px;
+  color: var(--site-muted);
+  font-size: 13px;
+}
+
+.card {
+  border-color: var(--site-border);
+  border-radius: 16px;
+  box-shadow: var(--site-shadow);
+}
+
+.consent-layout .card {
+  padding: 30px;
+}
+
+.consent-layout .card:first-child {
+  background: linear-gradient(145deg, #f1f7ea 0%, #ffffff 62%);
+  border-color: #d8e7d1;
+}
+
+.consent-layout form {
+  border-top: 4px solid var(--site-lime);
+}
+
+.consent-layout form h2 {
+  font-size: 21px;
+  letter-spacing: -0.7px;
+}
+
+.consent-point {
+  padding: 22px 0;
+}
+
+.consent-point > span {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #e3f0d7;
+  color: #3e6135;
+  flex-shrink: 0;
+}
+
+.checkbox {
+  padding: 12px 13px;
+  margin: 10px 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.checkbox:hover {
+  background: #f6faf4;
+  border-color: #e1ebdd;
+}
+
+.consent-check {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e7eee5;
+  border-radius: 0;
+}
+
+.button {
+  min-height: 46px;
+  border-radius: 10px;
+  box-shadow: 0 1px 1px rgba(20, 50, 40, 0.04);
+}
+
+.button.primary {
+  background: linear-gradient(135deg, #245544 0%, #1c4639 100%);
+  box-shadow: 0 8px 18px rgba(36, 74, 60, 0.15);
+}
+
+.button.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 11px 22px rgba(36, 74, 60, 0.2);
+}
+
+nav a {
+  border-radius: 10px;
+}
+
+.notice {
+  border-radius: 11px;
+}
+
+.measurement-layout .positioning,
+.chart-card {
+  border-radius: 16px;
+}
+
+.camera-frame {
+  border: 1px solid #dfe9dc;
+  background: linear-gradient(145deg, #eef5ea, #f8faf7);
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    margin-left: 0;
+  }
+
+  main {
+    padding: 30px 20px;
+  }
+
+  .page-heading h1 {
+    font-size: 34px;
+  }
+}

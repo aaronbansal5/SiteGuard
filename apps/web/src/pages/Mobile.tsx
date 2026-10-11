@@ -1102,6 +1102,23 @@ function MobileMeasuring({
         Latest quality: {quality ?? "waiting"} · {stream.status}
       </p>
       <ErrorNotice message={a.error || cameraError || stream.error} />
+      {(cameraError || stream.error) && s.source === "presage" && (
+        <button
+          type="button"
+          className="button secondary mobile-big"
+          disabled={a.busy}
+          onClick={() =>
+            void a.run(async () => {
+              await api(`/sessions/${s.id}/complete`, {});
+              onFinished();
+            })
+          }
+        >
+          {a.busy
+            ? "Resetting camera…"
+            : "Start a fresh browser camera check-in"}
+        </button>
+      )}
       <button
         type="button"
         className="button primary mobile-big"
