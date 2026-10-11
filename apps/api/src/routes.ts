@@ -37,7 +37,7 @@ import {
 import { audit } from "./domain/requests.js";
 import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
 import { personalInsights, personalTrend } from "./domain/personal.js";
-import { evaluateRestSupport } from "./research/rest-support.js";
+import { createResearchDemoEvaluator } from "./research/synthetic-demo.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
   app: FastifyInstance,
@@ -46,6 +46,7 @@ export async function registerRoutes(
   manager: MeasurementManager,
 ) {
   const explainer = new Explainer(c);
+  const evaluateResearch = createResearchDemoEvaluator(c);
   const identityStreams = new Map<string, number>();
   const workerStreams = new Map<string, number>();
   let totalStreams = 0;
@@ -359,7 +360,7 @@ export async function registerRoutes(
         "Complete the check-in before reviewing rest support",
       );
     const summary = await sessionSummary(r, s.id);
-    return evaluateRestSupport(summary);
+    return evaluateResearch(summary);
   });
   app.get("/api/sessions/:id/personal-insights", async (req) => {
     const s = await ownSession(req);

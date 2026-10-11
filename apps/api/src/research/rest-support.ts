@@ -45,6 +45,25 @@ export interface RestSupportResult {
   modelVersion: string;
   experimental: true;
   disclaimer: string;
+  syntheticDemo: boolean;
+  modelProvenance:
+    | { kind: "descriptive_rule"; runtime_ready: false }
+    | {
+        kind: "synthetic_demo";
+        runtime_ready: false;
+        dataset_sha256: string;
+        artifact_sha256: string;
+      };
+  demoModel?: {
+    status:
+      | "inferred"
+      | "insufficient_evidence"
+      | "unavailable"
+      | "measurement_source_blocked";
+    /** Uncalibrated logistic output, never a validated confidence or fatigue score. */
+    score: number | null;
+    target: "self-reported request for additional rest";
+  };
 }
 
 function extractMetric(
@@ -199,5 +218,7 @@ export function evaluateRestSupport(summary: Summary): RestSupportResult {
     modelVersion: MODEL_VERSION,
     experimental: true,
     disclaimer: EXPERIMENTAL_DISCLAIMER,
+    syntheticDemo: false,
+    modelProvenance: { kind: "descriptive_rule", runtime_ready: false },
   };
 }

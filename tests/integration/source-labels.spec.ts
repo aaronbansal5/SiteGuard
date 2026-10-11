@@ -35,7 +35,7 @@ test("history labels every synthetic session as synthetic", async ({
 test("summary and worker home show the synthetic badge", async ({ page }) => {
   await page.goto(`/sessions/${fixtureId(1011)}`);
   await expect(
-    page.getByRole("heading", { name: "Your observations, in context." }),
+    page.getByRole("heading", { name: "Your check-in results." }),
   ).toBeVisible();
   await expect(page.getByText("Synthetic demo", { exact: true })).toBeVisible();
   await page.goto("/worker");

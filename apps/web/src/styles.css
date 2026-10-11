@@ -796,6 +796,51 @@ main {
   grid-template-columns: 1.05fr 1fr;
   gap: 22px;
 }
+.checkin-setup {
+  max-width: 680px;
+  margin: 0 auto 22px;
+}
+.checkin-setup > .button {
+  margin-top: 14px;
+  min-height: 48px;
+}
+.setup-description {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #42593e;
+  margin: 12px 0;
+}
+.flow-details > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  padding: 12px 0;
+}
+.flow-details > summary:focus-visible {
+  outline: 2px solid #467455;
+  outline-offset: 4px;
+}
+.flow-details[open] > summary {
+  margin-bottom: 14px;
+}
+.research-details {
+  margin-top: 16px;
+}
+.research-signal strong {
+  font-size: 20px;
+  line-height: 1.4;
+}
+.rest-next-step .help-actions > .button:first-child {
+  background: #42593e;
+  border-color: #42593e;
+  color: #fff;
+  min-height: 48px;
+}
+.rest-next-step > .text-link {
+  margin-top: 20px;
+  display: inline-flex;
+}
 .consent-layout .card-header {
   justify-content: flex-start;
 }

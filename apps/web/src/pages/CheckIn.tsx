@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
-import { ShieldCheck, ArrowRight, LockKeyhole } from "lucide-react";
+import { ArrowRight, LockKeyhole } from "lucide-react";
 import { useIdentity } from "../App";
 import { ChooseWorker } from "./WorkerHome";
 import { api, useResource, useAction } from "../lib/api";
 import type { Session } from "@siteguard/contracts";
 import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
 import { PageHeading, ErrorNotice, HelpActions } from "../components/ui";
+
 export function CheckIn() {
   const { identity } = useIdentity(),
     [search] = useSearchParams(),
@@ -28,9 +29,16 @@ export function CheckIn() {
     window.isSecureContext &&
     navigator.mediaDevices?.getUserMedia,
   );
+  const sourceAvailable = Boolean(health.data?.measurementSources[source]);
   useEffect(() => {
     if (health.data && !sourceSelected) {
-      setSource(browserCamera ? "presage" : "mock");
+      setSource(
+        browserCamera ||
+          (!health.data.measurementSources.mock &&
+            health.data.measurementSources.presage)
+          ? "presage"
+          : "mock",
+      );
       setSourceSelected(true);
     }
   }, [browserCamera, health.data, sourceSelected]);
@@ -38,157 +46,164 @@ export function CheckIn() {
   return (
     <>
       <PageHeading
-        eyebrow="VOLUNTARY CHECK-IN / 01"
-        title="A check-in on your terms."
-        description="Choose what to record. Your protected break remains yours."
+        eyebrow="STEP 1 OF 3 · SETUP"
+        title="Ready to check in?"
+        description="Choose a source, give consent, then begin. Your scheduled break stays protected."
       />
-      <div className="consent-layout">
-        <section className="card">
-          <div className="card-header">
-            <span className="portal-icon">
-              <ShieldCheck size={24} />
-            </span>
-            <div>
-              <h2>Before you begin</h2>
-              <p>Understand what this check-in collects.</p>
-            </div>
-          </div>
-          <div className="consent-point">
-            <span>01</span>
-            <div>
-              <h3>Only normalized observations</h3>
-              <p>
-                We record timestamped pulse, breathing rate, source, and
-                quality. SiteGuard does not store camera images or video.
-              </p>
-            </div>
-          </div>
-          <div className="consent-point">
-            <span>02</span>
-            <div>
-              <h3>No identification, no clearance</h3>
-              <p>
-                No facial identification. Measurements cannot establish recovery
-                or whether you are fit to return to work.
-              </p>
-            </div>
-          </div>
-          <div className="consent-point">
-            <span>03</span>
-            <div>
-              <h3>Your history is private by default</h3>
-              <p>
-                Your supervisor sees break times and requests. Sharing this
-                session's physiological summary is optional.
-              </p>
-            </div>
-          </div>
-          <div className="notice demo">
-            Synthetic mode uses no camera. Before real use, verify the Presage
-            bridge's processing and telemetry privacy separately.
-          </div>
-        </section>
-        <form
-          className="card"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!consent || a.busy) return;
-            void a.run(async () => {
-              const result = await api<{ session: Session }>("/sessions", {
-                breakId: search.get("breakId"),
-                source,
-                ...(source === "presage" && browserCamera
-                  ? { input: "custom" as const }
-                  : {}),
-                consentVersion: "v1",
-                shareWithSupervisor: share,
-                context: { workload: null, temperatureC: null },
-              });
-              navigate(
-                `/sessions/${result.session.id}/measure${source === "presage" && browserCamera ? "?camera=browser" : ""}`,
-              );
+      <form
+        className="card checkin-setup"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!consent || a.busy || !sourceAvailable || !search.get("breakId"))
+            return;
+          void a.run(async () => {
+            const result = await api<{ session: Session }>("/sessions", {
+              breakId: search.get("breakId"),
+              source,
+              ...(source === "presage" && browserCamera
+                ? { input: "custom" as const }
+                : {}),
+              consentVersion: "v1",
+              shareWithSupervisor: share,
+              context: { workload: null, temperatureC: null },
             });
-          }}
-        >
-          <h2>Check-in preferences</h2>
-          <label>
-            Measurement source
-            <select
-              value={source}
-              onChange={(e) => setSource(e.target.value as typeof source)}
+            if (source === "presage" && browserCamera) {
+              try {
+                sessionStorage.setItem(
+                  `siteguard-camera:${result.session.id}`,
+                  "browser",
+                );
+              } catch {
+                /* The URL still carries camera mode when storage is unavailable. */
+              }
+            }
+            navigate(
+              `/sessions/${result.session.id}/measure${source === "presage" && browserCamera ? "?camera=browser" : ""}`,
+            );
+          });
+        }}
+      >
+        <h2>Choose your measurement source</h2>
+        <label>
+          Measurement source
+          <select
+            value={source}
+            disabled={health.loading || a.busy}
+            onChange={(e) => {
+              setSource(e.target.value as typeof source);
+              setSourceSelected(true);
+            }}
+          >
+            <option
+              value="mock"
+              disabled={!health.data?.measurementSources.mock}
             >
-              <option value="mock">Synthetic demo · no camera</option>
-              <option
-                value="presage"
-                disabled={!health.data?.measurementSources.presage}
-              >
-                Presage · local camera bridge
-                {!health.data?.measurementSources.presage
-                  ? " (not configured)"
-                  : ""}
-              </option>
-            </select>
-          </label>
-          <p className="fine-print">
-            Recommended check-in: {RECOMMENDED_CHECK_IN_SECONDS[source]} seconds
-            {source === "presage"
-              ? ", including camera warm-up before readings count."
-              : "."}
-          </p>
-          <p className="fine-print">
-            No workload or temperature questions are required. The before/after
-            reading windows and your eligible history are handled automatically.
-          </p>
+              Synthetic demo · no camera
+            </option>
+            <option
+              value="presage"
+              disabled={!health.data?.measurementSources.presage}
+            >
+              {browserCamera
+                ? "This device's camera · Presage"
+                : "Laptop bridge camera · Presage"}
+              {!health.data?.measurementSources.presage ? " (unavailable)" : ""}
+            </option>
+          </select>
+        </label>
+        <p className="setup-description">
+          {source === "mock"
+            ? "Try the complete flow with synthetic readings. No camera is used."
+            : browserCamera
+              ? "Your browser will ask for camera access next. Sit still with your face in view."
+              : "Use the camera attached to the laptop running Presage. This device's camera will not open."}
+        </p>
+        <p className="setup-description">
+          Allow about {RECOMMENDED_CHECK_IN_SECONDS[source]} seconds
+          {source === "presage" ? ", including camera warm-up" : ""}. You can
+          finish early.
+        </p>
+        <div className="notice subtle">
+          <LockKeyhole size={18} />
+          <span>
+            SiteGuard records pulse, breathing, timestamps, and reading quality.
+            It does not store camera images or video. Your results are private
+            unless you choose to share.
+          </span>
+        </div>
+        <p className="setup-description">
+          Experimental research estimate — not medical advice or work clearance.
+          You choose whether to request more rest.
+        </p>
+        <label className="checkbox consent-check">
+          <input
+            type="checkbox"
+            required
+            checked={consent}
+            disabled={a.busy}
+            onChange={(e) => setConsent(e.target.checked)}
+          />
+          <span>
+            I understand the limitations and voluntarily agree to record these
+            observations.
+          </span>
+        </label>
+        <details className="flow-details">
+          <summary>Optional sharing and privacy details</summary>
           <label className="checkbox">
             <input
               type="checkbox"
               checked={share}
+              disabled={a.busy}
               onChange={(e) => setShare(e.target.checked)}
             />
             <span>Share this session's summary with safety operations</span>
           </label>
-          <label className="checkbox consent-check">
-            <input
-              type="checkbox"
-              required
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-            />
-            <span>
-              I understand the limitations and voluntarily agree to record these
-              observations.
-            </span>
-          </label>
-          <ErrorNotice
-            message={
-              a.error ||
-              health.error ||
-              (!search.get("breakId")
-                ? "Select your active protected break from the worker portal before starting."
-                : "")
-            }
-          />
-          <button
-            className="button primary full"
-            disabled={!consent || a.busy || !search.get("breakId")}
-          >
-            {a.busy ? "Starting…" : "Begin check-in"}
-            <ArrowRight size={17} />
-          </button>
-          <Link className="button ghost full" to="/worker">
-            Skip measurement
-          </Link>
-          <p className="fine-print">
-            <LockKeyhole size={12} /> Consent version v1 · You can stop at any
-            time.
+          <p className="setup-description">
+            Supervisors see break times and requests. The research estimate
+            stays private. No facial identification is used. Presage processing
+            and telemetry must be verified separately before real use.
           </p>
-        </form>
-      </div>
-      <section className="card">
-        <h2>Need support instead?</h2>
-        <p className="muted">Assistance is independent of check-in consent.</p>
+        </details>
+        <ErrorNotice message={a.error || health.error} />
+        {health.error && (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => void health.refresh()}
+          >
+            Retry source check
+          </button>
+        )}
+        {!search.get("breakId") && (
+          <p role="status">
+            Open your active break from the worker home to begin.
+          </p>
+        )}
+        <button
+          className="button primary full"
+          disabled={
+            !consent ||
+            a.busy ||
+            !sourceAvailable ||
+            health.loading ||
+            !search.get("breakId")
+          }
+        >
+          {a.busy ? "Starting…" : "Begin check-in"}
+          <ArrowRight size={17} />
+        </button>
+        <Link className="button ghost full" to="/worker">
+          Back to worker home
+        </Link>
+        <p className="fine-print">
+          Voluntary check-in · You can stop at any time.
+        </p>
+      </form>
+      <details className="card flow-details">
+        <summary>Need help without a check-in?</summary>
         <HelpActions />
-      </section>
+      </details>
     </>
   );
 }

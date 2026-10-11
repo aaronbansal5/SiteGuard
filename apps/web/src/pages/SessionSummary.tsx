@@ -66,16 +66,39 @@ export function SessionSummary() {
         to={identity?.role === "supervisor" ? "/supervisor" : "/worker"}
       >
         <ArrowLeft size={15} />
-        Back to workspace
+        {identity?.role === "supervisor"
+          ? "Back to safety operations"
+          : "Back to worker home"}
       </Link>
       <ErrorNotice message={summary.error || session.error || readings.error} />
       {!s || !v ? (
-        (summary.loading || session.loading) && <Loading />
+        summary.loading || session.loading ? (
+          <Loading />
+        ) : (
+          <section className="card">
+            <h1>Results temporarily unavailable</h1>
+            <p>
+              Try loading your results again. You can still request rest or
+              help.
+            </p>
+            <button
+              className="button secondary"
+              onClick={() => {
+                void session.refresh();
+                void summary.refresh();
+                void readings.refresh();
+              }}
+            >
+              Retry results
+            </button>
+            {identity?.role === "worker" && <HelpActions sessionId={id} />}
+          </section>
+        )
       ) : (
         <>
           <PageHeading
-            eyebrow="CHECK-IN SUMMARY / 03"
-            title="Your observations, in context."
+            eyebrow="STEP 3 OF 3 · RESULTS"
+            title="Your check-in results."
             description={`${date(s.startedAt)} · ${time(s.startedAt)} · ${Math.round(v.durationSeconds)} seconds recorded`}
             action={<SourceBadge source={s.source} />}
           />
@@ -84,17 +107,30 @@ export function SessionSummary() {
             <span>
               {s.shareWithSupervisor
                 ? "This session summary is shared with safety operations."
-                : "This session summary is private to your worker workspace."}{" "}
-              {s.context.workload
-                ? s.context.workload[0].toUpperCase() +
-                  s.context.workload.slice(1)
-                : "Unrecorded"}{" "}
-              workload ·{" "}
-              {s.context.temperatureC === null
-                ? "Temperature not recorded"
-                : `${s.context.temperatureC}°C`}
+                : "This session summary is private to your worker workspace."}
             </span>
           </div>
+          {identity?.role === "worker" && identity.workerId === s.workerId && (
+            <ResearchRestSupportCard
+              key={s.id}
+              sessionId={s.id}
+              source={s.source}
+              completed={s.status === "completed"}
+            />
+          )}
+          {identity?.role === "worker" && (
+            <section className="card rest-next-step">
+              <h2>Want more rest?</h2>
+              <p>
+                You decide. Send a request to your supervisor, regardless of
+                these results.
+              </p>
+              <HelpActions sessionId={s.id} />
+              <Link className="text-link" to="/worker">
+                Done · Back to worker home <ArrowRight size={14} />
+              </Link>
+            </section>
+          )}
           <div className="two-columns">
             <Metric
               title="Pulse"
@@ -111,34 +147,23 @@ export function SessionSummary() {
               icon={<Wind size={20} />}
             />
           </div>
-          {readings.data && (
-            <div className="two-columns">
-              <VitalChart
-                readings={readings.data.readings}
-                metric="pulse"
-                startedAt={s.startedAt}
-              />
-              <VitalChart
-                readings={readings.data.readings}
-                metric="breathing"
-                startedAt={s.startedAt}
-              />
-            </div>
-          )}
           <section className="card explanation">
             <div className="card-header">
               <div>
-                <h2>Before / after guidance</h2>
+                <h2>What changed during your check-in</h2>
                 <p>
-                  Gemini can select approved context from the initial and final
-                  windows and eligible history; it cannot make a medical
-                  recommendation.
+                  A plain-language explanation of your readings and available
+                  history.
                 </p>
               </div>
               <span className="badge">
-                {explanation?.origin === "gemini"
-                  ? "Gemini fact selection"
-                  : "Deterministic explanation"}
+                {explanation
+                  ? explanation.origin === "gemini"
+                    ? "Explained with Gemini"
+                    : "Recorded facts"
+                  : explanationError
+                    ? "Unavailable"
+                    : "Preparing…"}
               </span>
             </div>
             <ErrorNotice message={explanationError} />
@@ -150,7 +175,11 @@ export function SessionSummary() {
                 </p>
               ))
             ) : (
-              <p className="muted">Preparing the factual summary…</p>
+              <p className="muted">
+                {explanationError
+                  ? "The explanation is unavailable. Your measurements and rest-request controls remain available."
+                  : "Preparing the explanation…"}
+              </p>
             )}
             <div className="limitations">
               {v.limitations.map((p) => (
@@ -158,34 +187,33 @@ export function SessionSummary() {
               ))}
             </div>
           </section>
-          {identity?.role === "worker" && identity.workerId === s.workerId && (
-            <>
-              <ResearchRestSupportCard
-                key={s.id}
-                sessionId={s.id}
-                source={s.source}
-                completed={s.status === "completed"}
-              />
-              <PersonalInsightsPanel
-                sessionId={s.id}
-                completed={s.status === "completed"}
-              />
-            </>
-          )}
-          {identity?.role === "worker" && (
-            <section className="card">
-              <div className="card-header">
-                <div>
-                  <h2>Choose your next step</h2>
-                  <p>Your needs matter independently of the measurements.</p>
-                </div>
-                <Link to="/history">
-                  Session history <ArrowRight size={14} />
-                </Link>
+          <details className="card flow-details">
+            <summary>View charts and history</summary>
+            {readings.data && (
+              <div className="two-columns">
+                <VitalChart
+                  readings={readings.data.readings}
+                  metric="pulse"
+                  startedAt={s.startedAt}
+                />
+                <VitalChart
+                  readings={readings.data.readings}
+                  metric="breathing"
+                  startedAt={s.startedAt}
+                />
               </div>
-              <HelpActions sessionId={s.id} />
-            </section>
-          )}
+            )}
+            {identity?.role === "worker" &&
+              identity.workerId === s.workerId && (
+                <PersonalInsightsPanel
+                  sessionId={s.id}
+                  completed={s.status === "completed"}
+                />
+              )}
+            <Link className="text-link" to="/history">
+              Session history <ArrowRight size={14} />
+            </Link>
+          </details>
           <SafetyNote />
         </>
       )}
@@ -195,8 +223,8 @@ export function SessionSummary() {
 
 const REST_SUPPORT_SIGNALS: Record<RestSupportResult["signal"], string> = {
   consider_additional_rest: "Consider additional rest",
-  no_additional_signal: "No additional rest-support signal",
-  insufficient_evidence: "Insufficient evidence",
+  no_additional_signal: "No additional signal in these readings",
+  insufficient_evidence: "Not enough evidence for an estimate",
 };
 
 function isRestSupportResult(value: unknown): value is RestSupportResult {
@@ -295,7 +323,7 @@ function ResearchRestSupportCard({
     >
       <div className="card-header">
         <div>
-          <h2 id="research-rest-support-title">Research rest support</h2>
+          <h2 id="research-rest-support-title">Your research signal</h2>
           <p>
             Experimental research estimate — not medical advice or work
             clearance.
@@ -328,55 +356,57 @@ function ResearchRestSupportCard({
         </>
       ) : (
         <>
-          <div className="two-columns">
-            <div className="comparison">
-              <span>Rest-support signal</span>
-              <strong>{REST_SUPPORT_SIGNALS[result.support.signal]}</strong>
-              <small>
-                This signal does not determine your rest needs or readiness.
-              </small>
-            </div>
-            <div className="comparison">
-              <span>Model confidence</span>
-              <strong>Not available</strong>
-              <small>
-                Validated confidence is unavailable without labeled data.
-              </small>
-            </div>
+          <div className="comparison research-signal">
+            <span>Rest-support signal</span>
+            <strong>{REST_SUPPORT_SIGNALS[result.support.signal]}</strong>
+            <small>
+              {result.support.signal === "consider_additional_rest"
+                ? "Additional rest may be worth considering. You decide whether to request it."
+                : result.support.signal === "no_additional_signal"
+                  ? "This does not mean you need less rest. You can still request more."
+                  : "There is not enough usable information to estimate a signal. You can still request rest."}
+            </small>
           </div>
-          <div className="limitations">
-            <h3>Uncertainty: {result.support.uncertainty.level}</h3>
-            {result.support.uncertainty.reasons.length ? (
-              result.support.uncertainty.reasons.map((text, index) => (
-                <p key={index}>{text}</p>
-              ))
-            ) : (
-              <p>Uncertainty was not supplied by the model.</p>
-            )}
-          </div>
-          <div className="limitations">
-            <h3>Evidence</h3>
-            <p>
-              Source: {result.support.evidence.source ?? "Unavailable"} ·
-              Duration:{" "}
-              {result.support.evidence.durationSeconds === null
-                ? "Unavailable"
-                : `${number(result.support.evidence.durationSeconds)} seconds`}
-            </p>
-            <RestSupportEvidence evidence={result.support.evidence} />
-            <h3>Evidence issues</h3>
-            {result.support.evidence.issues.length ? (
-              result.support.evidence.issues.map((text, index) => (
-                <p key={index}>{text}</p>
-              ))
-            ) : (
-              <p>No evidence issues reported.</p>
-            )}
-          </div>
-          <p className="fine-print">
-            Model version: {result.support.modelVersion}
+          <p className="setup-description">
+            Confidence: not available. This estimate has no validated confidence
+            score.
           </p>
-          <p className="fine-print">{result.support.disclaimer}</p>
+          <details className="flow-details research-details">
+            <summary>Why this result? Evidence and limitations</summary>
+            <div className="limitations">
+              <h3>Uncertainty has not been measured</h3>
+              {result.support.uncertainty.reasons.length ? (
+                result.support.uncertainty.reasons.map((text, index) => (
+                  <p key={index}>{text}</p>
+                ))
+              ) : (
+                <p>Uncertainty was not supplied by the model.</p>
+              )}
+            </div>
+            <div className="limitations">
+              <h3>Evidence</h3>
+              <p>
+                Source: {result.support.evidence.source ?? "Unavailable"} ·
+                Duration:{" "}
+                {result.support.evidence.durationSeconds === null
+                  ? "Unavailable"
+                  : `${number(result.support.evidence.durationSeconds)} seconds`}
+              </p>
+              <RestSupportEvidence evidence={result.support.evidence} />
+              <h3>Evidence issues</h3>
+              {result.support.evidence.issues.length ? (
+                result.support.evidence.issues.map((text, index) => (
+                  <p key={index}>{text}</p>
+                ))
+              ) : (
+                <p>No evidence issues reported.</p>
+              )}
+            </div>
+            <p className="fine-print">
+              Model version: {result.support.modelVersion}
+            </p>
+            <p className="fine-print">{result.support.disclaimer}</p>
+          </details>
         </>
       )}
       <p className="fine-print">

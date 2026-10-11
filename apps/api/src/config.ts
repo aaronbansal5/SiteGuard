@@ -8,6 +8,8 @@ export interface Config {
   cookieSecret: string;
   measurementToken: string;
   demoMode: boolean;
+  /** Explicit opt-in to the local synthetic research artifact; never production. */
+  researchDemoEnabled: boolean;
   hosted: boolean;
   bridgeUrl: string;
   bridgeToken?: string;
@@ -32,6 +34,9 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     measurementToken:
       process.env.MEASUREMENT_TOKEN || randomBytes(32).toString("hex"),
     demoMode: process.env.DEMO_MODE !== "false",
+    researchDemoEnabled:
+      process.env.DEMO_MODE === "true" &&
+      process.env.RESEARCH_DEMO_ENABLED === "true",
     hosted,
     bridgeUrl: process.env.PRESAGE_BRIDGE_URL || "http://127.0.0.1:4311",
     bridgeToken: process.env.PRESAGE_BRIDGE_TOKEN,
@@ -43,6 +48,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
       process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || undefined,
     ...overrides,
   };
+  if (!c.demoMode || process.env.NODE_ENV === "production")
+    c.researchDemoEnabled = false;
   if (
     c.hosted &&
     (!(process.env.COOKIE_SECRET || overrides.cookieSecret) ||

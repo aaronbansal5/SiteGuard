@@ -72,6 +72,20 @@ function storage() {
   }
 }
 
+function cameraErrorMessage(error: unknown) {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError")
+      return "Camera access was not allowed. Allow Camera in this site's Safari settings, then try again. You can still request rest without a check-in.";
+    if (error.name === "NotFoundError")
+      return "No camera was found. Open SiteGuard on a phone with a front camera.";
+    if (error.name === "NotReadableError")
+      return "The camera is busy. Close other apps using it, then try again.";
+  }
+  return error instanceof Error
+    ? error.message
+    : "Camera access failed. Try again.";
+}
+
 export function MobileApp() {
   const { identity } = useIdentity();
   const [choosing, setChoosing] = useState(false);
@@ -252,22 +266,38 @@ function MobileWorker({ workerId }: { workerId: string }) {
     (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
   );
   const nextBreak = sorted.find((b) => Date.parse(b.startsAt) > now);
-  const canMeasure = Boolean(browserCamera || demoMode) && Boolean(activeBreak);
+  const canMeasure =
+    !health.loading &&
+    !breaks.loading &&
+    Boolean(browserCamera || demoMode) &&
+    Boolean(activeBreak);
   const blockedReason =
-    !browserCamera && !demoMode
-      ? "Camera check-in needs HTTPS and a running Presage bridge. Synthetic demo mode is also unavailable."
-      : !activeBreak
-        ? `Check-ins open during your scheduled break${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
-        : "";
+    health.loading || breaks.loading
+      ? "Checking camera availability and your break schedule…"
+      : !browserCamera && !demoMode
+        ? !window.isSecureContext
+          ? "Open SiteGuard's trusted HTTPS link on this phone to enable the camera. Rest requests are still available."
+          : "Camera check-in is unavailable. Ask the demo host to check the Presage connection. Rest requests are still available."
+        : !activeBreak
+          ? `Check-ins open during your scheduled break${nextBreak ? ` (next: ${time(nextBreak.startsAt)})` : ""}.`
+          : "";
 
   return (
     <>
+      {stage.kind !== "home" && (
+        <p className="eyebrow" aria-label="Check-in steps">
+          {stage.kind === "consent"
+            ? "1 of 3 · Consent"
+            : stage.kind === "measuring"
+              ? "2 of 3 · Live check-in"
+              : "3 of 3 · Summary & rest request"}
+        </p>
+      )}
       <ErrorNotice
         message={health.error || breaks.error || history.error || ""}
       />
       {stage.kind === "home" && (
         <>
-          <DevicePairingCard />
           <MobileHome
             reminder={reminder}
             demoMode={demoMode}
@@ -277,6 +307,10 @@ function MobileWorker({ workerId }: { workerId: string }) {
             blockedReason={blockedReason}
             onStart={() => setStage({ kind: "consent" })}
           />
+          <details className="mobile-card">
+            <summary>Using the native iPhone app? Pair it here</summary>
+            <DevicePairingCard />
+          </details>
         </>
       )}
       {stage.kind === "consent" && (
@@ -311,18 +345,14 @@ function MobileWorker({ workerId }: { workerId: string }) {
           }}
         />
       )}
-      {stage.kind !== "home" && (
+      {(stage.kind === "consent" || stage.kind === "measuring") && (
         <section className="mobile-card">
           <h2>Need support?</h2>
           <p className="muted">
             Requests reach a person, with or without a measurement.
           </p>
           <HelpActions
-            sessionId={
-              stage.kind === "measuring" || stage.kind === "done"
-                ? stage.sessionId
-                : null
-            }
+            sessionId={stage.kind === "measuring" ? stage.sessionId : null}
           />
         </section>
       )}
@@ -426,6 +456,33 @@ function MobileHome({
         </div>
       </section>
 
+      <section className="mobile-card">
+        <h1>Check in now</h1>
+        <p className="muted">
+          Consent → check-in → summary. About{" "}
+          {browserCamera
+            ? RECOMMENDED_CHECK_IN_SECONDS.presage
+            : RECOMMENDED_CHECK_IN_SECONDS.mock}{" "}
+          seconds; stop whenever you want.
+        </p>
+        <p className="fine-print">
+          {browserCamera
+            ? "Use your front camera. Your browser asks for permission after you agree. No video is saved."
+            : demoMode
+              ? "Synthetic demo is available. It uses no camera and does not measure your pulse or breathing."
+              : "Camera availability is shown below."}
+        </p>
+        {blockedReason && <p className="fine-print">{blockedReason}</p>}
+        <button
+          type="button"
+          className="button primary mobile-big"
+          disabled={!canMeasure}
+          onClick={onStart}
+        >
+          Start check-in <ArrowRight size={18} />
+        </button>
+      </section>
+
       {s?.phase === "due" && (
         <section
           className="mobile-card mobile-prompt"
@@ -461,7 +518,7 @@ function MobileHome({
 
       <section className="mobile-card mobile-reminder" aria-live="off">
         <div className="row-between">
-          <h1>Check-in reminders</h1>
+          <h2>Check-in reminders</h2>
           {demoMode && <span className="badge synthetic">Demo interval</span>}
         </div>
         {!s || !settings ? (
@@ -488,64 +545,51 @@ function MobileHome({
                 </>
               )}
             </div>
-            <form className="mobile-interval" onSubmit={submit}>
-              <label>
-                Check-in reminder every N seconds
+            <details>
+              <summary>Reminder settings (optional)</summary>
+              <form className="mobile-interval" onSubmit={submit}>
+                <label>
+                  Check-in reminder every N seconds
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={MIN_REMINDER_INTERVAL_SECONDS}
+                    max={MAX_REMINDER_INTERVAL_SECONDS}
+                    step={1}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                  />
+                </label>
+                <button type="submit" className="button secondary mobile-big">
+                  Set interval
+                </button>
+              </form>
+              <p className="fine-print">
+                {demoMode
+                  ? `Demo interval: ${settings.intervalSeconds} seconds so the cycle is visible in a short demo. `
+                  : ""}
+                A reminder is a convenience, not a rest or health
+                recommendation. It never starts a measurement.
+              </p>
+              <label className="checkbox mobile-toggle">
                 <input
-                  type="number"
-                  inputMode="numeric"
-                  min={MIN_REMINDER_INTERVAL_SECONDS}
-                  max={MAX_REMINDER_INTERVAL_SECONDS}
-                  step={1}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  type="checkbox"
+                  checked={settings.enabled}
+                  onChange={(e) => reminder.setEnabled(e.target.checked)}
                 />
+                <span>
+                  {settings.enabled ? (
+                    <Bell size={16} />
+                  ) : (
+                    <BellOff size={16} />
+                  )}{" "}
+                  Remind me to check in
+                </span>
               </label>
-              <button type="submit" className="button secondary mobile-big">
-                Set interval
-              </button>
-            </form>
-            <p className="fine-print">
-              {demoMode
-                ? `Demo interval: ${settings.intervalSeconds} seconds so the cycle is visible in a short demo. `
-                : ""}
-              A reminder is a convenience, not a rest or health recommendation.
-              It never starts a measurement.
-            </p>
-            <label className="checkbox mobile-toggle">
-              <input
-                type="checkbox"
-                checked={settings.enabled}
-                onChange={(e) => reminder.setEnabled(e.target.checked)}
-              />
-              <span>
-                {settings.enabled ? <Bell size={16} /> : <BellOff size={16} />}{" "}
-                Remind me to check in
-              </span>
-            </label>
-            <NotificationOptIn />
+              <NotificationOptIn />
+            </details>
           </>
         )}
-      </section>
-
-      <section className="mobile-card">
-        <h2>Check in now</h2>
-        <p className="muted">
-          Voluntary, about{" "}
-          {browserCamera
-            ? RECOMMENDED_CHECK_IN_SECONDS.presage
-            : RECOMMENDED_CHECK_IN_SECONDS.mock}{" "}
-          seconds, and you can stop at any time.
-        </p>
-        {blockedReason && <p className="fine-print">{blockedReason}</p>}
-        <button
-          type="button"
-          className="button primary mobile-big"
-          disabled={!canMeasure}
-          onClick={onStart}
-        >
-          Start check-in <ArrowRight size={18} />
-        </button>
       </section>
 
       <section className="mobile-card">
@@ -561,6 +605,13 @@ function NotificationOptIn() {
   const isIOS =
     typeof navigator !== "undefined" &&
     /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const supported =
+    typeof window !== "undefined" &&
+    "Notification" in window &&
+    window.isSecureContext;
+  const [permission, setPermission] = useState<NotificationPermission | null>(
+    supported ? Notification.permission : null,
+  );
   if (isIOS)
     return (
       <p className="fine-print">
@@ -570,13 +621,6 @@ function NotificationOptIn() {
         notifications.
       </p>
     );
-  const supported =
-    typeof window !== "undefined" &&
-    "Notification" in window &&
-    window.isSecureContext;
-  const [permission, setPermission] = useState<NotificationPermission | null>(
-    supported ? Notification.permission : null,
-  );
   if (!supported)
     return (
       <p className="fine-print">
@@ -636,12 +680,21 @@ function MobileConsent({
     ),
     [share, setShare] = useState(false);
   const a = useAction();
+  const mounted = useRef(false);
+  const ownedMedia = useRef<MediaStream | undefined>(undefined);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      ownedMedia.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
   return (
     <form
       className="mobile-card"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!consent || !breakId || a.busy) return;
+        if (!consent || !breakId || !canMeasure || a.busy) return;
         void a.run(async () => {
           let media: MediaStream | undefined;
           if (source === "presage") {
@@ -650,15 +703,24 @@ function MobileConsent({
               !navigator.mediaDevices?.getUserMedia
             )
               throw new Error("Camera check-in requires HTTPS on this phone.");
-            media = await navigator.mediaDevices.getUserMedia({
-              audio: false,
-              video: {
-                facingMode: "user",
-                width: { ideal: 960 },
-                height: { ideal: 720 },
-                frameRate: { ideal: 30 },
-              },
-            });
+            try {
+              media = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                  facingMode: "user",
+                  width: { ideal: 960 },
+                  height: { ideal: 720 },
+                  frameRate: { ideal: 30 },
+                },
+              });
+            } catch (error) {
+              throw new Error(cameraErrorMessage(error));
+            }
+            if (!mounted.current) {
+              media.getTracks().forEach((track) => track.stop());
+              return;
+            }
+            ownedMedia.current = media;
           }
           try {
             const result = await api<{ session: Session }>("/sessions", {
@@ -669,9 +731,19 @@ function MobileConsent({
               shareWithSupervisor: share,
               context: { workload: null, temperatureC: null },
             });
+            if (!mounted.current) {
+              media?.getTracks().forEach((track) => track.stop());
+              // Finish a start request that completed after leaving the screen.
+              void api(`/sessions/${result.session.id}/complete`, {}).catch(
+                () => {},
+              );
+              return;
+            }
+            ownedMedia.current = undefined;
             onStarted(result.session.id, media);
           } catch (error) {
             media?.getTracks().forEach((track) => track.stop());
+            ownedMedia.current = undefined;
             throw error;
           }
         });
@@ -685,7 +757,9 @@ function MobileConsent({
             <>
               <strong>Your camera is used for this check-in.</strong> Frames are
               sent over HTTPS to the SiteGuard server for transient Presage
-              processing. They are not saved. Stop at any time.
+              processing. No video is saved. Tap Begin check-in, then Allow when
+              your browser asks for camera permission. Microphone access is not
+              needed. Stop at any time.
             </>
           ) : (
             <>
@@ -716,6 +790,7 @@ function MobileConsent({
           Check-in mode
           <select
             value={source}
+            disabled={a.busy}
             onChange={(e) => setSource(e.target.value as "presage" | "mock")}
           >
             <option value="presage">iPhone camera · Presage</option>
@@ -724,13 +799,14 @@ function MobileConsent({
         </label>
       )}
       <p className="fine-print">
-        No workload or temperature questions are required. SiteGuard handles the
-        before/after windows and eligible history automatically.
+        SiteGuard compares the beginning and end of your check-in and uses
+        eligible past check-ins automatically.
       </p>
       <label className="checkbox mobile-toggle">
         <input
           type="checkbox"
           checked={share}
+          disabled={a.busy}
           onChange={(e) => setShare(e.target.checked)}
         />
         <span>Share this session's summary with safety operations</span>
@@ -739,6 +815,7 @@ function MobileConsent({
         <input
           type="checkbox"
           checked={consent}
+          disabled={a.busy}
           onChange={(e) => setConsent(e.target.checked)}
         />
         <span>
@@ -758,6 +835,7 @@ function MobileConsent({
         <button
           type="button"
           className="button secondary mobile-big"
+          disabled={a.busy}
           onClick={onCancel}
         >
           Not now
@@ -787,6 +865,15 @@ function MobileMeasuring({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const stopCamera = useRef<(() => void) | undefined>(undefined);
+  // Also release an already-approved camera if loading fails or the worker
+  // leaves before the session resource arrives.
+  useEffect(
+    () => () => {
+      initialMedia?.getTracks().forEach((track) => track.stop());
+    },
+    [initialMedia],
+  );
   useEffect(() => {
     if (s?.source !== "presage" || s.status !== "active") return;
     let stopped = false;
@@ -795,15 +882,20 @@ function MobileMeasuring({
     let inFlight = 0;
     let encoding = false;
     let lastTimestampUs = 0;
+    const releaseCamera = () => {
+      stopped = true;
+      clearTimeout(timer);
+      media?.getTracks().forEach((track) => track.stop());
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+    stopCamera.current = releaseCamera;
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     const failCapture = (error: unknown) => {
       if (stopped) return;
       stopped = true;
       clearTimeout(timer);
-      setCameraError(
-        error instanceof Error ? error.message : "Camera capture stopped.",
-      );
+      setCameraError(cameraErrorMessage(error));
       media?.getTracks().forEach((track) => track.stop());
       setCameraActive(false);
     };
@@ -904,19 +996,14 @@ function MobileMeasuring({
         setCameraActive(true);
         void capture();
       } catch (error) {
-        if (!stopped)
-          setCameraError(
-            error instanceof Error ? error.message : "Camera access failed.",
-          );
+        if (!stopped) setCameraError(cameraErrorMessage(error));
         media?.getTracks().forEach((track) => track.stop());
       }
     };
     void start();
     return () => {
-      stopped = true;
-      clearTimeout(timer);
-      media?.getTracks().forEach((track) => track.stop());
-      if (videoRef.current) videoRef.current.srcObject = null;
+      releaseCamera();
+      if (stopCamera.current === releaseCamera) stopCamera.current = undefined;
     };
   }, [s?.source, s?.status, sessionId, initialMedia]);
   const [now, setNow] = useState(Date.now());
@@ -963,6 +1050,12 @@ function MobileMeasuring({
       </div>
       <h1>Sit comfortably and rest.</h1>
       {s.source === "presage" && (
+        <p className="muted">
+          Keep your face in view, sit still and stay quiet. Pulse and breathing
+          may take time to appear.
+        </p>
+      )}
+      {s.source === "presage" && (
         <>
           <video
             ref={videoRef}
@@ -987,7 +1080,9 @@ function MobileMeasuring({
         </>
       )}
       <div className="mobile-countdown">
-        <span>Elapsed</span>
+        <span>
+          Elapsed · about {Math.max(0, target - elapsed)} seconds remaining
+        </span>
         <strong data-testid="checkin-elapsed">
           {formatCountdown(elapsed)}
         </strong>
@@ -999,6 +1094,7 @@ function MobileMeasuring({
         aria-valuemin={0}
         aria-valuemax={target}
         aria-valuenow={Math.min(target, elapsed)}
+        aria-valuetext={`${elapsed} seconds elapsed; suggested length ${target} seconds`}
       >
         <span
           style={{ width: `${Math.min(100, (elapsed / target) * 100)}%` }}
@@ -1031,7 +1127,10 @@ function MobileMeasuring({
         {s.source === "mock"
           ? "Synthetic demonstration values, not a real measurement."
           : "Presage measurement."}{" "}
-        Latest quality: {quality ?? "waiting"} · {stream.status}
+        {quality === "valid"
+          ? "Valid reading received"
+          : "Waiting for a valid reading"}{" "}
+        · {stream.status}
       </p>
       <ErrorNotice message={a.error || cameraError || stream.error} />
       <button
@@ -1040,6 +1139,13 @@ function MobileMeasuring({
         disabled={a.busy}
         onClick={() =>
           void a.run(async () => {
+            stopCamera.current?.();
+            initialMedia?.getTracks().forEach((track) => track.stop());
+            setCameraActive(false);
+            if (s.source === "presage")
+              setCameraError(
+                "Camera stopped. Finish this check-in to see your summary.",
+              );
             await api(`/sessions/${s.id}/complete`, {});
             onFinished();
           })
@@ -1100,12 +1206,23 @@ function MobileDone({
         <h1>Thanks for checking in.</h1>
         <ErrorNotice message={summary.error} />
         {!v ? (
-          summary.loading && <Loading />
+          summary.loading ? (
+            <Loading />
+          ) : (
+            <button
+              type="button"
+              className="button secondary mobile-big"
+              onClick={() => void summary.refresh()}
+            >
+              Retry summary
+            </button>
+          )
         ) : (
           <>
             <p className="muted">
               {Math.round(v.durationSeconds)} seconds recorded. Changes compare
-              the first and last 15 seconds of valid readings.
+              each metric's initial and final valid-reading windows. Missing
+              readings are shown as insufficient data.
             </p>
             <div className="mobile-readings">
               <MobileMetric label="Pulse change" unit="bpm" value={v.pulse} />
@@ -1117,6 +1234,12 @@ function MobileDone({
             </div>
           </>
         )}
+        <h2>Would you like more rest?</h2>
+        <p className="muted">
+          You choose whether to request additional rest, with or without enough
+          readings. Your protected break stays in place.
+        </p>
+        <HelpActions sessionId={sessionId} />
         <div className="mobile-stack">
           <Link
             className="button secondary mobile-big"

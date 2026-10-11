@@ -33,7 +33,15 @@ export function Measurement() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
-  const browserCamera = search.get("camera") === "browser";
+  const browserCamera =
+    search.get("camera") === "browser" ||
+    (() => {
+      try {
+        return sessionStorage.getItem(`siteguard-camera:${id}`) === "browser";
+      } catch {
+        return false;
+      }
+    })();
   const s = session.data?.session;
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -47,6 +55,7 @@ export function Measurement() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let busy = false;
     let timestampUs = 0;
+    const controller = new AbortController();
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     const fail = (error: unknown) => {
@@ -55,6 +64,10 @@ export function Measurement() {
         error instanceof Error ? error.message : "Camera capture stopped.",
       );
       setCameraActive(false);
+      stopped = true;
+      controller.abort();
+      clearTimeout(timer);
+      media?.getTracks().forEach((track) => track.stop());
     };
     const capture = async () => {
       if (stopped || busy || !media || !context || !videoRef.current) return;
@@ -88,6 +101,10 @@ export function Measurement() {
             body: frame,
             credentials: "same-origin",
             cache: "no-store",
+            signal: AbortSignal.any([
+              controller.signal,
+              AbortSignal.timeout(15000),
+            ]),
           },
         );
         if (!response.ok)
@@ -101,6 +118,10 @@ export function Measurement() {
     };
     const start = async () => {
       try {
+        if (!context)
+          throw new Error(
+            "Camera processing is unavailable in this browser. Finish this check-in and try another browser.",
+          );
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
           throw new Error("Camera check-in requires HTTPS.");
         media = await navigator.mediaDevices.getUserMedia({
@@ -112,9 +133,13 @@ export function Measurement() {
             frameRate: { ideal: 30 },
           },
         });
-        if (stopped) return;
+        if (stopped) {
+          media.getTracks().forEach((track) => track.stop());
+          return;
+        }
         videoRef.current!.srcObject = media;
         await videoRef.current!.play();
+        if (stopped) return;
         setCameraActive(true);
         void capture();
       } catch (error) {
@@ -124,6 +149,7 @@ export function Measurement() {
     void start();
     return () => {
       stopped = true;
+      controller.abort();
       clearTimeout(timer);
       media?.getTracks().forEach((track) => track.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
@@ -158,7 +184,7 @@ export function Measurement() {
       <div className="card">
         <h1>Check-in completed</h1>
         <Link className="button primary" to={`/sessions/${s.id}`}>
-          Review observations
+          View results
         </Link>
       </div>
     );
@@ -171,9 +197,13 @@ export function Measurement() {
   return (
     <>
       <PageHeading
-        eyebrow="VOLUNTARY CHECK-IN / 02"
-        title="Settle in. Observe the change."
-        description="Stay seated and stationary throughout your check-in."
+        eyebrow="STEP 2 OF 3 · MEASUREMENT"
+        title="Your check-in is recording."
+        description={
+          s.source === "mock"
+            ? "Watch the synthetic readings, then finish to see your results."
+            : "Sit still, face the camera in even light, then finish to see your results."
+        }
         action={<SourceBadge source={s.source} />}
       />
       <div className="measurement-layout">
@@ -182,7 +212,7 @@ export function Measurement() {
             <span className="eyebrow">
               {s.source === "mock"
                 ? "SYNTHETIC MEASUREMENT"
-                : "LOCAL CAMERA CHECK-IN"}
+                : "CAMERA CHECK-IN"}
             </span>
             <span className="badge">{quality || "Waiting"}</span>
           </div>
@@ -202,7 +232,11 @@ export function Measurement() {
                   }}
                 />
                 <strong>
-                  {cameraActive ? "Camera active" : "Starting camera…"}
+                  {cameraError
+                    ? "Camera stopped"
+                    : cameraActive
+                      ? "Camera active"
+                      : "Starting camera…"}
                 </strong>
                 <span>
                   {cameraError ||
@@ -222,8 +256,8 @@ export function Measurement() {
                 </strong>
                 <span>
                   {s.source === "mock"
-                    ? "A deterministic stream demonstrates the flow."
-                    : "Camera capture is managed by the local Presage bridge."}
+                    ? "Synthetic readings demonstrate the complete flow."
+                    : "Use the camera on the laptop running Presage."}
                 </span>
               </>
             )}
@@ -235,8 +269,9 @@ export function Measurement() {
           <div className="positioning-tip">
             <Info size={16} />
             <p>
-              Rest comfortably. In real mode, face the camera with even lighting
-              and follow bridge positioning instructions.
+              {s.source === "mock"
+                ? "No positioning needed for the synthetic demo."
+                : "Keep your face in view and stay still while readings arrive."}
             </p>
           </div>
           <div className="session-timer">
@@ -252,11 +287,15 @@ export function Measurement() {
               style={{ width: `${Math.min(100, (elapsed / target) * 100)}%` }}
             />
           </div>
+          <p className="setup-description" role="status">
+            {elapsed < target
+              ? `About ${target - elapsed} seconds left in the suggested recording.`
+              : "Suggested recording time reached. Finish when you’re ready."}
+          </p>
           <p className="fine-print">
-            {s.source === "mock"
-              ? `Demo walkthrough: ${target} seconds.`
-              : `Recommended: ${target} seconds. Readings need about 30–45 seconds of warm-up before they count.`}{" "}
-            Data sufficiency is not a medical threshold.
+            {s.source === "presage" &&
+              "Readings may need 30–45 seconds to warm up. "}
+            You can finish early; your summary may show insufficient data.
           </p>
           <button
             className="button primary full"
@@ -269,7 +308,7 @@ export function Measurement() {
             }
           >
             <Square size={14} />
-            {a.busy ? "Stopping source…" : "Finish check-in"}
+            {a.busy ? "Preparing results…" : "Finish check-in"}
           </button>
         </section>
         <div>

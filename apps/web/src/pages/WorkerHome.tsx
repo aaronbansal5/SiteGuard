@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Coffee, ArrowRight, Clock, Activity, LockKeyhole } from "lucide-react";
+import { Coffee, ArrowRight, Activity } from "lucide-react";
 import type {
   Break,
   Session,
@@ -49,9 +49,9 @@ function Worker({ workerId }: { workerId: string }) {
   return (
     <>
       <PageHeading
-        eyebrow="WORKER PORTAL"
+        eyebrow="WORKER CHECK-IN"
         title="Take a moment for yourself."
-        description="Your measurements, your context, and a direct path to support."
+        description="Choose a source, record your check-in, then review the results and request rest if you want it."
         action={<span className="badge">Worker W-{workerId.slice(-2)}</span>}
       />
       <ErrorNotice message={breaks.error || history.error || requests.error} />
@@ -67,14 +67,12 @@ function Worker({ workerId }: { workerId: string }) {
               {br ? "YOUR BREAK IS IN PROGRESS" : "YOUR PROTECTED SCHEDULE"}
             </span>
             <h2>
-              {br
-                ? "Rest comes first. Check in if you choose."
-                : "Your next break is protected."}
+              {br ? "Ready for a check-in?" : "Your next break is protected."}
             </h2>
             <p>
               {br
                 ? `${time(br.startsAt)} – ${time(br.endsAt)} · ${br.policyLabel}`
-                : "Voluntary measurement is available during a scheduled break. Assistance is always available."}
+                : "Check-ins open during a scheduled break. You can request rest or help below at any time."}
             </p>
           </div>
           {active ? (
@@ -86,58 +84,19 @@ function Worker({ workerId }: { workerId: string }) {
             </Link>
           ) : br ? (
             <Link className="button primary" to={`/check-in?breakId=${br.id}`}>
-              Start voluntary check-in <ArrowRight size={17} />
+              Start check-in <ArrowRight size={17} />
             </Link>
           ) : (
             <span className="badge">No active break</span>
           )}
         </section>
       )}
-      <div className="stats-grid three">
-        <section className="card stat">
-          <span>
-            <LockKeyhole size={18} />
-            Protected rest
-          </span>
-          <strong>
-            {breaks.data?.breaks.filter((b) => b.kind === "protected").length ??
-              "—"}
-            <small>scheduled break</small>
-          </strong>
-          <p>Fictional site policy, preserved by planning</p>
-        </section>
-        <section className="card stat">
-          <span>
-            <Clock size={18} />
-            Your check-ins
-          </span>
-          <strong>
-            {history.data?.sessions.filter((s) => s.status === "completed")
-              .length ?? "—"}
-            <small>recorded sessions</small>
-          </strong>
-          <p>Every session retains its measurement source</p>
-        </section>
-        <section className="card stat">
-          <span>
-            <Activity size={18} />
-            Open requests
-          </span>
-          <strong>
-            {requests.data?.requests.filter(
-              (r) => !["resolved", "declined"].includes(r.status),
-            ).length ?? "—"}
-            <small>awaiting follow-up</small>
-          </strong>
-          <p>Requests are independent of vital readings</p>
-        </section>
-      </div>
       <div className="two-columns">
         <section className="card">
           <div className="card-header">
             <div>
-              <h2>Support, whenever you need it</h2>
-              <p>You do not need a measurement to request help.</p>
+              <h2>Need more rest or help?</h2>
+              <p>You can ask now, with or without a check-in.</p>
             </div>
           </div>
           <HelpActions onSent={() => void requests.refresh()} />
@@ -172,7 +131,7 @@ function Worker({ workerId }: { workerId: string }) {
                 </div>
               </div>
               <Link className="text-link" to={`/sessions/${latest.id}`}>
-                Review observations <ArrowRight size={15} />
+                View results <ArrowRight size={15} />
               </Link>
             </>
           ) : (
