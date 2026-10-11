@@ -69,6 +69,25 @@ describe("bounded personal rest recommendation", () => {
     expect(result.limitations.join(" ")).toMatch(/non-diagnostic|clearance/i);
   });
 
+  it("bases the suggestion on the check-in that was just collected", async () => {
+    let sent: Record<string, string[]> = {};
+    await new RestRecommender(
+      loadConfig({ geminiKey: "test", geminiModel: "test" }),
+      async (facts) => {
+        sent = facts;
+        return { suggestedMinutes: 15, rationale: ["bounded fact"] };
+      },
+    ).recommend(summary, summary.sessionId, fixtureId(704));
+    expect(sent.pulse[0]).toContain("from 80 to 75 bpm");
+    expect(sent.breathing[0]).toContain("from 18 to 16 breaths/min");
+    expect(sent.measurement[0]).toContain("60 seconds");
+
+    const fallback = await new RestRecommender(
+      loadConfig({ geminiKey: undefined, geminiModel: undefined }),
+    ).recommend(summary, summary.sessionId, fixtureId(705));
+    expect(fallback.rationale.join(" ")).toContain("from 80 to 75 bpm");
+  });
+
   it("sends only summary facts, never readings or camera frames", async () => {
     let sent: unknown;
     await new RestRecommender(

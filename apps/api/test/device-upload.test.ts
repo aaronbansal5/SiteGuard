@@ -417,6 +417,15 @@ describe("local iPhone upload", () => {
       expect(recommendation.sessionId).toBe(upload.id);
       expect(recommendation.suggestedMinutes).toBeGreaterThanOrEqual(5);
       expect(recommendation.suggestedMinutes).toBeLessThanOrEqual(30);
+      expect(recommendation.limitations.length).toBeGreaterThan(0);
+      expect(recommendation.rationale.join(" ")).toMatch(
+        /Pulse .*(went from|too few valid)/,
+      );
+      const summary = uploaded.json().summary;
+      for (const metric of ["pulse", "breathing"])
+        expect(summary[metric]).toHaveProperty("initialMedian");
+      for (const comparison of ["pulseComparison", "breathingComparison"])
+        expect(summary[comparison]).toHaveProperty("historicalMedianDelta");
       expect(
         (await ctx.repo.list("rest_recommendations")).some(
           (item) => item.sessionId === upload.id,

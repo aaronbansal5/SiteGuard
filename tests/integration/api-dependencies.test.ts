@@ -407,7 +407,8 @@ describe("Gemini failures fall back to deterministic facts", () => {
     } finally {
       await close(h);
     }
-  });
+    // Completion (rest suggestion) and explanation each wait out one deadline.
+  }, 2 * GEMINI_TIMEOUT_MS + 10_000);
 
   test("fixture Gemini selection is rendered from server facts only (control; not live verification)", async () => {
     respond = () =>

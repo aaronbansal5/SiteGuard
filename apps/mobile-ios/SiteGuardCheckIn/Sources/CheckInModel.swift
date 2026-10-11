@@ -13,6 +13,7 @@ struct CheckInResult: Equatable {
     var validPulseCount: Int
     var validBreathingCount: Int
     var uploadMessage: String
+    var receipt: UploadReceipt? = nil
 }
 
 struct ConsentChoices: Equatable {
@@ -309,6 +310,7 @@ final class CheckInModel {
         preview = nil
         let endedAt = Date()
         var uploadMessage = "Not uploaded. Readings stay on this result screen only and are discarded when you leave."
+        var receipt: UploadReceipt?
         if currentChoices.uploadToSiteGuard && uploader.isPaired && !collector.envelopes.isEmpty {
             let timestamp: (Date) -> String = { date in
                 ReadingMapper.isoTimestamp(micros: Int64(date.timeIntervalSince1970 * 1_000_000))
@@ -322,9 +324,10 @@ final class CheckInModel {
                 readings: collector.envelopes)
             pendingUpload = checkIn
             do {
-                let id = try await uploader.upload(checkIn)
+                let uploaded = try await uploader.upload(checkIn)
+                receipt = uploaded
                 pendingUpload = nil
-                uploadMessage = "Uploaded to SiteGuard. Desktop session: \(id)."
+                uploadMessage = "Uploaded to SiteGuard. Desktop session: \(uploaded.sessionId)."
             } catch {
                 uploadMessage = "Upload not confirmed: \(error.localizedDescription) Retry before leaving this screen."
             }
@@ -337,7 +340,8 @@ final class CheckInModel {
                 readingCount: collector.envelopes.count,
                 validPulseCount: collector.validPulseCount,
                 validBreathingCount: collector.validBreathingCount,
-                uploadMessage: uploadMessage))
+                uploadMessage: uploadMessage,
+                receipt: receipt))
         // The next optional reminder interval starts when the check-in ends.
         reminder.endCheckIn(now: Date())
         scheduleNotification()
@@ -347,10 +351,11 @@ final class CheckInModel {
         guard let checkIn = pendingUpload,
               case .completed(var result) = stage else { return }
         do {
-            let id = try await uploader.upload(checkIn)
+            let receipt = try await uploader.upload(checkIn)
             pendingUpload = nil
             canRetryUpload = false
-            result.uploadMessage = "Uploaded to SiteGuard. Desktop session: \(id)."
+            result.receipt = receipt
+            result.uploadMessage = "Uploaded to SiteGuard. Desktop session: \(receipt.sessionId)."
         } catch {
             result.uploadMessage = "Upload not confirmed: \(error.localizedDescription) Retry before leaving this screen."
         }

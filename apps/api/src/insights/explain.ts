@@ -80,10 +80,11 @@ export function renderSelection(raw: unknown, facts: Record<string, string[]>) {
   });
 }
 // Keep the fallback responsive while allowing normal hosted-model latency.
-export const GEMINI_TIMEOUT_MS = 5000;
+// Gemini rejects request deadlines below 10 s.
+export const GEMINI_TIMEOUT_MS = 12000;
 export const REST_RECOMMENDATION_MIN_MINUTES = 5;
 export const REST_RECOMMENDATION_MAX_MINUTES = 30;
-export const REST_RECOMMENDATION_MODEL_VERSION = "rest-recommendation-v1";
+export const REST_RECOMMENDATION_MODEL_VERSION = "rest-recommendation-v2";
 const recommendationSchema = z.strictObject({
   suggestedMinutes: z.number().int(),
   rationale: z.array(z.string()).min(1).max(4),
@@ -93,8 +94,34 @@ const recommendationLimitations = [
   "It does not know symptoms, sensor error, workload causes, or clinical history.",
   "A worker may ignore or change it; only the worker requests rest and a supervisor approves and schedules it.",
 ];
+const observedChange = (
+  label: string,
+  unit: string,
+  m: Summary["pulse"],
+  c: Summary["pulseComparison"],
+) =>
+  m.status === "available"
+    ? `${label} went from ${m.initialMedian} to ${m.finalMedian} ${unit} during this check-in (change ${m.delta}).` +
+      (c.status === "available"
+        ? ` Across ${c.count} comparable earlier check-ins the usual change was ${c.historicalMedianDelta} ${unit}.`
+        : " There are not enough comparable earlier check-ins for a personal comparison.")
+    : `${label} had too few valid observations in this check-in to describe a change.`;
 export function recommendationFacts(summary: Summary) {
   return {
+    pulse: [
+      observedChange("Pulse", "bpm", summary.pulse, summary.pulseComparison),
+    ],
+    breathing: [
+      observedChange(
+        "Breathing rate",
+        "breaths/min",
+        summary.breathing,
+        summary.breathingComparison,
+      ),
+    ],
+    measurement: [
+      `The check-in lasted ${Math.round(summary.durationSeconds)} seconds, with ${summary.pulse.initialCount + summary.pulse.finalCount} valid pulse and ${summary.breathing.initialCount + summary.breathing.finalCount} valid breathing observations in the opening and closing windows.`,
+    ],
     signal:
       summary.pulse.status === "available" &&
       summary.breathing.status === "available"
@@ -131,7 +158,11 @@ export class RestRecommender {
       summary.breathing.status === "available"
         ? 15
         : 10;
-    let rationale = Object.values(facts).map((v) => v[0]);
+    let rationale = [
+      facts.pulse[0],
+      facts.breathing[0],
+      facts.measurement[0],
+    ];
     if ((this.config.geminiKey && this.config.geminiModel) || this.generate) {
       try {
         const task = this.generate ? this.generate(facts) : this.call(facts);
@@ -172,7 +203,7 @@ export class RestRecommender {
       model: this.config.geminiModel!,
       contents: JSON.stringify({
         instruction:
-          "Return a bounded, non-diagnostic suggestion only. Do not diagnose, claim clearance, schedule or approve rest. Use only provided facts.",
+          "Suggest how many minutes of additional rest this worker might ask for, based only on the provided observations from the check-in they just completed and their comparable earlier check-ins. Give up to four short, plain-language reasons that cite those facts. Return a bounded, non-diagnostic suggestion only. Do not diagnose, claim clearance, schedule or approve rest. Use only provided facts.",
         facts,
       }),
       config: {

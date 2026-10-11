@@ -66,12 +66,47 @@ protocol SiteGuardUploader {
     /// `expectedWorkerId` is nil when the server's worker list requires sign-in;
     /// the one-time code (issued to the signed-in worker) then identifies the worker.
     func pair(code: String, expectedWorkerId: String?) async throws -> PairedWorker
-    func upload(_ checkIn: DeviceCheckIn) async throws -> String
+    func upload(_ checkIn: DeviceCheckIn) async throws -> UploadReceipt
 }
 
 struct PairedWorker: Equatable {
     let id: String
     let displayName: String?
+}
+
+/// Bounded, non-diagnostic suggestion the server derives from an uploaded check-in.
+struct RestSuggestion: Decodable, Equatable {
+    let suggestedMinutes: Int
+    let rationale: [String]
+    let limitations: [String]
+    let origin: String
+}
+
+struct ObservedChange: Decodable, Equatable {
+    let status: String
+    let initialMedian: Double?
+    let finalMedian: Double?
+    let delta: Double?
+}
+
+struct UsualChange: Decodable, Equatable {
+    let status: String
+    let count: Int
+    let historicalMedianDelta: Double?
+}
+
+/// The server's summary of the check-in it just stored.
+struct CheckInObservations: Decodable, Equatable {
+    let pulse: ObservedChange
+    let breathing: ObservedChange
+    let pulseComparison: UsualChange
+    let breathingComparison: UsualChange
+}
+
+struct UploadReceipt: Equatable {
+    let sessionId: String
+    let observations: CheckInObservations?
+    let suggestion: RestSuggestion?
 }
 
 final class LocalHTTPSUploader: SiteGuardUploader {
@@ -162,11 +197,20 @@ final class LocalHTTPSUploader: SiteGuardUploader {
         return PairedWorker(id: reply.workerId, displayName: reply.displayName)
     }
 
-    func upload(_ checkIn: DeviceCheckIn) async throws -> String {
+    func upload(_ checkIn: DeviceCheckIn) async throws -> UploadReceipt {
         guard let token else { throw UploadError.notPaired }
         struct Reply: Decodable { let session: Session }
         struct Session: Decodable { let id: String }
+        struct Summary: Decodable { let summary: CheckInObservations }
+        struct Suggestion: Decodable { let recommendation: RestSuggestion }
         let data = try await request(path: "api/device/check-ins", body: checkIn, bearer: token)
-        return try JSONDecoder().decode(Reply.self, from: data).session.id
+        let decoder = JSONDecoder()
+        let sessionId = try decoder.decode(Reply.self, from: data).session.id
+        // The check-in is already stored once the session decodes; an unexpected
+        // summary or suggestion shape only hides those extras.
+        return UploadReceipt(
+            sessionId: sessionId,
+            observations: try? decoder.decode(Summary.self, from: data).summary,
+            suggestion: try? decoder.decode(Suggestion.self, from: data).recommendation)
     }
 }
