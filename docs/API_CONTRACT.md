@@ -62,3 +62,29 @@ With `CHECK_IN_TEST_MODE=true`, `DEMO_MODE=true`, and `HOSTED=false`, `/health` 
 ## Local camera preview
 
 `GET /sessions/:id/preview`: worker owner only, active local Presage sessions only. Returns in-memory JPEG with no-store headers, 204 while waiting or after completion, and 503 if the bridge is unavailable. No images are persisted. The preview uses the existing native capture; it does not open browser camera capture.
+
+## Supabase email/password authentication
+
+When `AUTH_MODE=supabase`, unauthenticated browser entry is `/login` (account
+creation `/signup`). Supabase verifies identity; application roles and opaque
+session digests remain in the configured app database. Demo role login is disabled.
+All browser writes require an explicitly configured origin and JSON.
+
+- `POST /auth/password/login {email,password}` verifies Supabase credentials and
+  confirmed email, issues an eight-hour HttpOnly app session cookie, and returns
+  `{signedIn:true,identity}`. Clients cannot supply role or worker ID.
+- `POST /auth/password/signup {email,password,displayName}` requires password
+  length 8..256 and display name 1..80. With email confirmation, returns
+  `{signedIn:false,message}` without granting a session. An immediately confirmed
+  Supabase session follows the same verified login procedure.
+- `POST /auth/password/reset-request {email}` sends a provider reset link with an
+  enumeration-resistant acknowledgment `{message}`.
+- `POST /auth/password/reset {accessToken,refreshToken,password}` verifies the
+  recovery identity, updates the Supabase password and revokes its app sessions.
+  Recovery tokens are not persisted in the app database.
+
+Only a verified email matching server-owned `SUPABASE_ADMIN_EMAIL` is automatically
+assigned supervisor access. Other new identities get dedicated worker records;
+user-editable provider metadata never assigns privileges. Existing `/auth/me`
+and `/auth/logout` preserve the shared role/session interfaces. See
+[SUPABASE_AUTH.md](SUPABASE_AUTH.md) for provider redirect setup and session limits.

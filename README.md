@@ -62,3 +62,5 @@ Real Presage hardware, live Gemini, Tiger Data, and hosted deployment require se
 - [Agent ownership](AGENTS.md), [readiness assessment](docs/PRODUCTION_READINESS.md)
 
 No diagnosis, risk score, medical clearance, or medically optimal rest claim. Data sufficiency rules and fictional break fixtures are not medical or legal guidance. SiteGuard does not store camera footage or identify faces.
+
+Supabase email/password authentication and worker/admin setup: [docs/SUPABASE_AUTH.md](docs/SUPABASE_AUTH.md).

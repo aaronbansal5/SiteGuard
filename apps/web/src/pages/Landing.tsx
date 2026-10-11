@@ -1,3 +1,4 @@
+import { Login } from "./Login";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -16,6 +17,7 @@ import { useIdentity } from "../App";
 import { ErrorNotice, PageHeading } from "../components/ui";
 export function Landing() {
   const { config } = useIdentity();
+  if (config?.mode === "supabase") return <Login />;
   if (config?.mode === "oidc")
     return (
       <>

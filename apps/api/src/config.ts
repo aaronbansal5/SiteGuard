@@ -2,8 +2,12 @@ import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 export interface Config {
   checkInTestMode: boolean;
-  authMode: "demo" | "oidc";
+  authMode: "demo" | "oidc" | "supabase";
+  supabaseUrl?: string;
+  supabasePublishableKey?: string;
+  supabaseAdminEmail?: string;
   appOrigin: string;
+  authAdditionalOrigins: string[];
   siteId: string;
   oidcIssuer?: string;
   oidcClientId?: string;
@@ -38,8 +42,22 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
   const hosted = process.env.HOSTED === "true";
   const c: Config = {
     checkInTestMode: process.env.CHECK_IN_TEST_MODE === "true",
-    authMode: process.env.AUTH_MODE === "oidc" ? "oidc" : "demo",
+    authMode:
+      process.env.AUTH_MODE === "supabase"
+        ? "supabase"
+        : process.env.AUTH_MODE === "oidc"
+          ? "oidc"
+          : "demo",
+    supabaseUrl: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+    supabasePublishableKey:
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    supabaseAdminEmail: process.env.SUPABASE_ADMIN_EMAIL?.trim().toLowerCase(),
     appOrigin: process.env.APP_ORIGIN || "http://127.0.0.1:3001",
+    authAdditionalOrigins: (process.env.AUTH_ADDITIONAL_ORIGINS || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
     siteId: process.env.SITE_ID || "local-demo",
     oidcIssuer: process.env.OIDC_ISSUER,
     oidcClientId: process.env.OIDC_CLIENT_ID,
@@ -76,6 +94,12 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
       process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || undefined,
     ...overrides,
   };
+  if (
+    process.env.AUTH_MODE &&
+    !overrides.authMode &&
+    !["demo", "oidc", "supabase"].includes(process.env.AUTH_MODE)
+  )
+    throw new Error("AUTH_MODE must be demo, oidc or supabase");
   if (!c.demoMode || process.env.NODE_ENV === "production") {
     c.researchDemoEnabled = false;
     c.researchDemoAllowPresage = false;
@@ -113,8 +137,42 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     !["https:", "http:"].includes(origin.protocol)
   )
     throw new Error("APP_ORIGIN must be an HTTP(S) origin");
-  if (c.hosted && c.authMode !== "oidc")
-    throw new Error("Hosted mode requires AUTH_MODE=oidc");
+  for (const extra of c.authAdditionalOrigins) {
+    const url = new URL(extra);
+    if (
+      url.origin !== extra ||
+      url.username ||
+      url.password ||
+      !["http:", "https:"].includes(url.protocol) ||
+      (c.hosted && url.protocol !== "https:")
+    )
+      throw new Error(
+        "AUTH_ADDITIONAL_ORIGINS must contain explicit HTTP(S) origins; HTTPS when hosted",
+      );
+  }
+  if (c.hosted && c.authMode === "demo")
+    throw new Error("Hosted mode requires account authentication");
+  if (c.authMode === "supabase") {
+    if (!c.supabaseUrl || !c.supabasePublishableKey)
+      throw new Error("Supabase URL and publishable key are required");
+    const url = new URL(c.supabaseUrl);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/"
+    )
+      throw new Error("SUPABASE_URL must be an HTTPS origin");
+    if (
+      c.supabaseAdminEmail &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.supabaseAdminEmail)
+    )
+      throw new Error("SUPABASE_ADMIN_EMAIL must be an email address");
+  }
+  if (c.hosted && origin.protocol !== "https:")
+    throw new Error("Hosted APP_ORIGIN must use HTTPS");
   if (c.authMode === "oidc") {
     if (!c.oidcIssuer || !c.oidcClientId)
       throw new Error("OIDC_ISSUER and OIDC_CLIENT_ID are required");

@@ -2491,3 +2491,126 @@ body.fall-alert-active::before {
     animation: none;
   }
 }
+
+.auth-layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(300px, 460px);
+  gap: 64px;
+  align-items: center;
+  max-width: 1100px;
+  margin: 48px auto;
+}
+.auth-intro h1 {
+  font-size: clamp(36px, 4vw, 60px);
+  line-height: 1.12;
+  margin: 24px 0;
+  letter-spacing: -0.04em;
+}
+.auth-intro h1 span {
+  color: #0f766e;
+}
+.auth-intro p {
+  font-size: 18px;
+  max-width: 400px;
+  line-height: 1.7;
+}
+.auth-benefit {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 36px;
+  color: #0f766e;
+}
+.auth-benefit small {
+  display: block;
+  margin-top: 6px;
+  color: #475569;
+}
+.auth-card {
+  padding: 32px;
+}
+.auth-card h2 {
+  font-size: 28px;
+  margin: 12px 0;
+}
+.auth-card form {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+.auth-card label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+.auth-card input {
+  width: 100%;
+  min-height: 46px;
+}
+.auth-password {
+  position: relative;
+}
+.auth-password input {
+  padding-right: 46px;
+}
+.auth-eye {
+  position: absolute;
+  right: 8px;
+  top: 9px;
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  cursor: pointer;
+  color: #475569;
+}
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  min-height: 48px;
+}
+.auth-text-button {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: #0f766e;
+  text-align: right;
+  padding: 0;
+}
+.auth-switch {
+  margin: 24px 0 18px;
+  text-align: center;
+}
+.auth-switch a {
+  color: #0f766e;
+  font-weight: 600;
+}
+.auth-footnote {
+  display: block;
+  line-height: 1.6;
+  color: #475569;
+}
+.auth-message {
+  padding: 12px;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  color: #134e4a;
+  line-height: 1.5;
+}
+@media (max-width: 900px) {
+  .auth-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    margin: 16px auto;
+    max-width: 500px;
+  }
+  .auth-intro h1 {
+    font-size: 36px;
+  }
+  .auth-benefit {
+    display: none;
+  }
+  .auth-card {
+    padding: 24px;
+  }
+}

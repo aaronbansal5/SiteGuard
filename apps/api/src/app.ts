@@ -75,7 +75,9 @@ export async function createApp(
         for (const [key, value] of writeRates)
           if (value.resetsAt <= now) writeRates.delete(key);
       }
-      const login = req.url.split("?")[0] === "/api/demo/login";
+      const login =
+        req.url.split("?")[0] === "/api/demo/login" ||
+        req.url.startsWith("/api/auth/password/");
       // Behind a reverse proxy the socket address is the proxy's, so every
       // client would share one quota unless CLIENT_IP_HEADER is configured.
       const frame = /^\/api\/sessions\/[0-9a-f-]+\/frame(?:\?|$)/i.test(
@@ -114,14 +116,16 @@ export async function createApp(
       );
     }
     if (
-      c.authMode === "oidc" &&
+      c.authMode !== "demo" &&
       ["POST", "PATCH", "DELETE"].includes(req.method) &&
       req.url.startsWith("/api/") &&
       !req.headers.authorization &&
       req.url.split("?")[0] !== "/api/auth/mobile/exchange"
     ) {
       if (
-        req.headers.origin !== c.appOrigin ||
+        ![c.appOrigin, ...c.authAdditionalOrigins].includes(
+          req.headers.origin || "",
+        ) ||
         !req.headers["content-type"]?.startsWith("application/json")
       ) {
         throw new AppError(
@@ -158,8 +162,8 @@ export async function createApp(
         );
       const publicProtocol = c.hosted || localTlsProxy ? "https" : req.protocol;
       if (
-        c.authMode === "oidc"
-          ? origin.origin !== c.appOrigin
+        c.authMode !== "demo"
+          ? ![c.appOrigin, ...c.authAdditionalOrigins].includes(origin.origin)
           : origin.host !== req.headers.host ||
             origin.protocol !== `${publicProtocol}:`
       )

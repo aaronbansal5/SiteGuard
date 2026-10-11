@@ -71,7 +71,7 @@ const Supervisor = lazy(() =>
   })),
 );
 type AuthConfig = {
-  mode: "demo" | "oidc";
+  mode: "demo" | "oidc" | "supabase";
   loginAvailable: boolean;
   siteId: string;
 };
@@ -81,7 +81,13 @@ const AuthContext = createContext<{
   config: AuthConfig | null;
   account?: Account;
   login: (a: Identity) => Promise<void>;
-}>({ identity: null, config: null, login: async () => {} });
+  refreshIdentity: () => Promise<Identity | null>;
+}>({
+  identity: null,
+  config: null,
+  login: async () => {},
+  refreshIdentity: async () => null,
+});
 export const useIdentity = () => useContext(AuthContext);
 function Protected({
   children,
@@ -90,12 +96,16 @@ function Protected({
   children: ReactNode;
   role?: Identity["role"];
 }) {
-  const { identity } = useIdentity();
+  const { identity, config } = useIdentity();
   const location = useLocation();
   if (!identity)
     return (
       <Navigate
-        to={"/?next=" + encodeURIComponent(location.pathname)}
+        to={
+          (config?.mode === "supabase" ? "/login" : "/") +
+          "?next=" +
+          encodeURIComponent(location.pathname)
+        }
         replace
       />
     );
@@ -177,6 +187,15 @@ function Shell() {
     await api("/demo/login", a);
     setIdentity(a);
   };
+  const refreshIdentity = async () => {
+    loginRevision.current += 1;
+    const current = await api<{ identity: Identity | null; account?: Account }>(
+      "/auth/me",
+    );
+    setIdentity(current.identity);
+    setAccount(current.account);
+    return current.identity;
+  };
   const logout = async () => {
     if (logoutBusy) return;
     setLogoutBusy(true);
@@ -197,7 +216,9 @@ function Shell() {
     location.pathname.startsWith("/mobile/")
   )
     return (
-      <AuthContext.Provider value={{ identity, login, config, account }}>
+      <AuthContext.Provider
+        value={{ identity, login, config, account, refreshIdentity }}
+      >
         <a className="skip-link" href="#main">
           Skip to content
         </a>
@@ -224,7 +245,9 @@ function Shell() {
       </AuthContext.Provider>
     );
   return (
-    <AuthContext.Provider value={{ identity, login, config, account }}>
+    <AuthContext.Provider
+      value={{ identity, login, config, account, refreshIdentity }}
+    >
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -369,6 +392,46 @@ function Shell() {
               >
                 <Route
                   path="/"
+                  element={
+                    identity ? (
+                      <Navigate
+                        to={
+                          identity.role === "worker" ? "/worker" : "/supervisor"
+                        }
+                        replace
+                      />
+                    ) : config.mode === "supabase" ? (
+                      <Navigate
+                        to={"/login" + location.search + location.hash}
+                        replace
+                      />
+                    ) : (
+                      <Landing />
+                    )
+                  }
+                />
+                <Route
+                  path="/login"
+                  element={
+                    identity &&
+                    !(
+                      config.mode === "supabase" &&
+                      (location.hash.includes("type=recovery") ||
+                        new URLSearchParams(location.search).has("recovery"))
+                    ) ? (
+                      <Navigate
+                        to={
+                          identity.role === "worker" ? "/worker" : "/supervisor"
+                        }
+                        replace
+                      />
+                    ) : (
+                      <Landing />
+                    )
+                  }
+                />
+                <Route
+                  path="/signup"
                   element={
                     identity ? (
                       <Navigate

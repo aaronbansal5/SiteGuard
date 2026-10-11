@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "cd ../.. && tsx watch --env-file-if-exists=.env apps/api/src/server.ts",
-    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --external:fastify --external:@fastify/* --external:pg --external:@google/genai --external:zod --external:openid-client --outfile=dist/server.js"
+    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --external:fastify --external:@fastify/* --external:pg --external:@google/genai --external:zod --external:openid-client --external:@supabase/supabase-js --outfile=dist/server.js"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
@@ -12,6 +12,7 @@
     "@google/genai": "^2.28.0",
     "@siteguard/contracts": "*",
     "@siteguard/mock-data": "*",
+    "@supabase/supabase-js": "2.117.3",
     "fastify": "^5.0.0",
     "openid-client": "6.8.8",
     "pg": "^8.0.0",

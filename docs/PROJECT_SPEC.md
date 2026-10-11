@@ -37,3 +37,14 @@ Protected intervals cannot move/shrink. Approval creates separate additional res
 
 Six fictional workers, two tasks, staggered protected breaks, source-labeled synthetic history seeded relative to demo startup. Run 60-second mock check-in, descriptive summary/history, rest request, supervisor approval and coverage adjustment. Demonstrate symptoms independent of vitals. Real Presage starts a separate session and cannot compare with mock history. Gemini optional; deterministic facts always available.
 Persistent restart/reset; tested API contracts; no credentials for mock; no frontend secrets; source honesty; protected breaks/unresolved assistance retained; external failures explicit. Hosted demo fictional only; real measurements local by default. Demo role selection is not production authentication.
+
+## Account login
+
+The configured app now uses Supabase for email/password signup, confirmation and
+password recovery. Login is the entry page; users do not select their privilege
+level. A verified server-configured admin email grants supervisor access; other
+new accounts get their own worker profiles. App roles and hashed, revocable app
+sessions remain in Tiger Data. Demo role selection is explicit rehearsal mode
+only. The existing native iPhone OIDC handoff is not a Supabase login flow; its
+future adapter must exchange a verified Supabase identity before receiving an
+app session. The phone web experience uses the same login as the desktop app.

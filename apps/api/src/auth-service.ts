@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { registerSupabaseAuth } from "./supabase-auth.js";
 import * as oidc from "openid-client";
 import type { Config } from "./config.js";
 import type { Repository } from "./db/repository.js";
@@ -114,7 +115,7 @@ export async function registerAuth(
   r: Repository,
   c: Config,
 ) {
-  if (c.authMode === "oidc")
+  if (c.authMode !== "demo")
     await r.transaction(async (tx) => {
       const bound = (
         await tx.driver.query(
@@ -165,11 +166,16 @@ export async function registerAuth(
     const secret = requestSessionToken(req);
     if (!secret || !/^[A-Za-z0-9_-]{43}$/.test(secret)) return;
     const rows = await r.driver.query(
-      "SELECT a.id,a.email,a.site_id,a.role,a.worker_id,a.disabled,s.expires_at FROM auth_sessions s JOIN auth_accounts a ON a.id=s.account_id WHERE s.token_digest=$1 AND s.expires_at>$2",
+      "SELECT a.issuer,a.id,a.email,a.site_id,a.role,a.worker_id,a.disabled,s.expires_at FROM auth_sessions s JOIN auth_accounts a ON a.id=s.account_id WHERE s.token_digest=$1 AND s.expires_at>$2",
       [tokenDigest(secret), new Date().toISOString()],
     );
     const a = rows[0];
     if (!a || Number(a.disabled) !== 0 || a.site_id !== c.siteId) return;
+    if (
+      c.authMode === "supabase" &&
+      a.issuer !== `${c.supabaseUrl!.replace(/\/$/, "")}/auth/v1`
+    )
+      return;
     if (a.role === "worker" && !(await r.get("workers", String(a.worker_id))))
       return;
     setIdentity(req, {
@@ -190,7 +196,9 @@ export async function registerAuth(
     loginAvailable:
       c.authMode === "demo"
         ? !c.hosted
-        : Boolean(c.oidcIssuer && c.oidcClientId),
+        : c.authMode === "supabase"
+          ? Boolean(c.supabaseUrl && c.supabasePublishableKey)
+          : Boolean(c.oidcIssuer && c.oidcClientId),
     siteId: c.siteId,
   }));
   app.get("/api/auth/me", async (req) => ({
@@ -218,6 +226,7 @@ export async function registerAuth(
       reply.clearCookie(name, { path: "/", secure: c.hosted });
     return { loggedOut: true };
   });
+  if (c.authMode === "supabase") registerSupabaseAuth(app, r, c);
   app.get("/api/auth/mobile/start", async (req, reply) => {
     if (c.authMode !== "oidc")
       fail(403, "AUTH_DISABLED", "Account login is not configured");

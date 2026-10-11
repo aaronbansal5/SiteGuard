@@ -5,7 +5,7 @@ Use Node24.7+ (built-in SQLite is experimental in24.7), npm workspaces, one Fast
 
 ## Configuration
 
-See `.env.example`. `DATABASE_URL` is required for normal development and deployment and must point to Tiger Cloud. Missing or unreachable Tiger configuration fails startup; it never silently switches stores. SQLite requires `SITEGUARD_ALLOW_SQLITE=true` and is reserved for isolated tests/rehearsals. `HOST` defaults to 127.0.0.1. `HOSTED=true` requires strong COOKIE_SECRET/MEASUREMENT_TOKEN and makes cookies Secure. `DEMO_MODE=false` disables demo login/mock/seed. There is no production account system.
+See `.env.example`. `DATABASE_URL` is required for normal development and deployment and must point to Tiger Cloud. Missing or unreachable Tiger configuration fails startup; it never silently switches stores. SQLite requires `SITEGUARD_ALLOW_SQLITE=true` and is reserved for isolated tests/rehearsals. `HOST` defaults to 127.0.0.1. `HOSTED=true` requires strong COOKIE_SECRET/MEASUREMENT_TOKEN and makes cookies Secure. `DEMO_MODE=false` disables demo login/mock/seed. Supabase account login is configured in [SUPABASE_AUTH.md](SUPABASE_AUTH.md). Demo role selection is only for isolated demonstrations.
 Gemini requires both key/model. Presage requires token and independently supplied local bridge. Optional integrations are not verified against live accounts/hardware.
 
 ## Storage
