@@ -43,11 +43,15 @@ export class MeasurementManager {
     }
     for (const f of this.listeners.get(id) || []) f(event);
   }
-  async start(id: string, kind: "mock" | "presage") {
+  async start(
+    id: string,
+    kind: "mock" | "presage",
+    input: "camera" | "custom" = "camera",
+  ) {
     const source =
       kind === "mock"
         ? new MockSource(this.config.mockIntervalMs)
-        : new PresageSource(this.config);
+        : new PresageSource(this.config, input);
     const state = {
       source,
       pending: Promise.resolve() as Promise<unknown>,
@@ -103,6 +107,19 @@ export class MeasurementManager {
         }
       });
     }
+  }
+  async sendFrame(
+    id: string,
+    frame: Buffer,
+    timestampUs: number,
+    contentType:
+      "application/octet-stream" | "image/jpeg" = "application/octet-stream",
+  ) {
+    const state = this.active.get(id);
+    if (!state || !(state.source instanceof PresageSource))
+      throw new Error("Presage session is not active");
+    await state.starting;
+    await state.source.sendFrame(frame, timestampUs, contentType);
   }
   async stop(id: string) {
     const state = this.active.get(id);

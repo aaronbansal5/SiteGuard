@@ -8,15 +8,16 @@
     "node": ">=24.7"
   },
   "scripts": {
-    "start": "tsx --env-file-if-exists=.env src/cli.ts",
+    "start": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx src/cli.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "smoke:hardware": "tsx --env-file-if-exists=.env scripts/smoke.ts --hardware",
-    "inspect:metrics": "tsx --env-file-if-exists=.env scripts/inspect-metrics.ts",
+    "smoke:hardware": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx scripts/smoke.ts --hardware",
+    "inspect:metrics": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx scripts/inspect-metrics.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@smartspectra/node-sdk": "3.4.0",
+    "sharp": "^0.35.5",
     "zod": "^4.0.0"
   },
   "devDependencies": {

@@ -7,6 +7,7 @@ struct ConsentView: View {
     @State private var consented = false
     @State private var choices = ConsentChoices()
     @State private var starting = false
+    @State private var enteredPresageKey = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -15,27 +16,46 @@ struct ConsentView: View {
                 Text("**Camera, on this phone only.** Presage measures pulse and breathing from the front camera on the device. Frames are not stored or sent by SiteGuard.")
                 Text("**Only normalized observations.** Timestamped pulse, breathing rate, source and quality.")
                 Text("**No identification, no clearance.** Readings cannot show that you have recovered or are fit to return to work.")
-                Text("**Not uploaded yet.** This build is not connected to SiteGuard, so readings stay on this screen and are discarded afterwards.")
+                Text(model.isPaired
+                     ? "**Upload is optional.** Without the upload switch below, readings stay on this phone and are discarded after this screen."
+                     : "**Not uploaded.** This phone is not paired with SiteGuard, so readings stay on this screen and are discarded afterwards.")
                 Text("**Presage needs the internet** to verify the app; telemetry is turned off.")
             }
             .font(.callout)
-            // Sharing with safety operations is offered once uploads exist;
-            // until then there is nothing to share (choices stay default/private).
             Toggle("I understand the limitations and voluntarily agree to record this check-in.", isOn: $consented)
+            if model.isPaired {
+                Toggle("Upload this check-in's pulse and breathing readings to SiteGuard", isOn: $choices.uploadToSiteGuard)
+                if choices.uploadToSiteGuard {
+                    Toggle("Allow my manager to view the detailed readings for this check-in", isOn: $choices.shareWithSupervisor)
+                }
+            }
+            if !model.configuration.hasPresageCredentials {
+                SecureField("Presage API key", text: $enteredPresageKey)
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+                Text("Personal test only. The key stays in memory for this check-in and is not saved in the app or uploaded to SiteGuard.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             if let error = model.errorMessage {
                 Text(error).foregroundStyle(.red).font(.callout)
             }
             Button {
                 starting = true
+                let key = enteredPresageKey
+                enteredPresageKey = ""
                 Task {
-                    await model.begin(consented: consented, choices: choices)
+                    await model.begin(consented: consented, choices: choices, enteredPresageKey: key)
                     starting = false
                 }
             } label: {
                 Text(starting ? "Starting…" : "Begin check-in").frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
-            .disabled(!consented || starting)
+            .disabled(!consented || starting ||
+                (!model.configuration.hasPresageCredentials &&
+                 enteredPresageKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
             Button {
                 model.cancelConsent()
             } label: {
@@ -66,8 +86,14 @@ struct MeasuringView: View {
             if let image = model.preview {
                 // Live positioning preview only; never saved.
                 Image(uiImage: image).resizable().scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 260)
+                    .background(.black)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .accessibilityLabel("Camera preview for positioning")
+            } else {
+                ContentUnavailableView("Starting front camera", systemImage: "camera")
+                    .frame(maxWidth: .infinity, minHeight: 180)
             }
             Text(model.guidance ?? "Sit still, face the camera and stay quiet.")
                 .font(.callout)
@@ -80,10 +106,20 @@ struct MeasuringView: View {
                     : "Suggested length: \(target) seconds (a data-sufficiency guide, not a medical threshold)."
             )
             .font(.footnote).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                measurementCard("Pulse", value: model.pulseRateBpm, unit: "bpm")
+                measurementCard("Breathing", value: model.breathingRateBrpm, unit: "brpm")
+            }
+            Text("Only stable Presage readings are shown. A dash means no valid reading yet.")
+                .font(.footnote).foregroundStyle(.secondary)
             Text(
-                "\(model.collector.validPulseCount) valid pulse and \(model.collector.validBreathingCount) valid breathing readings so far."
+                "\(model.collector.envelopes.count) Presage observations captured · "
+                    + "\(model.collector.validPulseCount) valid pulse · "
+                    + "\(model.collector.validBreathingCount) valid breathing."
             )
             .font(.footnote)
+            Text("Rate readings arrive when Presage detects a new event, not for every camera frame. Unstable observations are captured but not called valid.")
+                .font(.footnote).foregroundStyle(.secondary)
             if let error = model.errorMessage {
                 Text(error).foregroundStyle(.red).font(.callout)
             }
@@ -94,6 +130,18 @@ struct MeasuringView: View {
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
         }
+    }
+
+    private func measurementCard(_ title: String, value: Double?, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.callout).foregroundStyle(.secondary)
+            Text(value.map { "\(Int($0.rounded())) \(unit)" } ?? "— \(unit)")
+                .font(.title2.bold()).monospacedDigit()
+                .accessibilityLabel("\(title): \(value.map { "\(Int($0.rounded())) \(unit)" } ?? "no valid reading yet")")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -108,10 +156,14 @@ struct CompletedView: View {
                 "\(Int(result.endedAt.timeIntervalSince(result.startedAt))) seconds · \(result.readingCount) readings (\(result.validPulseCount) valid pulse, \(result.validBreathingCount) valid breathing)."
             )
             Text(result.uploadMessage).font(.callout)
-            Text(
-                "Your summary and personal comparison are computed by SiteGuard after upload, so they are not available in this build."
-            )
-            .font(.footnote).foregroundStyle(.secondary)
+            if model.canRetryUpload {
+                Button("Retry upload") { Task { await model.retryUpload() } }
+                    .buttonStyle(.bordered).controlSize(.large)
+            }
+            if result.uploadMessage.hasPrefix("Uploaded") {
+                Text("Open the desktop worker history for your summary. A manager can open detailed charts only if you enabled sharing for this check-in.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Button {
                 model.leaveResult()
             } label: {

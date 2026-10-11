@@ -168,4 +168,5 @@ export interface Overview extends Schedule {
   coverageGaps: Gap[];
   symptomReports: Symptom[];
   sharedSessionIds: string[];
+  sharedSessions: Session[];
 }

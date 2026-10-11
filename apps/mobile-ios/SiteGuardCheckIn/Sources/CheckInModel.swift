@@ -16,6 +16,7 @@ struct CheckInResult: Equatable {
 }
 
 struct ConsentChoices: Equatable {
+    var uploadToSiteGuard = false
     var shareWithSupervisor = false
     var workload: String? = nil
     var temperatureC: Double? = nil
@@ -43,15 +44,31 @@ final class CheckInModel {
     private(set) var guidance: String?
     private(set) var errorMessage: String?
     private(set) var notificationsAllowed = false
-    var preview: UIImage? { measurement.preview }
+    private(set) var notificationStatusMessage: String?
+    private(set) var preview: UIImage?
+    private(set) var pulseRateBpm: Double?
+    private(set) var breathingRateBrpm: Double?
+    private(set) var pairingMessage: String?
+    var pairedWorkerId: String? { uploader.pairedWorkerId }
+    private(set) var serverURLText: String
+    private(set) var availableWorkers: [DeviceWorker] = []
+    private(set) var canRetryUpload = false
+    var isPaired: Bool { uploader.isPaired }
 
     private var ticker: Task<Void, Never>?
     private var sampler: Task<Void, Never>?
+    private var previewUpdater: Task<Void, Never>?
+    private var currentChoices = ConsentChoices()
+    private var pendingUpload: DeviceCheckIn?
     private static let notificationId = "siteguard-checkin-reminder"
+    private static let notificationOptInKey = "siteguard-checkin-notification-opt-in"
 
-    init(configuration: AppConfiguration = .load(), uploader: SiteGuardUploader = UnpairedUploader()) {
+    init(configuration: AppConfiguration = .load(), uploader: SiteGuardUploader? = nil) {
         self.configuration = configuration
-        self.uploader = uploader
+        let saved = UserDefaults.standard.string(forKey: "siteguard-device-origin")
+        let address = saved ?? configuration.siteGuardWebURL?.absoluteString ?? ""
+        self.serverURLText = address
+        self.uploader = uploader ?? LocalHTTPSUploader(origin: URL(string: address))
         reminder = ReminderSchedule(intervalSeconds: configuration.reminderIntervalSeconds)
         reminder.enable(now: Date())
         ticker = Task { [weak self] in
@@ -60,6 +77,7 @@ final class CheckInModel {
                 self?.tick()
             }
         }
+        Task { [weak self] in await self?.restoreNotificationPermission() }
     }
 
     private func tick() {
@@ -91,7 +109,23 @@ final class CheckInModel {
     /// optional check-in is available; they never start a measurement.
     func requestNotificationPermission() async {
         let center = UNUserNotificationCenter.current()
-        notificationsAllowed = (try? await center.requestAuthorization(options: [.alert])) ?? false
+        _ = try? await center.requestAuthorization(options: [.alert])
+        let settings = await center.notificationSettings()
+        notificationsAllowed = settings.authorizationStatus == .authorized
+            && settings.alertSetting == .enabled
+        UserDefaults.standard.set(notificationsAllowed, forKey: Self.notificationOptInKey)
+        notificationStatusMessage = notificationsAllowed ? nil
+            : "Notifications are off. Enable alerts in iPhone Settings → SiteGuard → Notifications."
+        scheduleNotification()
+    }
+
+    private func restoreNotificationPermission() async {
+        guard UserDefaults.standard.bool(forKey: Self.notificationOptInKey) else { return }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        notificationsAllowed = settings.authorizationStatus == .authorized
+            && settings.alertSetting == .enabled
+        notificationStatusMessage = notificationsAllowed ? nil
+            : "Notifications are off. Enable alerts in iPhone Settings → SiteGuard → Notifications."
         scheduleNotification()
     }
 
@@ -117,6 +151,38 @@ final class CheckInModel {
         stage = .consent
     }
 
+    func loadWorkers(serverURL: String) async {
+        do {
+            guard let origin = URL(string: serverURL.trimmingCharacters(in: .whitespacesAndNewlines))
+            else { throw UploadError.notConfigured }
+            try uploader.configure(origin: origin)
+            availableWorkers = try await uploader.workers()
+            pairingMessage = availableWorkers.isEmpty ? "No demo workers found on this server." : nil
+        } catch {
+            availableWorkers = []
+            pairingMessage = error.localizedDescription
+        }
+    }
+
+    func pair(code: String, serverURL: String, selectedWorkerId: String) async {
+        do {
+            guard availableWorkers.contains(where: { $0.id == selectedWorkerId }) else {
+                throw UploadError.wrongWorker
+            }
+            guard let origin = URL(string: serverURL.trimmingCharacters(in: .whitespacesAndNewlines))
+            else { throw UploadError.notConfigured }
+            try uploader.configure(origin: origin)
+            let workerId = try await uploader.pair(
+                code: code.trimmingCharacters(in: .whitespacesAndNewlines),
+                expectedWorkerId: selectedWorkerId)
+            serverURLText = origin.absoluteString
+            UserDefaults.standard.set(serverURLText, forKey: "siteguard-device-origin")
+            pairingMessage = "Paired to worker \(workerId). Upload remains optional for every check-in."
+        } catch {
+            pairingMessage = error.localizedDescription
+        }
+    }
+
     func cancelConsent() {
         reminder.endCheckIn(now: Date())
         scheduleNotification()
@@ -124,36 +190,69 @@ final class CheckInModel {
     }
 
     /// Starts the camera only after explicit consent for this check-in.
-    func begin(consented: Bool, choices: ConsentChoices) async {
+    func begin(consented: Bool, choices: ConsentChoices, enteredPresageKey: String? = nil) async {
         guard consented, stage == .consent else { return }
-        guard configuration.hasPresageCredentials else {
-            errorMessage = "Presage is not configured in this build. See the README."
+        let localKey = enteredPresageKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = configuration.smartSpectraAPIKey ?? (localKey?.isEmpty == false ? localKey : nil)
+        guard configuration.usesOAuth || key != nil else {
+            errorMessage = "Enter a Presage API key to start this check-in."
             return
         }
         collector = ReadingCollector()
+        currentChoices = choices
+        pendingUpload = nil
+        canRetryUpload = false
+        preview = nil
+        pulseRateBpm = nil
+        breathingRateBrpm = nil
         guidance = nil
         errorMessage = nil
-        measurement.configure(apiKey: configuration.smartSpectraAPIKey)
+        let startedAt = Date()
         do {
+            try measurement.configure(apiKey: key)
             try await measurement.start()
         } catch {
             errorMessage = measurement.errorDescription?.message
                 ?? "The measurement could not start. Nothing was recorded."
+            try? await measurement.stop()
             return
         }
-        let startedAt = Date()
         stage = .measuring(startedAt: startedAt)
+        measurement.observeMetrics { [weak self] pulses, breathings in
+            self?.ingest(pulses: pulses, breathings: breathings)
+        }
+        // SmartSpectra owns the camera, as the desktop SDK does. Copy only its
+        // latest in-memory preview into observable UI state; never save frames.
+        previewUpdater = Task { [weak self] in
+            while !Task.isCancelled {
+                if let image = self?.measurement.preview, self?.preview !== image {
+                    self?.preview = image
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
         sampler = Task { [weak self] in
             while !Task.isCancelled {
-                self?.sample()
+                self?.refreshStatus()
                 try? await Task.sleep(for: .seconds(1))
             }
         }
     }
 
-    private func sample() {
-        let latest = measurement.latestSamples()
-        _ = collector.ingest(pulse: latest.pulse, breathing: latest.breathing)
+    private func ingest(pulses: [MetricSample], breathings: [MetricSample]) {
+        let added = collector.ingest(pulses: pulses, breathings: breathings)
+        for envelope in added {
+            if let pulse = envelope.reading.heartRateBpm {
+                pulseRateBpm = envelope.reading.quality == .valid ? pulse : nil
+            }
+            if let breathing = envelope.reading.respiratoryRateBrpm {
+                breathingRateBrpm = envelope.reading.quality == .valid ? breathing : nil
+            }
+        }
+        refreshStatus()
+    }
+
+    private func refreshStatus() {
         guidance = measurement.guidance ?? (collector.envelopes.isEmpty ? nil : PositioningGuidance.warmUp)
         if let error = measurement.errorDescription { errorMessage = error.message }
     }
@@ -162,20 +261,41 @@ final class CheckInModel {
         guard case let .measuring(startedAt) = stage else { return }
         sampler?.cancel()
         sampler = nil
+        previewUpdater?.cancel()
+        previewUpdater = nil
+        measurement.stopObservingMetrics()
+        let finalSamples = measurement.currentSamples()
+        ingest(pulses: finalSamples.pulse, breathings: finalSamples.breathing)
         try? await measurement.stop()
-        sample()
-        let uploadMessage: String
-        if uploader.isPaired {
-            // Unreachable in this scaffold; see SiteGuardUploader.swift TODO.
-            uploadMessage = "Uploaded to SiteGuard."
-        } else {
-            uploadMessage = UploadError.notPaired.errorDescription!
-                + " Readings were kept only in this app's memory and are discarded when you leave this screen."
+        refreshStatus()
+        preview = nil
+        let endedAt = Date()
+        var uploadMessage = "Not uploaded. Readings stay on this result screen only and are discarded when you leave."
+        if currentChoices.uploadToSiteGuard && uploader.isPaired && !collector.envelopes.isEmpty {
+            let timestamp: (Date) -> String = { date in
+                ReadingMapper.isoTimestamp(micros: Int64(date.timeIntervalSince1970 * 1_000_000))
+            }
+            let checkIn = DeviceCheckIn(
+                id: UUID().uuidString.lowercased(),
+                startedAt: timestamp(startedAt), endedAt: timestamp(endedAt),
+                shareWithSupervisor: currentChoices.shareWithSupervisor,
+                context: .init(workload: currentChoices.workload,
+                               temperatureC: currentChoices.temperatureC),
+                readings: collector.envelopes)
+            pendingUpload = checkIn
+            do {
+                let id = try await uploader.upload(checkIn)
+                pendingUpload = nil
+                uploadMessage = "Uploaded to SiteGuard. Desktop session: \(id)."
+            } catch {
+                uploadMessage = "Upload not confirmed: \(error.localizedDescription) Retry before leaving this screen."
+            }
         }
+        canRetryUpload = pendingUpload != nil
         stage = .completed(
             CheckInResult(
                 startedAt: startedAt,
-                endedAt: Date(),
+                endedAt: endedAt,
                 readingCount: collector.envelopes.count,
                 validPulseCount: collector.validPulseCount,
                 validBreathingCount: collector.validBreathingCount,
@@ -185,8 +305,31 @@ final class CheckInModel {
         scheduleNotification()
     }
 
+    func retryUpload() async {
+        guard let checkIn = pendingUpload,
+              case .completed(var result) = stage else { return }
+        do {
+            let id = try await uploader.upload(checkIn)
+            pendingUpload = nil
+            canRetryUpload = false
+            result.uploadMessage = "Uploaded to SiteGuard. Desktop session: \(id)."
+        } catch {
+            result.uploadMessage = "Upload not confirmed: \(error.localizedDescription) Retry before leaving this screen."
+        }
+        stage = .completed(result)
+    }
+
+    /// Camera use ends when the worker leaves the app during a check-in.
+    func stopForBackground() async {
+        if case .measuring = stage { await finish() }
+    }
+
     func leaveResult() {
+        pendingUpload = nil
+        canRetryUpload = false
         collector = ReadingCollector()  // discard in-memory readings
+        pulseRateBpm = nil
+        breathingRateBrpm = nil
         stage = .home
     }
 }

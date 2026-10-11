@@ -9,6 +9,7 @@ import { seed } from "./db/seed.js";
 import { interruptSessions } from "./domain/sessions.js";
 import { MeasurementManager } from "./measurement/manager.js";
 import { registerRoutes } from "./routes.js";
+import { registerDeviceRoutes } from "./device-routes.js";
 import { AppError } from "./errors.js";
 import { clientAddress, rateLimitKey } from "./client-ip.js";
 // Generic, fixed messages for framework-level client errors (never echo the
@@ -51,6 +52,16 @@ export async function createApp(
     throw error;
   }
   const manager = new MeasurementManager(r, c);
+  app.addContentTypeParser(
+    "application/octet-stream",
+    { parseAs: "buffer" },
+    (_req, body, done) => done(null, body),
+  );
+  app.addContentTypeParser(
+    "image/jpeg",
+    { parseAs: "buffer" },
+    (_req, body, done) => done(null, body),
+  );
   const writeRates = new Map<string, { count: number; resetsAt: number }>();
   app.addHook("onRequest", async (req, reply) => {
     if (["POST", "PATCH", "DELETE"].includes(req.method)) {
@@ -64,7 +75,11 @@ export async function createApp(
       const login = req.url.split("?")[0] === "/api/demo/login";
       // Behind a reverse proxy the socket address is the proxy's, so every
       // client would share one quota unless CLIENT_IP_HEADER is configured.
-      const key = `${rateLimitKey(clientAddress(req, c.clientIpHeader))}:${login ? "login" : "write"}`;
+      const frame = /^\/api\/sessions\/[0-9a-f-]+\/frame(?:\?|$)/i.test(
+        req.url,
+      );
+      const bucket = login ? "login" : frame ? "frame" : "write";
+      const key = `${rateLimitKey(clientAddress(req, c.clientIpHeader))}:${bucket}`;
       const old = writeRates.get(key);
       const rate =
         old && old.resetsAt > now ? old : { count: 0, resetsAt: now + 60000 };
@@ -72,7 +87,7 @@ export async function createApp(
       if (writeRates.size < 10000 || writeRates.has(key))
         writeRates.set(key, rate);
       else failRate();
-      if (rate.count > (login ? 30 : 120)) failRate();
+      if (rate.count > (login ? 30 : frame ? 2400 : 120)) failRate();
       function failRate(): never {
         reply.header("Retry-After", "60");
         throw new AppError(
@@ -115,9 +130,15 @@ export async function createApp(
           },
         });
       }
+      const localTlsProxy =
+        req.headers["x-siteguard-public-proto"] === "https" &&
+        ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
+          req.socket.remoteAddress ?? "",
+        );
+      const publicProtocol = c.hosted || localTlsProxy ? "https" : req.protocol;
       if (
         origin.host !== req.headers.host ||
-        origin.protocol !== `${c.hosted ? "https" : req.protocol}:`
+        origin.protocol !== `${publicProtocol}:`
       )
         return reply.code(403).send({
           error: {
@@ -182,6 +203,7 @@ export async function createApp(
     });
   });
   await registerRoutes(app, r, c, manager);
+  registerDeviceRoutes(app, r, c);
   if (existsSync(c.webDist)) {
     await app.register(staticFiles, {
       root: c.webDist,

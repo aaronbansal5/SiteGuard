@@ -130,12 +130,22 @@ export interface SmartSpectraModule {
   ValidationCode: { kOk: number } & Readonly<Record<string, number>>;
   SmartSpectraErrorCode: Record<string, number>;
   CameraSelection: { default: unknown };
+  PixelFormat: { kRGBA: number };
   decodeMetrics(buf: Buffer): unknown;
 }
 
 interface VendorSdk {
   on(event: string, cb: (...args: never[]) => void): unknown;
   useCamera(selection: unknown): unknown;
+  useCustomInput(): unknown;
+  sendFrame(
+    frame: Buffer,
+    width: number,
+    height: number,
+    stride: number,
+    format: number,
+    timestampUs: number,
+  ): unknown;
   start(): void;
   stopAsync(): Promise<void>;
   destroy(): Promise<void>;
@@ -212,7 +222,7 @@ export class PresageSdkAdapter implements SdkAdapter {
     }
   }
 
-  async probe(): Promise<AdapterProbe> {
+  async probe(mode: "camera" | "custom" = "camera"): Promise<AdapterProbe> {
     if (!this.apiKey())
       return { ready: false, reason: "SMARTSPECTRA_API_KEY is not set" };
     let m: SmartSpectraModule;
@@ -221,6 +231,7 @@ export class PresageSdkAdapter implements SdkAdapter {
     } catch (e) {
       return { ready: false, reason: (e as Error).message };
     }
+    if (mode === "custom") return { ready: true, reason: null };
     try {
       const cams = m.SmartSpectraSDK.availableCameras();
       if (!cams.length)
@@ -234,7 +245,10 @@ export class PresageSdkAdapter implements SdkAdapter {
     return { ready: true, reason: null };
   }
 
-  async open(handlers: AdapterHandlers): Promise<AdapterCapture> {
+  async open(
+    handlers: AdapterHandlers,
+    mode: "camera" | "custom" = "camera",
+  ): Promise<AdapterCapture> {
     const apiKey = this.apiKey();
     if (!apiKey)
       throw new SdkNotVerifiedError("SMARTSPECTRA_API_KEY is not set");
@@ -252,7 +266,8 @@ export class PresageSdkAdapter implements SdkAdapter {
       enableTelemetry: false,
     });
     this.open_ = true;
-    let lastKey = 0;
+    let lastPulseKey = 0;
+    let lastBreathingKey = 0;
     let lastStatus = "";
     let closed = false;
 
@@ -272,6 +287,7 @@ export class PresageSdkAdapter implements SdkAdapter {
     });
 
     sdk.on("processingStatus", ((status: number) => {
+      if (debug) console.error(`[presage-sdk] processing status=${status}`);
       if (status === m.ProcessingStatus.kRunning) settle();
       else if (status === m.ProcessingStatus.kError)
         settle(new Error("SmartSpectra entered error state while starting"));
@@ -279,8 +295,6 @@ export class PresageSdkAdapter implements SdkAdapter {
     let warmUpAnnounced = false;
     sdk.on("validationStatus", ((code: number, _ts: number, hint: string) => {
       settle(); // the pipeline is running once it reports input feedback
-      if (debug)
-        console.error(`[presage-sdk] validation code=${code} hint=${hint}`);
       // The SDK reports validation on every frame; forward only changes.
       // Vendor hint text is not forwarded: guidance is SiteGuard-owned.
       const measuring = code === m.ValidationCode.kOk;
@@ -288,6 +302,8 @@ export class PresageSdkAdapter implements SdkAdapter {
       const next = measuring ? "measuring|" : `positioning|${message}`;
       if (next === lastStatus) return;
       lastStatus = next;
+      if (debug)
+        console.error(`[presage-sdk] validation code=${code} hint=${hint}`);
       if (measuring) {
         handlers.onStatus(
           "measuring",
@@ -297,6 +313,10 @@ export class PresageSdkAdapter implements SdkAdapter {
       } else handlers.onStatus("positioning", message);
     }) as never);
     sdk.on("error", ((code: number, message: string, retryable: boolean) => {
+      if (debug)
+        console.error(
+          `[presage-sdk] error code=${errorName(code)} retryable=${retryable} message=${message}`,
+        );
       settle(new Error(`${errorName(code)}: ${message}`));
       handlers.onError(errorName(code), message, retryable);
     }) as never);
@@ -322,22 +342,42 @@ export class PresageSdkAdapter implements SdkAdapter {
           `[presage-sdk] packet ts=${packetUs} pulse=${JSON.stringify(p)} breathing=${JSON.stringify(b)}`,
         );
       if (!p && !b) return; // no rate in this packet
-      const sampleUs = Math.max(p ? (tsUs(p) ?? 0) : 0, b ? (tsUs(b) ?? 0) : 0);
-      // Identity for de-duplication: the sample timestamp when the SDK sets
-      // one, otherwise the packet timestamp from the 'metrics' event.
-      const key = sampleUs || (Number.isFinite(packetUs) ? packetUs : 0);
-      if (!key || key <= lastKey) return; // nothing new in this packet
-      lastKey = key;
-      // Sample timestamps are wall-clock epoch µs (vendor data-types docs);
-      // convert to the bridge monotonic clock. Without one, use receipt time.
-      const monotonicMs = sampleUs
-        ? this.clock.monotonicMs() + (sampleUs / 1000 - this.clock.wallMs())
-        : this.clock.monotonicMs();
-      handlers.onSample({
-        monotonicMs,
-        pulse: observation(p),
-        breathing: observation(b),
-      });
+      const fallback = Number.isFinite(packetUs) ? packetUs : 0;
+      const pulseUs = p ? tsUs(p) : null;
+      const breathingUs = b ? tsUs(b) : null;
+      const pulseKey = pulseUs ?? fallback;
+      const breathingKey = breathingUs ?? fallback;
+      const newPulse = p && pulseKey > lastPulseKey;
+      const newBreathing = b && breathingKey > lastBreathingKey;
+      if (!newPulse && !newBreathing) return;
+      if (newPulse) lastPulseKey = pulseKey;
+      if (newBreathing) lastBreathingKey = breathingKey;
+      // Each metric has its own clock. A breathing packet can be newer than
+      // pulse without suppressing a pulse sample arriving in the next packet.
+      const monotonic = (sampleUs: number | null) =>
+        sampleUs
+          ? this.clock.monotonicMs() + (sampleUs / 1000 - this.clock.wallMs())
+          : this.clock.monotonicMs();
+      if (newPulse && newBreathing && pulseKey === breathingKey) {
+        handlers.onSample({
+          monotonicMs: monotonic(pulseUs ?? breathingUs),
+          pulse: observation(p),
+          breathing: observation(b),
+        });
+      } else {
+        if (newPulse)
+          handlers.onSample({
+            monotonicMs: monotonic(pulseUs),
+            pulse: observation(p),
+            breathing: null,
+          });
+        if (newBreathing)
+          handlers.onSample({
+            monotonicMs: monotonic(breathingUs),
+            pulse: null,
+            breathing: observation(b),
+          });
+      }
     }) as never);
 
     const close = async () => {
@@ -352,8 +392,37 @@ export class PresageSdkAdapter implements SdkAdapter {
     };
 
     try {
-      sdk.useCamera(m.CameraSelection.default);
+      if (mode === "custom") sdk.useCustomInput();
+      else sdk.useCamera(m.CameraSelection.default);
       sdk.start();
+      // A custom-input pipeline cannot emit validation or metrics before the
+      // browser receives its session ID and submits the first frame.
+      if (mode === "custom")
+        return {
+          close,
+          sendFrame: (frame, width, height, timestampUs) => {
+            if (closed) throw new Error("Capture is stopped");
+            try {
+              if (
+                sdk.sendFrame(
+                  frame,
+                  width,
+                  height,
+                  width * 4,
+                  m.PixelFormat.kRGBA,
+                  timestampUs,
+                ) === false
+              )
+                throw new Error("SmartSpectra rejected the camera frame");
+            } catch (error) {
+              const status = (sdk as { processingStatus?: number })
+                .processingStatus;
+              throw new Error(
+                `SmartSpectra frame rejected in state ${status ?? "unknown"}: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+          },
+        };
       const poll = setInterval(() => {
         const st = (sdk as { processingStatus?: number }).processingStatus;
         if (st === m.ProcessingStatus.kRunning) settle();

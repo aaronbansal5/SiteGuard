@@ -79,4 +79,21 @@ final class ReadingMapperTests: XCTestCase {
         XCTAssertEqual(c.validPulseCount, 1)
         XCTAssertEqual(c.validBreathingCount, 1)
     }
+
+    func testCollectorKeepsAllSamplesInOneSdkPayload() {
+        var c = ReadingCollector()
+        let pulses = [1, 2, 3].map {
+            MetricSample(value: Double(80 + $0), stable: true, timestampMicros: Int64($0) * 1_000_000)
+        }
+        let breathings = [1, 3].map {
+            MetricSample(value: Double(16 + $0), stable: true, timestampMicros: Int64($0) * 1_000_000)
+        }
+        let readings = c.ingest(pulses: Array(pulses.reversed()), breathings: Array(breathings.reversed()))
+        XCTAssertEqual(readings.map(\.sequence), [0, 1, 2])
+        XCTAssertEqual(c.validPulseCount, 3)
+        XCTAssertEqual(c.validBreathingCount, 2)
+        XCTAssertEqual(readings[0].reading.respiratoryRateBrpm, 17)
+        XCTAssertNil(readings[1].reading.respiratoryRateBrpm)
+        XCTAssertTrue(c.ingest(pulses: pulses, breathings: breathings).isEmpty)
+    }
 }

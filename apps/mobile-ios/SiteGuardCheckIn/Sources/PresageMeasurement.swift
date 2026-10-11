@@ -1,15 +1,13 @@
 // The only file that touches the SmartSpectra Swift SDK.
 //
 // Every SDK symbol used here is taken from the official docs (fetched
-// 2026-10-10); nothing is invented. NOT COMPILED in the authoring
-// environment (Linux, no Swift toolchain): build on a Mac and fix any
-// signature drift against the pinned package version.
+// 2026-10-10); physical-iOS arm64 build passed with Xcode 27.
 //   - SmartSpectraSDK.shared, start() async throws, stop() async throws,
 //     metrics, imageOutput, processingStatus (.running), error
 //     (SmartSpectraError: code, message, retryable), validationStatus
 //     (ValidationStatus: code, hint)          -> docs/swift/api-reference.md
 //   - config.apiKey, config.requestedMetrics, config.enableTelemetry,
-//     config.imageOutputEnabled, config.cameraPosition
+//     config.imageOutputEnabled, useCamera(.front)
 //                                             -> docs/swift/api-reference.md
 //   - SmartSpectraConfig.breathingMetrics + [.pulseRate];
 //     metrics.cardio.pulseRate.last / metrics.breathing.rate.last
@@ -24,46 +22,82 @@
 //                                                (MeasurementWithConfidence)
 //   - SmartSpectraSDK.shared is observable; outside SwiftUI use
 //     withObservationTracking               -> docs/swift/headless-mode.md
-// This file polls the latest samples once per second instead of relying on
-// observation callbacks, which keeps the mapping simple and testable.
+// SDK metric payloads contain samples since the previous update; observing
+// every payload prevents a one-second poll from dropping intervening samples.
 import AVFoundation
+import Observation
 import SmartSpectra
 import UIKit
 
 @MainActor
 final class PresageMeasurement {
     private let sdk = SmartSpectraSDK.shared
+    private var observationId = 0
 
     /// Configure before every start. When PresageService-Info.plist is
     /// bundled, OAuth takes precedence and the API key is ignored
     /// (docs/swift/option-2-oauth.md), so the key is only set when present.
-    func configure(apiKey: String?) {
-        if let apiKey { sdk.config.apiKey = apiKey }
+    func configure(apiKey: String?) throws {
+        sdk.config.apiKey = apiKey ?? ""
         // Pulse and breathing only: no face, expression, EDA or HRV metrics.
         sdk.config.requestedMetrics = SmartSpectraConfig.breathingMetrics + [.pulseRate]
         // Telemetry defaults to true; SiteGuard turns it off (as the bridge does).
         sdk.config.enableTelemetry = false
         // Live preview for positioning only. Frames are never stored or sent.
         sdk.config.imageOutputEnabled = true
-        sdk.config.cameraPosition = .front
+        try sdk.useCamera(.front)
     }
 
     func start() async throws { try await sdk.start() }
-    func stop() async throws { try await sdk.stop() }
+    func stop() async throws {
+        stopObservingMetrics()
+        defer { sdk.config.apiKey = "" }
+        try await sdk.stop()
+    }
 
     var preview: UIImage? { sdk.imageOutput }
     var isRunning: Bool { sdk.processingStatus == .running }
 
-    /// Latest pulse and breathing samples, reduced to documented fields.
-    func latestSamples() -> (pulse: MetricSample?, breathing: MetricSample?) {
-        guard let metrics = sdk.metrics else { return (nil, nil) }
-        let pulse = metrics.cardio.pulseRate.last.map {
+    /// All samples in the current SDK update, reduced to documented fields.
+    func currentSamples() -> (pulse: [MetricSample], breathing: [MetricSample]) {
+        guard let metrics = sdk.metrics else { return ([], []) }
+        let pulse = metrics.cardio.pulseRate.map {
             MetricSample(value: Double($0.value), stable: $0.stable, timestampMicros: Int64($0.timestamp))
         }
-        let breathing = metrics.breathing.rate.last.map {
+        let breathing = metrics.breathing.rate.map {
             MetricSample(value: Double($0.value), stable: $0.stable, timestampMicros: Int64($0.timestamp))
         }
         return (pulse, breathing)
+    }
+
+    /// Re-arm one-shot Observation tracking after each SDK metrics change.
+    func observeMetrics(_ receive: @escaping @MainActor ([MetricSample], [MetricSample]) -> Void) {
+        observationId &+= 1
+        observeMetrics(id: observationId, receive: receive)
+    }
+
+    func stopObservingMetrics() { observationId &+= 1 }
+
+    private func observeMetrics(
+        id: Int,
+        receive: @escaping @MainActor ([MetricSample], [MetricSample]) -> Void
+    ) {
+        guard id == observationId else { return }
+        let metrics = withObservationTracking {
+            sdk.metrics
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.observeMetrics(id: id, receive: receive)
+            }
+        }
+        guard id == observationId, let metrics else { return }
+        let pulse = metrics.cardio.pulseRate.map {
+            MetricSample(value: Double($0.value), stable: $0.stable, timestampMicros: Int64($0.timestamp))
+        }
+        let breathing = metrics.breathing.rate.map {
+            MetricSample(value: Double($0.value), stable: $0.stable, timestampMicros: Int64($0.timestamp))
+        }
+        receive(pulse, breathing)
     }
 
     /// SiteGuard guidance for the current validation code (nil when ok).

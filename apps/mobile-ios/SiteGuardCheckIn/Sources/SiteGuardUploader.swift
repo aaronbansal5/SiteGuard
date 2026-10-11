@@ -1,53 +1,151 @@
-// Network layer to the SiteGuard API.
-//
-// TODO(docs/MOBILE_APP.md "Proposed phone ingestion contract"): NOT IMPLEMENTED.
-// The SiteGuard API ingests real (source=presage) readings only through the
-// local Presage bridge, and rejects source=presage in hosted mode. That rule
-// is intentionally unchanged. Until the API ships per-device pairing tokens
-// over TLS with fixed-source sessions and per-session consent, this app
-// uploads nothing: readings stay in memory for the current check-in only and
-// are discarded when the worker leaves the result screen.
+// Local HTTPS upload of normalized readings only. URLSession uses the normal
+// iOS trust store; no certificate bypass and no camera frames.
 import Foundation
+import Security
 
-/// Session start request proposed for the phone path (mirrors POST /api/sessions
-/// plus the device-specific fields in docs/MOBILE_APP.md).
-struct DeviceSessionStart: Encodable {
-    var breakId: String
-    var source = "presage"
-    var consentVersion = "v1"
-    var shareWithSupervisor: Bool
-    var context: Context
-    struct Context: Encodable {
-        var workload: String?
-        var temperatureC: Double?
+struct DeviceWorker: Decodable, Identifiable, Equatable {
+    let id: String
+    let displayName: String
+}
+
+private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }
 
-enum UploadError: LocalizedError, Equatable {
-    case notPaired
+struct DeviceCheckIn: Encodable {
+    var id: String
+    var startedAt: String
+    var endedAt: String
+    var consentVersion = "v1"
+    var shareWithSupervisor: Bool
+    var context: Context
+    var readings: [ReadingEnvelope]
+    struct Context: Encodable {
+        var workload: String?
+        var temperatureC: Double?
+        enum CodingKeys: String, CodingKey { case workload, temperatureC }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            if let workload { try c.encode(workload, forKey: .workload) }
+            else { try c.encodeNil(forKey: .workload) }
+            if let temperatureC { try c.encode(temperatureC, forKey: .temperatureC) }
+            else { try c.encodeNil(forKey: .temperatureC) }
+        }
+    }
+}
+
+enum UploadError: LocalizedError {
+    case notConfigured, notPaired, wrongWorker, rejected(Int), invalidResponse
     var errorDescription: String? {
         switch self {
-        case .notPaired:
-            return "This app is not connected to SiteGuard yet. Nothing was uploaded."
+        case .notConfigured: return "Set a trusted SiteGuard HTTPS URL in this build before pairing."
+        case .notPaired: return "This phone is not paired with SiteGuard. Nothing was uploaded."
+        case .wrongWorker: return "That code belongs to a different worker. Select the same name on the web and phone, then get a new code."
+        case .rejected(let status): return "SiteGuard rejected the upload (HTTP \(status)). Nothing was confirmed."
+        case .invalidResponse: return "SiteGuard returned an invalid response. Nothing was confirmed."
         }
     }
 }
 
 protocol SiteGuardUploader {
     var isPaired: Bool { get }
-    func startSession(_ request: DeviceSessionStart) async throws -> String
-    func upload(sessionId: String, readings: [ReadingEnvelope]) async throws
-    func complete(sessionId: String) async throws
+    var pairedWorkerId: String? { get }
+    func configure(origin: URL) throws
+    func workers() async throws -> [DeviceWorker]
+    func pair(code: String, expectedWorkerId: String) async throws -> String
+    func upload(_ checkIn: DeviceCheckIn) async throws -> String
 }
 
-/// The only uploader in this scaffold. Every call fails closed.
-struct UnpairedUploader: SiteGuardUploader {
-    let isPaired = false
-    func startSession(_ request: DeviceSessionStart) async throws -> String {
-        throw UploadError.notPaired
+final class LocalHTTPSUploader: SiteGuardUploader {
+    private(set) var origin: URL?
+    private let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
+    private let account = "local-demo-device-token"
+    private let service = "com.siteguard.adaptivebreak.device"
+    init(origin: URL?) { self.origin = origin?.scheme == "https" ? origin : nil }
+    func configure(origin: URL) throws {
+        guard origin.scheme == "https", origin.host != nil,
+              origin.user == nil, origin.password == nil,
+              origin.path.isEmpty || origin.path == "/",
+              origin.query == nil, origin.fragment == nil else { throw UploadError.notConfigured }
+        self.origin = origin
     }
-    func upload(sessionId: String, readings: [ReadingEnvelope]) async throws {
-        throw UploadError.notPaired
+
+    private var storedPairing: (workerId: String, token: String)? {
+        guard let origin else { return nil }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let stored = String(data: data, encoding: .utf8) else { return nil }
+        let parts = stored.split(separator: "|", maxSplits: 2).map(String.init)
+        guard parts.count == 3, parts[0] == origin.absoluteString else { return nil }
+        return (parts[1], parts[2])
     }
-    func complete(sessionId: String) async throws { throw UploadError.notPaired }
+    private var token: String? { storedPairing?.token }
+    var pairedWorkerId: String? { storedPairing?.workerId }
+    var isPaired: Bool { token != nil }
+
+    private func request<T: Encodable>(path: String, body: T, bearer: String? = nil) async throws -> Data {
+        guard let origin else { throw UploadError.notConfigured }
+        var request = URLRequest(url: origin.appending(path: path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
+        request.httpBody = try JSONEncoder().encode(body)
+        request.timeoutInterval = 20
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse else { throw UploadError.invalidResponse }
+        if response.statusCode == 401 && bearer != nil { throw UploadError.notPaired }
+        guard response.statusCode == 201 else { throw UploadError.rejected(response.statusCode) }
+        return data
+    }
+
+    func workers() async throws -> [DeviceWorker] {
+        struct Reply: Decodable { let workers: [DeviceWorker] }
+        guard let origin else { throw UploadError.notConfigured }
+        var request = URLRequest(url: origin.appending(path: "api/workers"))
+        request.timeoutInterval = 15
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200
+        else { throw UploadError.invalidResponse }
+        return try JSONDecoder().decode(Reply.self, from: data).workers
+    }
+
+    func pair(code: String, expectedWorkerId: String) async throws -> String {
+        struct Body: Encodable { let code: String }
+        struct Reply: Decodable { let deviceToken: String; let workerId: String }
+        let data = try await request(path: "api/devices/pair", body: Body(code: code.uppercased()))
+        let reply = try JSONDecoder().decode(Reply.self, from: data)
+        guard reply.workerId == expectedWorkerId else { throw UploadError.wrongWorker }
+        guard let origin, reply.deviceToken.count == 43 else { throw UploadError.invalidResponse }
+        let value = Data("\(origin.absoluteString)|\(reply.workerId)|\(reply.deviceToken)".utf8)
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: service,
+                                    kSecAttrAccount as String: account]
+        SecItemDelete(query as CFDictionary)
+        var item = query
+        item[kSecValueData as String] = value
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        guard SecItemAdd(item as CFDictionary, nil) == errSecSuccess else { throw UploadError.invalidResponse }
+        return reply.workerId
+    }
+
+    func upload(_ checkIn: DeviceCheckIn) async throws -> String {
+        guard let token else { throw UploadError.notPaired }
+        struct Reply: Decodable { let session: Session }
+        struct Session: Decodable { let id: String }
+        let data = try await request(path: "api/device/check-ins", body: checkIn, bearer: token)
+        return try JSONDecoder().decode(Reply.self, from: data).session.id
+    }
 }

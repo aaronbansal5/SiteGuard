@@ -45,7 +45,7 @@ Worker: "Report a symptom", send. Supervisor: acknowledge it, then preview/commi
 
 Each segment has a gate. If the gate has not passed on the demo laptop on demo day, skip the segment and don't mention the integration as working. Status lives in `docs/READINESS_REPORT.md`.
 
-**[OPTIONAL · REAL PRESAGE · about 45 s]** Gate: steady readings from the real SmartSpectra adapter (SDK 3.4.0, started with `npm run dev:live`) appeared in an app Presage check-in on this laptop that day. Current status is partially verified. Start, stop and reconnect have been observed on Mohit's Mac, but steady readings have not been confirmed yet, so this segment is skipped until they are.
+**[OPTIONAL · REAL PRESAGE · about 45 s]** Gate: a full app Presage check-in on this laptop produces **both** available pulse and breathing summaries from the real SmartSpectra adapter. Current status is partially verified: a 2026-10-10 camera check-in produced a breathing summary but zero valid pulse observations. Skip this segment until both work in the app.
 "Now the same flow with a real camera measurement." Begin a new check-in, choose Presage. "The badge now says Presage measurement, and the summary does not compare against synthetic history." If it fails: "The bridge reports unavailable. The session says so, and we don't substitute synthetic data." Then return to the core demo.
 
 **[OPTIONAL · TIGER DATA · about 15 s]** Gate: the Tiger Cloud service is verified (`verify:tiger` PASS: PostgreSQL 18.6, TLS 1.3, TimescaleDB 2.30.2, hypertable yes). On the day, `npm run verify:all` reports Tiger Data `PASS` and the Integrations panel shows PostgreSQL with readings stored in a hypertable.
@@ -54,7 +54,7 @@ Each segment has a gate. If the gate has not passed on the demo laptop on demo d
 **[OPTIONAL · GEMINI · about 15 s]** Gate: an explanation on the demo network returned `origin: "gemini"` (`npm run verify:gemini` PASS, or the Integrations panel shows the last explanation came from Gemini). The live check after the 12 s deadline fix is still pending.
 "Gemini picks and orders sentences from facts the server computed. It can't add claims of its own, and if it fails or times out we show the same facts deterministically."
 
-**[OPTIONAL · FALL DETECTION · about 30 s]** Gate: the standalone synthetic demo at `http://127.0.0.1:4322` runs on this laptop (`python3 -m fall_detection.server` in `integrations/fall-detection`). Synthetic mode only. Live camera mode has known false positives and its consent notice is still being fixed.
+**[OPTIONAL · FALL DETECTION · about 30 s]** Gate: the standalone synthetic demo at `http://127.0.0.1:4322` runs on this laptop (`python3 -m fall_detection.server` in `integrations/fall-detection`) **and no camera-active banner appears in synthetic mode**. The 2026-10-10 rehearsal found that misleading banner, so skip this segment until it is fixed and rechecked. Synthetic mode only; real-camera detection remains unverified.
 "Separately, here's an experimental possible-person-down prototype on synthetic input. A person lying horizontal for long enough raises an incident. A supervisor acknowledges it and then resolves it with a note, and a brief bend doesn't trigger it. It's a heuristic, not verified fall detection, and it isn't connected to the main app yet."
 
 **[OPTIONAL · HOSTED URL · about 10 s]** Gate: the deployment smoke check passed against the HTTPS URL that day. Not deployed yet, so skip this segment.
