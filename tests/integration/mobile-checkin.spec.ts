@@ -125,7 +125,7 @@ test("phone: consent every time, labeled synthetic check-in, insights after comp
     page.getByRole("heading", { name: "Before you begin" }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Phone browsers\s+cannot run the Presage SDK/),
+    page.getByText(/Synthetic demo readings\. No camera is used/),
   ).toBeVisible();
   await expect(page.getByText("Synthetic demo", { exact: true })).toBeVisible();
   const begin = page.getByRole("button", { name: "Begin check-in" });

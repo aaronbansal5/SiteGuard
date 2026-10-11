@@ -62,7 +62,7 @@ test.describe("Presage bridge failures", () => {
     try {
       expect(
         (await client(h).get("/api/health")).body.measurementSources,
-      ).toEqual({ mock: true, presage: true });
+      ).toEqual({ mock: true, presage: true, browserCamera: false });
       const w = client(h, await loginAs(h, "worker"));
       const begin = await w.post("/api/sessions", PRESAGE);
       expect(begin.status).toBe(201);

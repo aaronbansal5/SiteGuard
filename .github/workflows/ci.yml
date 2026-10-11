@@ -94,6 +94,10 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: integrations/presage-bridge/package-lock.json
+      # Bridge contract/consumer tests intentionally import application code.
+      # Install the root workspace dependencies as well as the bridge's own.
+      - run: npm ci
+        working-directory: .
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npx vitest run

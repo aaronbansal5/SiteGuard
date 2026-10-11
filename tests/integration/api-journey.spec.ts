@@ -186,6 +186,7 @@ test("synthetic source is labeled on every reading, summary and history record",
   expect(health.body.measurementSources).toEqual({
     mock: true,
     presage: false,
+    browserCamera: false,
   });
 });
 

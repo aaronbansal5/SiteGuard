@@ -13,7 +13,7 @@
     "dev": "concurrently -k \"tsx watch --env-file-if-exists=.env apps/api/src/server.ts\" \"npm run dev -w @siteguard/web\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "npm run typecheck && npm run build -w @siteguard/web && npm run build -w @siteguard/api",
+    "build": "tsc --noEmit -p tsconfig.build.json && npm run build -w @siteguard/web && npm run build -w @siteguard/api",
     "start": "node --env-file-if-exists=.env apps/api/dist/server.js",
     "db:migrate": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts",
     "db:migrate:postgres": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts postgres",
