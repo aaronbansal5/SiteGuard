@@ -5,7 +5,7 @@ import { ShieldCheck, ArrowRight, LockKeyhole } from "lucide-react";
 import { useIdentity } from "../App";
 import { ChooseWorker } from "./WorkerHome";
 import { useResource, useAction } from "../lib/api";
-import { RECOMMENDED_CHECK_IN_SECONDS } from "@siteguard/contracts";
+import { RECOMMENDED_CHECK_IN_SECONDS, type Break } from "@siteguard/contracts";
 import { PageHeading, ErrorNotice, HelpActions } from "../components/ui";
 export function CheckIn() {
   const { identity } = useIdentity(),
@@ -24,7 +24,14 @@ export function CheckIn() {
       browserCamera?: boolean;
     };
   }>("/health");
+  const breaks = useResource<{ breaks: Break[] }>("/breaks");
   const localTest = health.data?.checkInTestMode === true;
+  const now = Date.now();
+  const availableBreak =
+    breaks.data?.breaks.find(
+      (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
+    ) ?? (localTest ? breaks.data?.breaks[0] : undefined);
+  const breakId = search.get("breakId") || availableBreak?.id;
   const browserCamera = Boolean(
     health.data?.measurementSources.browserCamera &&
     window.isSecureContext &&
@@ -103,7 +110,7 @@ export function CheckIn() {
             if ((!localTest && !consent) || a.busy) return;
             void a.run(async () => {
               const result = await startOrResumeCheckIn(identity.workerId, {
-                breakId: search.get("breakId")!,
+                breakId: breakId!,
                 source,
                 ...(source === "presage" && browserCamera
                   ? { input: "custom" as const }
@@ -179,7 +186,7 @@ export function CheckIn() {
             message={
               a.error ||
               health.error ||
-              (!search.get("breakId")
+              (!breakId
                 ? "Select your active protected break from the worker portal before starting."
                 : "")
             }
@@ -187,10 +194,7 @@ export function CheckIn() {
           <button
             className="button primary full"
             disabled={
-              health.loading ||
-              (!localTest && !consent) ||
-              a.busy ||
-              !search.get("breakId")
+              health.loading || (!localTest && !consent) || a.busy || !breakId
             }
           >
             {a.busy
