@@ -68,9 +68,14 @@ export function Login() {
       setConfirm("");
       if (result.signedIn) {
         const identity = await refreshIdentity();
-        navigate(identity?.role === "supervisor" ? "/supervisor" : "/worker", {
-          replace: true,
-        });
+        const next = new URLSearchParams(location.search).get("next");
+        const destination =
+          identity?.role === "supervisor"
+            ? "/supervisor"
+            : next === "/mobile"
+              ? "/mobile"
+              : "/worker";
+        navigate(destination, { replace: true });
       } else {
         setMessage(result.message || "Check your email to continue.");
         if (mode === "reset") {
@@ -229,14 +234,20 @@ export function Login() {
           {mode === "login" ? (
             <>
               <span>New to SiteGuard? </span>
-              <Link to="/signup" onClick={() => change("signup")}>
+              <Link
+                to={"/signup" + location.search}
+                onClick={() => change("signup")}
+              >
                 Create an account
               </Link>
             </>
           ) : (
             <>
               <span>Already have an account? </span>
-              <Link to="/login" onClick={() => change("login")}>
+              <Link
+                to={"/login" + location.search}
+                onClick={() => change("login")}
+              >
                 Sign in
               </Link>
             </>

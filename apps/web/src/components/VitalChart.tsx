@@ -64,7 +64,7 @@ export function VitalChart({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
-            margin={{ left: -20, right: 10, top: 12, bottom: 0 }}
+            margin={{ left: 0, right: 16, top: 12, bottom: 8 }}
           >
             <CartesianGrid
               vertical={false}
@@ -75,14 +75,14 @@ export function VitalChart({
               dataKey="seconds"
               tickLine={false}
               axisLine={false}
-              tick={{ fontSize: 11, fill: "#7a8a86" }}
+              tick={{ fontSize: 14, fill: "#4f635b" }}
               tickFormatter={(v) => `${v}s`}
             />
             <YAxis
               domain={["auto", "auto"]}
               tickLine={false}
               axisLine={false}
-              tick={{ fontSize: 11, fill: "#7a8a86" }}
+              tick={{ fontSize: 14, fill: "#4f635b" }}
             />
             <Tooltip
               formatter={(value) => [

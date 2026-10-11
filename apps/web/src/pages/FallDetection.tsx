@@ -1,6 +1,14 @@
+import { IncidentScrollArea } from "../components/IncidentScrollArea";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Camera, ShieldAlert } from "lucide-react";
+import {
+  Camera,
+  ShieldAlert,
+  Eye,
+  ClipboardCheck,
+  Radio,
+  VideoOff,
+} from "lucide-react";
 import { useIdentity } from "../App";
 import { api, useAction, useResource } from "../lib/api";
 import { ErrorNotice, Loading, PageHeading } from "../components/ui";
@@ -56,6 +64,19 @@ export function FallDetection() {
     );
   return <SceneView manager={identity.role === "supervisor"} />;
 }
+function SceneQueue({
+  manager,
+  children,
+}: {
+  manager: boolean;
+  children: React.ReactNode;
+}) {
+  return manager ? (
+    <IncidentScrollArea>{children}</IncidentScrollArea>
+  ) : (
+    <>{children}</>
+  );
+}
 function SceneView({ manager }: { manager: boolean }) {
   const resource = useResource<Scene>("/fall-detection/state", 500),
     action = useAction();
@@ -64,6 +85,10 @@ function SceneView({ manager }: { manager: boolean }) {
   const [previewError, setPreviewError] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const scene = resource.data;
+  const unresolved =
+    scene?.incidents.filter((i) => ["open", "acknowledged"].includes(i.status))
+      .length || 0;
+  const reviewed = (scene?.incidents.length || 0) - unresolved;
   const unacknowledged =
     scene?.incidents.filter((incident) => incident.status === "open") || [];
   const alert = unacknowledged.length
@@ -139,7 +164,7 @@ function SceneView({ manager }: { manager: boolean }) {
       <PageHeading
         eyebrow="SITEGUARD / SCENE REVIEW"
         title="Fall detection"
-        description="Live scene monitoring and incident visibility for everyone signed in."
+        description="Watch the scene. Check an alert. Keep your team informed."
       />
       {alert && (
         <div className="fall-new-alert" role="alert">
@@ -171,7 +196,38 @@ function SceneView({ manager }: { manager: boolean }) {
       {resource.loading && <Loading />}
       {scene && (
         <>
-          <section className="card" style={{ marginBottom: 20 }}>
+          <div className="scene-stats" aria-label="Scene overview">
+            <div>
+              <Radio size={19} />
+              <span>
+                <small>MONITORING</small>
+                <strong>
+                  {scene.cameraActive && scene.status === "running"
+                    ? "Camera live"
+                    : "Camera offline"}
+                </strong>
+              </span>
+            </div>
+            <div>
+              <ShieldAlert size={19} />
+              <span>
+                <small>NEEDS FOLLOW-UP</small>
+                <strong>
+                  {unresolved} {unresolved === 1 ? "incident" : "incidents"}
+                </strong>
+              </span>
+            </div>
+            <div>
+              <ClipboardCheck size={19} />
+              <span>
+                <small>REVIEWED</small>
+                <strong>
+                  {reviewed} {reviewed === 1 ? "report" : "reports"}
+                </strong>
+              </span>
+            </div>
+          </div>
+          <section className="card scene-camera-card">
             <div className="fall-heading">
               <h2>
                 <Camera size={20} /> Scene monitoring
@@ -185,9 +241,9 @@ function SceneView({ manager }: { manager: boolean }) {
                 · {scene.status}
               </span>
             </div>
-            <p>
-              A valid person box wider than tall immediately flags a possible
-              person down. This heuristic does not confirm a fall or injury.
+            <p className="scene-camera-description">
+              Live view shared with your team. Boxes show anonymous person
+              tracking.
             </p>
             {scene.status === "unavailable" && (
               <p role="status">
@@ -210,11 +266,11 @@ function SceneView({ manager }: { manager: boolean }) {
               <>
                 <ErrorNotice message={previewError} />
                 {preview && (
-                  <div style={{ position: "relative", maxWidth: 960 }}>
+                  <div className="scene-feed">
                     <img
                       src={preview}
                       alt="Live scene camera feed"
-                      style={{ display: "block", width: "100%" }}
+                      className="scene-feed-image"
                     />
                     <svg
                       viewBox={`0 0 ${scene.frameSize?.[0] || 640} ${scene.frameSize?.[1] || 360}`}
@@ -255,12 +311,28 @@ function SceneView({ manager }: { manager: boolean }) {
                     </svg>
                   </div>
                 )}
-                {!scene.cameraActive && (
-                  <p>
-                    Camera is off. Tell everyone in view before starting. Frames
-                    are processed locally and are not stored.
-                  </p>
+                {!preview && (
+                  <div className="scene-feed-empty">
+                    <VideoOff size={32} />
+                    <h3>
+                      {scene.cameraActive
+                        ? "Connecting to the live view"
+                        : "Camera is offline"}
+                    </h3>
+                    <p>
+                      {scene.cameraActive
+                        ? "Incident reports remain available while the feed connects."
+                        : manager
+                          ? "Inform everyone in view, then start monitoring."
+                          : "A manager can start the camera. You can still review existing reports."}
+                    </p>
+                  </div>
                 )}
+                <div className="scene-camera-footer">
+                  <Eye size={16} />
+                  <span>Processed locally · video is not stored</span>
+                  <span>Possible person-down alerts need a human check.</span>
+                </div>
                 {manager &&
                   scene.source !== "synthetic" &&
                   (scene.cameraActive ? (
@@ -294,138 +366,164 @@ function SceneView({ manager }: { manager: boolean }) {
               </>
             }
           </section>
-          <section className="card">
-            <h2>
-              Scene review queue ·{" "}
-              {
-                scene.incidents.filter((i) =>
-                  ["open", "acknowledged"].includes(i.status),
-                ).length
-              }{" "}
-              unresolved
-            </h2>
-            {!scene.incidents.length && <p>No incident reports yet.</p>}
-            {[...scene.incidents]
-              .sort(
-                (a, b) =>
-                  Number(["open", "acknowledged"].includes(b.status)) -
-                  Number(["open", "acknowledged"].includes(a.status)),
-              )
-              .map((incident) => (
-                <article key={incident.id} className="fall-incident">
-                  <div className="fall-heading">
-                    <h3>Possible person down</h3>
-                    <span className="badge">
-                      {incident.status.replace("_", " ")}
-                    </span>
-                  </div>
-                  <p>
-                    {clock.format(new Date(incident.observedAt))} ·{" "}
-                    {incident.zoneId} ·{" "}
-                    {incident.durationSeconds === 0
-                      ? "Flagged immediately"
-                      : "Horizontal posture observed"}
-                  </p>
-                  <small>
-                    {incident.source === "synthetic"
-                      ? "Synthetic observation"
-                      : incident.source === "recorded_fixture"
-                        ? "Recorded fixture"
-                        : "Camera observation"}
-                  </small>
-                  {manager && incident.note && <p>{incident.note}</p>}
-                  {incident.updates?.map((update) => (
-                    <div key={update.id} className="fall-incident">
-                      <strong>{update.type.replaceAll("_", " ")}</strong>
-                      <small>
-                        {" "}
-                        · {clock.format(new Date(update.createdAt))} ·{" "}
-                        {update.actorRole === "supervisor"
-                          ? "Manager"
-                          : "Worker"}
-                      </small>
-                      <p>{update.note}</p>
+          <section className="card scene-queue">
+            <div className="scene-queue-heading">
+              <h2>
+                Scene review queue ·{" "}
+                {
+                  scene.incidents.filter((i) =>
+                    ["open", "acknowledged"].includes(i.status),
+                  ).length
+                }{" "}
+                unresolved
+              </h2>
+              <span className="scene-shared-label">Shared with your team</span>
+            </div>
+            <p className="scene-queue-description">
+              Review the scene, add a note, then resolve the report after
+              checking.
+            </p>
+            {!scene.incidents.length && (
+              <div className="scene-empty">
+                <ClipboardCheck size={30} />
+                <h3>No reports to review</h3>
+                <p>New camera observations will appear here automatically.</p>
+              </div>
+            )}
+            <SceneQueue manager={manager}>
+              {[...scene.incidents]
+                .sort(
+                  (a, b) =>
+                    Number(["open", "acknowledged"].includes(b.status)) -
+                      Number(["open", "acknowledged"].includes(a.status)) ||
+                    Date.parse(b.observedAt) - Date.parse(a.observedAt),
+                )
+                .map((incident) => (
+                  <article
+                    key={incident.id}
+                    className={`fall-incident scene-incident scene-incident-${incident.status}`}
+                  >
+                    <div className="fall-heading">
+                      <h3>Possible person down</h3>
+                      <span
+                        className={`badge scene-status scene-status-${incident.status}`}
+                      >
+                        {incident.status.replace("_", " ")}
+                      </span>
                     </div>
-                  ))}
-                  <a className="button secondary" href="tel:911">
-                    Call emergency services · 911 (US)
-                  </a>
-                  <p>
+                    <p className="scene-incident-meta">
+                      {clock.format(new Date(incident.observedAt))} ·{" "}
+                      {incident.zoneId} ·{" "}
+                      {incident.durationSeconds === 0
+                        ? "Flagged immediately"
+                        : "Horizontal posture observed"}
+                    </p>
                     <small>
-                      Opens your device’s dialer. If calling is unsupported, use
-                      a phone. Confirm below only after you have actually
-                      contacted emergency services.
+                      {incident.source === "synthetic"
+                        ? "Synthetic observation"
+                        : incident.source === "recorded_fixture"
+                          ? "Recorded fixture"
+                          : "Camera observation"}
                     </small>
-                  </p>
-                  {
-                    <>
-                      <label className="fall-note">
-                        Scene note (required to save or close)
-                        <textarea
-                          value={notes[incident.id] || ""}
-                          maxLength={1000}
-                          onChange={(e) =>
-                            setNotes({
-                              ...notes,
-                              [incident.id]: e.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <div className="button-row">
-                        {(["open", "acknowledged"].includes(incident.status)
-                          ? [
-                              "add_note",
-                              "acknowledge",
-                              "resolve",
-                              "false_alarm",
-                              "emergency_called",
-                            ]
-                          : ["add_note", "emergency_called"]
-                        ).map((kind) => (
-                          <button
-                            key={kind}
-                            className="button secondary"
-                            disabled={
-                              action.busy ||
-                              (kind !== "acknowledge" &&
-                                !notes[incident.id]?.trim())
-                            }
-                            onClick={() =>
-                              void action.run(async () => {
-                                await api(
-                                  `/safety/incidents/${incident.id}`,
-                                  {
-                                    action: kind,
-                                    revision: incident.revision,
-                                    note: notes[incident.id] || "",
-                                  },
-                                  "PATCH",
-                                );
-                                setNotes((current) => ({
-                                  ...current,
-                                  [incident.id]: "",
-                                }));
-                                await resource.refresh();
+                    {manager && incident.note && <p>{incident.note}</p>}
+                    {incident.updates?.map((update) => (
+                      <div key={update.id} className="scene-update">
+                        <strong>{update.type.replaceAll("_", " ")}</strong>
+                        <small>
+                          {" "}
+                          · {clock.format(new Date(update.createdAt))} ·{" "}
+                          {update.actorRole === "supervisor"
+                            ? "Manager"
+                            : "Worker"}
+                        </small>
+                        <p>{update.note}</p>
+                      </div>
+                    ))}
+                    <a
+                      className="button secondary scene-emergency"
+                      href="tel:911"
+                    >
+                      Call emergency services · 911 (US)
+                    </a>
+                    <p className="scene-emergency-hint">
+                      <small>
+                        Opens your device’s dialer. If calling is unsupported,
+                        use a phone. Confirm below only after you have actually
+                        contacted emergency services.
+                      </small>
+                    </p>
+                    {
+                      <>
+                        <label className="fall-note">
+                          Scene note (required to save or close)
+                          <textarea
+                            value={notes[incident.id] || ""}
+                            maxLength={1000}
+                            placeholder="What did you observe? What action did you take?"
+                            rows={2}
+                            onChange={(e) =>
+                              setNotes({
+                                ...notes,
+                                [incident.id]: e.target.value,
                               })
                             }
-                          >
-                            {kind === "acknowledge"
-                              ? "Acknowledge"
-                              : kind === "resolve"
-                                ? "Resolve after check"
-                                : kind === "add_note"
-                                  ? "Save note"
-                                  : kind === "emergency_called"
-                                    ? "Confirm emergency services contacted"
-                                    : "Mark false alarm"}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  }
-                </article>
-              ))}
+                          />
+                        </label>
+                        <div className="button-row">
+                          {(["open", "acknowledged"].includes(incident.status)
+                            ? [
+                                "add_note",
+                                "acknowledge",
+                                "resolve",
+                                "false_alarm",
+                                "emergency_called",
+                              ]
+                            : ["add_note", "emergency_called"]
+                          ).map((kind) => (
+                            <button
+                              key={kind}
+                              className={`button ${kind === "resolve" ? "primary" : "secondary"}`}
+                              disabled={
+                                action.busy ||
+                                (kind !== "acknowledge" &&
+                                  !notes[incident.id]?.trim())
+                              }
+                              onClick={() =>
+                                void action.run(async () => {
+                                  await api(
+                                    `/safety/incidents/${incident.id}`,
+                                    {
+                                      action: kind,
+                                      revision: incident.revision,
+                                      note: notes[incident.id] || "",
+                                    },
+                                    "PATCH",
+                                  );
+                                  setNotes((current) => ({
+                                    ...current,
+                                    [incident.id]: "",
+                                  }));
+                                  await resource.refresh();
+                                })
+                              }
+                            >
+                              {kind === "acknowledge"
+                                ? "Acknowledge"
+                                : kind === "resolve"
+                                  ? "Resolve after check"
+                                  : kind === "add_note"
+                                    ? "Save note"
+                                    : kind === "emergency_called"
+                                      ? "Confirm emergency services contacted"
+                                      : "Mark false alarm"}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    }
+                  </article>
+                ))}
+            </SceneQueue>
           </section>
         </>
       )}

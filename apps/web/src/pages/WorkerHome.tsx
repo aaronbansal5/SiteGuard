@@ -45,8 +45,10 @@ function Worker({ workerId }: { workerId: string }) {
     br = breaks.data?.breaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
     ),
-    checkInBreak =
-      br ?? (health.data?.checkInTestMode ? breaks.data?.breaks[0] : undefined),
+    nextBreak = breaks.data?.breaks
+      .filter((b) => Date.parse(b.endsAt) > now)
+      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))[0],
+    checkInBreak = br ?? (health.data?.checkInTestMode ? nextBreak : undefined),
     active = history.data?.sessions.find((s) => s.status === "active"),
     latest = history.data?.sessions.find((s) => s.status === "completed");
   return (
@@ -54,7 +56,7 @@ function Worker({ workerId }: { workerId: string }) {
       <PageHeading
         eyebrow="WORKER PORTAL"
         title="Take a moment for yourself."
-        description="Your measurements, your context, and a direct path to support."
+        description="Check your readings, request rest, or ask for help."
         action={<span className="badge">Worker W-{workerId.slice(-2)}</span>}
       />
       <ErrorNotice message={breaks.error || history.error || requests.error} />
@@ -96,7 +98,7 @@ function Worker({ workerId }: { workerId: string }) {
           ) : checkInBreak ? (
             <Link
               className="button primary"
-              to={`/check-in?breakId=${checkInBreak.id}`}
+              to={`/check-in${checkInBreak ? `?breakId=${checkInBreak.id}` : ""}`}
             >
               Start voluntary check-in <ArrowRight size={17} />
             </Link>
@@ -116,7 +118,7 @@ function Worker({ workerId }: { workerId: string }) {
               "—"}
             <small>scheduled break</small>
           </strong>
-          <p>Fictional site policy, preserved by planning</p>
+          <p>Your scheduled breaks stay protected</p>
         </section>
         <section className="card stat">
           <span>
@@ -141,14 +143,14 @@ function Worker({ workerId }: { workerId: string }) {
             ).length ?? "—"}
             <small>awaiting follow-up</small>
           </strong>
-          <p>Requests are independent of vital readings</p>
+          <p>You can ask for help without a check-in</p>
         </section>
       </div>
       <div className="two-columns">
         <section className="card">
           <div className="card-header">
             <div>
-              <h2>Support, whenever you need it</h2>
+              <h2>Need help or extra rest?</h2>
               <p>You do not need a measurement to request help.</p>
             </div>
           </div>
@@ -196,7 +198,7 @@ function Worker({ workerId }: { workerId: string }) {
         <section className="card">
           <div className="card-header">
             <h2>Your requests</h2>
-            <span className="muted">Updates from safety operations</span>
+            <span className="muted">Updates from your manager</span>
           </div>
           {requests.data?.requests.map((r) => (
             <div className="request-history" key={r.id}>

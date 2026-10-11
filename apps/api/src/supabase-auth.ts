@@ -218,12 +218,48 @@ export function registerSupabaseAuth(
         emailRedirectTo: `${c.appOrigin}/login?confirmed=1`,
       },
     });
-    if (error)
+    if (error) {
+      // Log only provider diagnostics, never credentials, email or provider payloads.
+      req.log.warn(
+        { providerCode: error.code, providerStatus: error.status },
+        "Supabase signup rejected",
+      );
+      if (error.code === "email_address_not_authorized")
+        fail(
+          503,
+          "AUTH_EMAIL_CONFIGURATION",
+          "Account creation is blocked by the site's email configuration. The administrator must configure Supabase SMTP to send confirmation emails to everyone.",
+        );
+      if (error.code === "signup_disabled")
+        fail(
+          503,
+          "SIGNUP_DISABLED",
+          "New accounts are disabled in Supabase. Contact the site administrator.",
+        );
+      if (error.status === 429 || error.code === "over_email_send_rate_limit")
+        fail(
+          429,
+          "SIGNUP_RATE_LIMITED",
+          "The sign-up service has reached its email or request limit. Please try again later.",
+        );
+      if (error.code === "weak_password")
+        fail(
+          400,
+          "WEAK_PASSWORD",
+          "Choose a stronger password that meets the site's password requirements.",
+        );
+      if (error.status === 0 || (error.status || 0) >= 500)
+        fail(
+          503,
+          "AUTH_UNAVAILABLE",
+          "Account creation is temporarily unavailable. Please retry or contact the site administrator.",
+        );
       fail(
-        error.status === 429 ? 429 : 400,
+        400,
         "SIGNUP_FAILED",
         "Account creation could not be completed. Check the email and password, or try signing in if you already have an account.",
       );
+    }
     if (data.session)
       return establish(await verify(data.session.access_token), req, reply);
     return {

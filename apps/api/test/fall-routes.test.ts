@@ -115,33 +115,36 @@ describe("fall detection role boundary", () => {
     expect(managerResult.json().incidents[0].note).toBeNull();
     expect(managerResult.json().tracks[0].trackId).toBe("secret-track");
   });
-  it("proxies worker preview using a backend-only credential", async () => {
-    const { app } = await setup(),
-      cookie = await login(app);
-    const fetcher = vi.fn(
-      async () =>
-        new Response(new Uint8Array([255, 216, 255, 217]), {
-          headers: { "Content-Type": "image/jpeg" },
+  it.each(["worker", "supervisor"] as const)(
+    "proxies %s preview using a backend-only credential",
+    async (role) => {
+      const { app } = await setup(),
+        cookie = await login(app, role);
+      const fetcher = vi.fn(
+        async () =>
+          new Response(new Uint8Array([255, 216, 255, 217]), {
+            headers: { "Content-Type": "image/jpeg" },
+          }),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const result = await app.inject({
+        url: "/api/fall-detection/preview",
+        headers: { cookie },
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.headers["content-type"]).toBe("image/jpeg");
+      expect(fetcher).toHaveBeenCalledWith(
+        "http://127.0.0.1:4322/api/preview",
+        expect.objectContaining({
+          headers: {
+            Authorization: "Bearer test-fall-secret-at-least-32-characters",
+          },
+          redirect: "error",
         }),
-    );
-    vi.stubGlobal("fetch", fetcher);
-    const result = await app.inject({
-      url: "/api/fall-detection/preview",
-      headers: { cookie },
-    });
-    expect(result.statusCode).toBe(200);
-    expect(result.headers["content-type"]).toBe("image/jpeg");
-    expect(fetcher).toHaveBeenCalledWith(
-      "http://127.0.0.1:4322/api/preview",
-      expect.objectContaining({
-        headers: {
-          Authorization: "Bearer test-fall-secret-at-least-32-characters",
-        },
-        redirect: "error",
-      }),
-    );
-    expect(result.body).not.toContain("test-fall-secret");
-  });
+      );
+      expect(result.body).not.toContain("test-fall-secret");
+    },
+  );
   it("requires explicit camera consent and handles invalid detector output", async () => {
     const { app } = await setup(),
       cookie = await login(app, "supervisor");

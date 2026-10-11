@@ -1,3 +1,4 @@
+import { IncidentScrollArea } from "../components/IncidentScrollArea";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, History } from "lucide-react";
@@ -31,7 +32,7 @@ function HistoryTable({ workerId }: { workerId: string }) {
       <PageHeading
         eyebrow="WORKER / HISTORY"
         title="A record of your check-ins."
-        description="Review observations over time. Every session keeps its source and context."
+        description="See your previous readings and open any check-in for details."
       />
       <ErrorNotice message={resource.error} />
       <PersonalTrendCard workerId={workerId} />
@@ -44,7 +45,12 @@ function HistoryTable({ workerId }: { workerId: string }) {
             <span className="badge">Private by default</span>
           </div>
           {resource.data?.sessions.length ? (
-            <div className="table-scroll">
+            <IncidentScrollArea
+              className="table-scroll history-scroll"
+              label="Session history, scroll for more"
+              visibleRows={5}
+              rowSelector="tbody > tr"
+            >
               <table>
                 <thead>
                   <tr>
@@ -102,7 +108,7 @@ function HistoryTable({ workerId }: { workerId: string }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </IncidentScrollArea>
           ) : (
             <div className="empty-state">
               <History size={28} />

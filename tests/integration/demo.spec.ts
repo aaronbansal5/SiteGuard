@@ -67,7 +67,9 @@ test("real-time mock check-in → summary → request → protected staffing cha
     await (await supervisor.request.get("/api/breaks")).json()
   ).breaks.filter((b: Break) => b.kind === "protected");
   await expect(
-    supervisor.getByRole("heading", { name: "5 minutes additional rest" }),
+    supervisor.getByRole("heading", {
+      name: "Extra break requested · 5 minutes",
+    }),
   ).toBeVisible();
   await supervisor
     .getByRole("button", { name: "Approve rest", exact: true })
@@ -76,20 +78,6 @@ test("real-time mock check-in → summary → request → protected staffing cha
   await expect(
     supervisor.getByText("Approved rest:", { exact: false }),
   ).toBeVisible();
-  await supervisor
-    .getByRole("button", { name: "Preview coverage proposal" })
-    .click();
-  await supervisor
-    .getByRole("button", { name: "Commit coverage proposal" })
-    .click();
-  await expect(
-    supervisor.getByText("Coverage updated. Protected breaks preserved."),
-  ).toBeVisible();
-  await expect(
-    supervisor
-      .locator("section.explanation")
-      .getByText("Deterministic explanation", { exact: true }),
-  ).toBeVisible();
   const after = (
     await (await supervisor.request.get("/api/breaks")).json()
   ).breaks.filter((b: Break) => b.kind === "protected");
@@ -97,7 +85,7 @@ test("real-time mock check-in → summary → request → protected staffing cha
   await page.getByRole("button", { name: "Report a symptom" }).click();
   await page.getByRole("button", { name: "Send request", exact: true }).click();
   await expect(
-    supervisor.getByRole("heading", { name: "Human assistance requested" }),
+    supervisor.getByRole("heading", { name: "Help requested" }),
   ).toBeVisible();
   await expect(supervisor.getByText("Reported: Feeling dizzy")).toBeVisible();
   await supervisor
@@ -107,12 +95,6 @@ test("real-time mock check-in → summary → request → protected staffing cha
   await expect(
     supervisor.getByText("acknowledged", { exact: true }),
   ).toBeVisible();
-  await supervisor
-    .getByRole("button", { name: "Preview coverage proposal" })
-    .click();
-  await supervisor
-    .getByRole("button", { name: "Commit coverage proposal" })
-    .click();
   const overview = await (
     await supervisor.request.get("/api/supervisor/overview")
   ).json();

@@ -6,39 +6,40 @@ test.beforeEach(async ({ page }) => {
   expect(reset.ok()).toBe(true);
   await page.request.post("/api/auth/logout", { data: {} });
 });
-test("stale coverage proposal cannot overwrite a newer worker need", async ({
+test("removed planner is absent and stale schedule writes remain rejected", async ({
   page,
   browser,
 }) => {
   await page.request.post("/api/demo/login", { data: { role: "supervisor" } });
   await page.goto("/supervisor");
-  await page.getByRole("button", { name: "Preview coverage proposal" }).click();
   await expect(
-    page.getByRole("heading", { name: "Proposal ready" }),
+    page.getByRole("heading", { name: "Protected break schedule" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Preview staffing changes" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Plan coverage" })).toHaveCount(
+    0,
+  );
+  const preview = await (
+    await page.request.post("/api/schedule/preview", { data: {} })
+  ).json();
   const worker = await browser.newContext();
   try {
     await worker.request.post("/api/demo/login", {
       data: { role: "worker", workerId: fixtureId(1) },
     });
-    await worker.request.post("/api/rest-requests", {
+    const request = await worker.request.post("/api/rest-requests", {
       data: { sessionId: null, kind: "assistance", requestedMinutes: null },
     });
-    await expect(
-      page.getByRole("button", { name: "Commit coverage proposal" }),
-    ).toBeDisabled();
-    await page
-      .getByRole("button", { name: "Preview coverage proposal" })
-      .click();
-    await expect(
-      page.getByRole("button", { name: "Commit coverage proposal" }),
-    ).toBeEnabled();
-    await page
-      .getByRole("button", { name: "Commit coverage proposal" })
-      .click();
-    await expect(
-      page.getByText("Coverage updated. Protected breaks preserved."),
-    ).toBeVisible();
+    expect(request.ok()).toBe(true);
+    const stale = await page.request.post("/api/schedule/commit", {
+      data: {
+        baseRevision: preview.baseRevision,
+        assignments: preview.assignments,
+      },
+    });
+    expect(stale.status()).toBe(409);
   } finally {
     await worker.close();
   }

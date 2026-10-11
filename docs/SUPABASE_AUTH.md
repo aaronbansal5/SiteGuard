@@ -26,17 +26,35 @@ Keep the existing `DATABASE_URL`, `COOKIE_SECRET` and `MEASUREMENT_TOKEN`.
 In Supabase **Authentication → URL Configuration**, set Site URL to the same
 `APP_ORIGIN` and allow redirects to `http://127.0.0.1:3001/login**` for this local
 setup. Use your HTTPS public origin instead when deployed. Enable the email
-provider under Authentication. Keep email confirmation enabled; configure SMTP
-for real workloads because provider email limits also affect signup/reset.
+provider under Authentication. This demo uses **Confirm email off**, so successful
+signup immediately starts an app session. If confirmation is enabled later,
+configure custom SMTP for confirmation delivery. Password reset still needs SMTP.
 
 Run `npm run build` then `npm run start`. Open `http://127.0.0.1:3001` and use
-**Create an account**. Email addresses serve as usernames. Confirm the emailed
-link before signing in. For Vite development on port 5173, set `APP_ORIGIN` to
+**Create an account**. Email addresses serve as usernames. With confirmation
+disabled, signup signs in immediately; otherwise confirm the emailed link first. For Vite development on port 5173, set `APP_ORIGIN` to
 `http://127.0.0.1:5173` and add that origin's login redirect to Supabase as well.
 Only configured origins may submit authenticated browser writes. Alternatively,
 keep the primary origin on port 3001 and set
 `AUTH_ADDITIONAL_ORIGINS=http://127.0.0.1:5173` to explicitly trust the Vite
 frontend too; confirmation emails still return to the primary origin.
+
+## Signup works only for the project owner's email
+
+SiteGuard has no worker email allowlist. Supabase must allow public signup and be
+able to deliver confirmations to arbitrary recipients. In Authentication settings:
+
+1. Keep **Allow new users to sign up** enabled.
+2. Keep **Confirm email** enabled, since admin access depends on verified ownership.
+3. Configure a **custom SMTP** sender under Authentication's email settings using
+   your email provider's SMTP host, port, username, password and verified sender.
+4. Check Authentication logs for `email_address_not_authorized`, email rate limits,
+   or SMTP errors if another address fails. Retry signup after fixing delivery.
+
+Supabase's default mail service only sends to organization members, not all users.
+Adding team members is not a public signup solution. Do not bypass email verification
+or add a service-role key to the browser. Password-reset delivery also needs SMTP.
+See [Supabase SMTP restrictions and setup](https://supabase.com/docs/guides/auth/auth-smtp).
 
 ## Worker and admin accounts
 
@@ -82,3 +100,13 @@ request alone does not establish successful live password authentication.
 The implementation follows Supabase's [email/password authentication](https://supabase.com/docs/guides/auth/passwords),
 [server-verified getUser](https://supabase.com/docs/reference/javascript/auth-getuser),
 and [password-reset flow](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail).
+
+## Phone browser and Vite
+
+Vite proxies `/api` to the same backend and Supabase project. Confirmation settings
+apply to both served builds and Vite, with no frontend rebuild required for a
+provider-setting change. `/mobile` requires the same worker login and preserves
+that destination through signup/sign-in. The separate native `apps/ios` client
+currently uses the OIDC mobile exchange, which is not enabled in Supabase mode;
+it does not yet share the web email/password login. The Presage `apps/mobile-ios`
+client uses separate device pairing rather than this account signup flow.

@@ -279,6 +279,20 @@ describe("account authentication boundaries", () => {
         })
       ).statusCode,
     ).toBe(200);
+    const frame = await x.app.inject({
+      method: "POST",
+      url: `/api/sessions/${fixtureId(1001)}/frame?timestampUs=1`,
+      headers: {
+        origin: x.config.appOrigin,
+        cookie: `siteguard_session=${await createAccountSession(x.repo, m.id)}`,
+        "content-type": "image/jpeg",
+      },
+      payload: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    // JPEG camera frames pass the same-origin guard, then are rejected by
+    // normal session authorization because supervisors cannot write frames.
+    expect(frame.statusCode).toBe(403);
+    expect(frame.json().error.code).toBe("FORBIDDEN");
   });
   it("rejects callback without transaction and does not reuse consumed transactions", async () => {
     const x = await setup();

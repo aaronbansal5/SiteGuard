@@ -42,6 +42,10 @@ async function setup(page: import("@playwright/test").Page) {
     identity = null;
     await route.fulfill({ json: { loggedOut: true } });
   });
+  return async (nextIdentity: Identity) => {
+    identity = nextIdentity;
+    await page.request.post("/api/demo/login", { data: identity });
+  };
 }
 test("login is the entry screen; worker login restores correct workspace and signs out", async ({
   page,
@@ -49,6 +53,9 @@ test("login is the entry screen; worker login restores correct workspace and sig
   await setup(page);
   await page.goto("/");
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("complementary")).toHaveCount(0);
+  await expect(page.getByRole("banner")).toHaveCount(0);
+  await expect(page.getByRole("navigation")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
@@ -61,6 +68,12 @@ test("login is the entry screen; worker login restores correct workspace and sig
       .getByRole("navigation")
       .getByRole("link", { name: "Safety operations" }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("navigation").getByRole("link", { name: "Phone check-in" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation").getByRole("link", { name: "Web check-in" }),
+  ).toBeVisible();
   await page.reload();
   await expect(page).toHaveURL(/\/worker$/);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -82,7 +95,16 @@ test("admin account lands in manager dashboard and failed login never grants a r
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/supervisor$/);
   await expect(
-    page.getByRole("button", { name: "Preview coverage proposal" }),
+    page.getByRole("heading", { name: "Protected break schedule" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Arrange task coverage" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Plan coverage" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Break & assistance requests" }),
   ).toBeVisible();
 });
 test("signup requires matching passwords and displays email confirmation without access", async ({
@@ -154,4 +176,36 @@ test("password reset opens safely and uses recovery tokens only for password upd
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
   await expect(page.getByRole("status")).toContainText("Password updated");
+});
+
+test("phone signup without email confirmation returns to mobile check-in", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const establish = await setup(page);
+  await page.route("**/api/auth/password/signup", async (route) => {
+    const identity: Identity = { role: "worker", workerId: fixtureId(1) };
+    await establish(identity);
+    await route.fulfill({ json: { signedIn: true, identity } });
+  });
+  await page.goto("/mobile");
+  await expect(page).toHaveURL(/\/login\?next=%2Fmobile$/);
+  await page.getByRole("link", { name: "Create an account" }).click();
+  await expect(page).toHaveURL(/\/signup\?next=%2Fmobile$/);
+  await page.getByLabel("Full name").fill("New worker");
+  await page.getByLabel("Email address").fill("new-worker@gmail.com");
+  await page.getByLabel("Password", { exact: true }).fill("fixture-password");
+  await page.getByLabel("Confirm password").fill("fixture-password");
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/mobile$/);
+  await expect(
+    page.getByRole("link", { name: "Worker portal", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });

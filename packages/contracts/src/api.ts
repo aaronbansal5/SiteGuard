@@ -15,7 +15,8 @@ export const LoginSchema = z.discriminatedUnion("role", [
 ]);
 export type Identity = z.infer<typeof LoginSchema>;
 export const StartSessionSchema = z.strictObject({
-  breakId: Id,
+  /** Local test sessions may omit a scheduled break entirely. */
+  breakId: Id.optional(),
   /** Explicit worker request to measure now outside the active break window. */
   onDemand: z.boolean().optional(),
   source: SourceSchema,

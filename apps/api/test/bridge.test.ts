@@ -100,6 +100,7 @@ test("owned browser frames reach only the active custom-input bridge session", a
   let frameBytes = 0;
   let frameType = "";
   let selectedInput = "";
+  let rejectFrames = false;
   const server = createServer(async (req, res) => {
     if (req.headers.authorization !== "Bearer fixture-bridge-token")
       return void res.writeHead(401).end();
@@ -127,6 +128,14 @@ test("owned browser frames reach only the active custom-input bridge session", a
     if (req.url?.startsWith("/v1/sessions/browser-session/frame")) {
       frameType = req.headers["content-type"] || "";
       for await (const chunk of req) frameBytes += chunk.length;
+      if (rejectFrames) {
+        res.setHeader("Content-Type", "application/json");
+        return void res
+          .writeHead(503)
+          .end(
+            JSON.stringify({ message: "SmartSpectra needs a steadier stream" }),
+          );
+      }
       return void res.writeHead(204).end();
     }
     if (req.url === "/v1/sessions/browser-session/stop")
@@ -189,6 +198,17 @@ test("owned browser frames reach only the active custom-input bridge session", a
     expect(compressedFrame.statusCode).toBe(204);
     expect(frameType).toBe("image/jpeg");
     expect(frameBytes).toBe(payload.length + jpeg.length);
+    rejectFrames = true;
+    const rejected = await x.app.inject({
+      method: "POST",
+      url: `/api/sessions/${id}/frame?timestampUs=${Date.now() * 1000 + 1}`,
+      headers: { cookie, "content-type": "image/jpeg" },
+      payload: jpeg,
+    });
+    expect(rejected.statusCode).toBe(503);
+    expect(rejected.json().error.message).toBe(
+      "SmartSpectra needs a steadier stream",
+    );
     expect(
       (
         await x.app.inject({
