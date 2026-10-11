@@ -30,8 +30,18 @@ export function CheckIn() {
   const availableBreak =
     breaks.data?.breaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
-    ) ?? (localTest ? breaks.data?.breaks[0] : undefined);
+    ) ??
+    [...(breaks.data?.breaks ?? [])].sort(
+      (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
+    )[0];
   const breakId = search.get("breakId") || availableBreak?.id;
+  const onDemand = Boolean(
+    availableBreak &&
+    !(
+      Date.parse(availableBreak.startsAt) <= now &&
+      Date.parse(availableBreak.endsAt) > now
+    ),
+  );
   const browserCamera = Boolean(
     health.data?.measurementSources.browserCamera &&
     window.isSecureContext &&
@@ -111,6 +121,7 @@ export function CheckIn() {
             void a.run(async () => {
               const result = await startOrResumeCheckIn(identity.workerId, {
                 breakId: breakId!,
+                onDemand,
                 source,
                 ...(source === "presage" && browserCamera
                   ? { input: "custom" as const }
@@ -130,6 +141,12 @@ export function CheckIn() {
             <p className="notice demo">
               Local testing: no consent form or scheduled-break time gate. Begin
               check-in starts recording; Finish check-in stops it.
+            </p>
+          )}
+          {onDemand && !localTest && (
+            <p className="notice demo">
+              On-demand check-in: you can start now without an active scheduled
+              break. This does not change your break schedule.
             </p>
           )}
           <label>
