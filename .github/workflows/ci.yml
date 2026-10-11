@@ -66,6 +66,7 @@ jobs:
             -e MEASUREMENT_TOKEN="ci-only-token-$(openssl rand -hex 16)" \
             -e SITEGUARD_ALLOW_SQLITE=true \
             -e SQLITE_PATH=/data/siteguard.sqlite \
+            -e DEMO_MODE=true \
             siteguard:ci
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:3001/api/health && break
