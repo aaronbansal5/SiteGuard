@@ -26,17 +26,19 @@ class Store:
         CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS incidents(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS actions(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS delivery(event_id TEXT PRIMARY KEY REFERENCES events(id), delivered_at TEXT);
         ''')
 
-    def record(self, observation, source, run_id, sequence, camera_id, zone_id):
+    def record(self, observation, source, run_id, sequence, camera_id, zone_id, observed_at=None):
         event = dict(observation, protocolVersion=1, eventId=str(uuid.uuid4()),
                      detectorRunId=run_id, sequence=sequence, cameraId=camera_id,
-                     zoneId=zone_id, observedAt=utc_now(), kind='possible_person_down',
+                     zoneId=zone_id, observedAt=observed_at or utc_now(), kind='possible_person_down',
                      source=source, method='bbox-aspect-v1')
         incident = dict(event, id=event['eventId'], status='open', note=None)
         with self.lock, self.db:
             self.db.execute('INSERT INTO events VALUES (?,?)', (event['eventId'], json.dumps(event)))
             self.db.execute('INSERT INTO incidents VALUES (?,?)', (incident['id'], json.dumps(incident)))
+            self.db.execute('INSERT INTO delivery VALUES (?,NULL)', (event['eventId'],))
         return event
 
     def list(self, table, limit=100):
@@ -121,4 +123,14 @@ class Store:
             counts['actions'] += self.db.execute(
                 "DELETE FROM actions WHERE json_extract(payload, '$.incidentId') NOT IN (SELECT id FROM incidents)"
                 " AND json_extract(payload, '$.createdAt') < ?", (cutoff,)).rowcount
+            self.db.execute('DELETE FROM delivery WHERE event_id NOT IN (SELECT id FROM events)')
         return counts
+
+    def pending(self):
+        with self.lock:
+            return [json.loads(row[0]) for row in self.db.execute(
+                'SELECT e.payload FROM events e JOIN delivery d ON e.id=d.event_id WHERE d.delivered_at IS NULL ORDER BY e.rowid LIMIT 100')]
+
+    def delivered(self, event_id):
+        with self.lock, self.db:
+            self.db.execute('UPDATE delivery SET delivered_at=? WHERE event_id=?', (utc_now(), event_id))

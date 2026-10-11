@@ -65,6 +65,13 @@ describe("Safety incident integration", () => {
           })
         ).statusCode,
       ).toBe(400);
+      // The standalone detector also reports the normalized alert region.
+      const withRegion = observation();
+      withRegion.evidence = {
+        heightWidthRatio: 0.4,
+        region: [0.1, 0.2, 0.3, 0.4],
+      } as typeof withRegion.evidence;
+      expect((await ingest(withRegion)).statusCode).toBe(201);
       const manager = await login(h.app, "supervisor");
       const incidents = (
         await h.app.inject({
@@ -73,8 +80,11 @@ describe("Safety incident integration", () => {
           headers: { cookie: manager },
         })
       ).json().incidents;
-      expect(incidents).toHaveLength(1);
-      expect(incidents[0].source).toBe("synthetic");
+      expect(incidents).toHaveLength(2);
+      expect(incidents.map((i: { source: string }) => i.source)).toEqual([
+        "synthetic",
+        "synthetic",
+      ]);
       expect(incidents[0].workerId).toBeNull();
     } finally {
       await h.app.close();

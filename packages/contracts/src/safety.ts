@@ -23,6 +23,8 @@ export const SafetyEventSchema = z.strictObject({
   durationSeconds: z.number().finite().nonnegative().max(86400),
   evidence: z.strictObject({
     heightWidthRatio: z.number().finite().positive().max(100),
+    // Normalized [x1, y1, x2, y2] frame region used for repeat suppression.
+    region: z.array(z.number().min(0).max(1)).length(4).optional(),
   }),
 });
 export const SafetyIncidentSchema = SafetyEventSchema.extend({
