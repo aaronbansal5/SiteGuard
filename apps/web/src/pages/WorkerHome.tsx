@@ -45,8 +45,10 @@ function Worker({ workerId }: { workerId: string }) {
     br = breaks.data?.breaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
     ),
-    checkInBreak =
-      br ?? (health.data?.checkInTestMode ? breaks.data?.breaks[0] : undefined),
+    nextBreak = breaks.data?.breaks
+      .filter((b) => Date.parse(b.endsAt) > now)
+      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))[0],
+    checkInBreak = br ?? (health.data?.checkInTestMode ? nextBreak : undefined),
     active = history.data?.sessions.find((s) => s.status === "active"),
     latest = history.data?.sessions.find((s) => s.status === "completed");
   return (
@@ -96,7 +98,7 @@ function Worker({ workerId }: { workerId: string }) {
           ) : checkInBreak ? (
             <Link
               className="button primary"
-              to={`/check-in?breakId=${checkInBreak.id}`}
+              to={`/check-in${checkInBreak ? `?breakId=${checkInBreak.id}` : ""}`}
             >
               Start voluntary check-in <ArrowRight size={17} />
             </Link>

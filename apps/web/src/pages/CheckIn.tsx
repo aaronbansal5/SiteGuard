@@ -27,14 +27,17 @@ export function CheckIn() {
   const breaks = useResource<{ breaks: Break[] }>("/breaks");
   const localTest = health.data?.checkInTestMode === true;
   const now = Date.now();
+  const workerBreaks = [...(breaks.data?.breaks ?? [])].sort(
+    (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
+  );
   const availableBreak =
-    breaks.data?.breaks.find(
+    workerBreaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
-    ) ??
-    [...(breaks.data?.breaks ?? [])].sort(
-      (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
-    )[0];
-  const breakId = search.get("breakId") || availableBreak?.id;
+    ) ?? workerBreaks.find((b) => Date.parse(b.endsAt) > now);
+  const requestedBreak = workerBreaks.find(
+    (b) => b.id === search.get("breakId"),
+  );
+  const breakId = requestedBreak?.id || availableBreak?.id;
   const onDemand = Boolean(
     availableBreak &&
     !(

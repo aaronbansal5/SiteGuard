@@ -255,9 +255,9 @@ function MobileWorker({ workerId }: { workerId: string }) {
   const activeBreak = sorted.find(
     (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
   );
-  const checkInBreak = activeBreak ?? sorted[0];
+  const nextBreak = sorted.find((b) => Date.parse(b.endsAt) > now);
+  const checkInBreak = activeBreak ?? nextBreak;
   const onDemand = Boolean(checkInBreak && !activeBreak);
-  const nextBreak = sorted.find((b) => Date.parse(b.startsAt) > now);
   const presageAvailable = Boolean(health.data?.measurementSources.presage);
   const canMeasure =
     Boolean(browserCamera || demoMode || (localTest && presageAvailable)) &&
