@@ -64,10 +64,13 @@ def validate_row(raw, line, allow_synthetic_demo=False):
         ("measurement_source", "presage"), ("label_source", "self_report"),
     )
     if allow_synthetic_demo:
-        expected_fields = (
-            ("consent_granted", "false"), ("data_kind", "synthetic"),
-            ("measurement_source", "mock"), ("label_source", "synthetic_demo"),
-        )
+        expected_fields = (("data_kind", "synthetic"),)
+        if row["consent_granted"].lower() not in ("true", "false"):
+            raise DatasetError(prefix + "synthetic demo consent_granted must be true or false")
+        if row["measurement_source"] not in ("mock", "presage"):
+            raise DatasetError(prefix + "synthetic demo measurement_source must be mock or presage")
+        if row["label_source"] not in ("synthetic_demo", "self_report"):
+            raise DatasetError(prefix + "synthetic demo label_source must be synthetic_demo or self_report")
     for field, expected in expected_fields:
         if row[field] != expected:
             raise DatasetError(prefix + f"{field} must be {expected}")
