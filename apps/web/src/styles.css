@@ -3861,55 +3861,55 @@ td {
   }
 }
 
-/* Shared-site alert remains visible on every authenticated route. */
+/* Shared-site alert: location first, explicit acknowledgment, no silent dismissal. */
 .global-scene-alert {
   position: fixed;
   bottom: 24px;
   left: 272px;
   right: 24px;
   z-index: 60;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px 24px;
-  background: #fff2f2;
-  border: 2px solid #c43535;
-  box-shadow: 0 8px 28px rgba(122, 27, 27, 0.16);
+  margin: 0 auto;
+  max-width: 960px;
+  max-height: calc(100dvh - 110px);
+  overflow-y: auto;
+  background: #ffffff;
+  color: #21352d;
+  border: 1px solid #d5a4a4;
+  border-top: 5px solid #b4232b;
+  border-radius: 16px;
+  box-shadow: 0 18px 60px rgba(42, 20, 20, .24);
+  padding: 24px;
 }
-.global-scene-alert strong {
-  font-size: 18px;
-  color: #862323;
-}
-.global-scene-alert > div {
-  min-width: 0;
-}
-.global-scene-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: auto;
-}
-.sign-in-shell .global-scene-alert {
-  left: 24px;
-}
-body:has(.mobile-app) .global-scene-alert {
-  left: 24px;
-}
+.scene-alert-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.scene-alert-symbol { display: grid; place-items: center; width: 54px; height: 54px; flex-shrink: 0; border-radius: 14px; background: #fbe9e9; color: #b4232b; }
+.scene-alert-heading h2 { margin: 0 0 4px; font-size: 24px; line-height: 1.2; color: #852129; }
+.scene-alert-heading p { margin: 0; font-size: 16px; }
+.scene-alert-count { margin-left: auto; background: #fbe9e9; color: #852129; padding: 7px 12px; border-radius: 20px; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.scene-alert-reports { max-height: 260px; overflow-y: auto; }
+.scene-alert-report { display: grid; grid-template-columns: 1fr auto; gap: 10px 20px; padding: 16px; border: 1px solid #eadcdc; background: #fffafa; border-radius: 10px; }
+.scene-alert-report + .scene-alert-report { margin-top: 10px; }
+.scene-alert-location { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.scene-alert-location > svg { color: #b4232b; flex-shrink: 0; }
+.scene-alert-location span { display: block; font-size: 14px; color: #635c5c; }
+.scene-alert-location strong { display: block; font-size: 21px; overflow-wrap: anywhere; }
+.scene-alert-metadata { display: flex; flex-wrap: wrap; gap: 8px 18px; grid-column: 1; font-size: 14px; color: #635c5c; }
+.scene-alert-metadata span { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.scene-alert-acknowledge { grid-column: 2; grid-row: 1 / 3; align-self: center; background: #b4232b; border-color: #b4232b; color: white; min-height: 46px; }
+.scene-alert-acknowledge:hover { background: #852129; border-color: #852129; }
+.scene-alert-footer { display: flex; align-items: center; gap: 20px; margin-top: 18px; }
+.scene-alert-footer p { margin: 0; font-size: 14px; line-height: 1.5; }
+.scene-alert-footer .scene-alert-caution { margin-top: 4px; color: #635c5c; }
+.scene-alert-review { margin-left: auto; white-space: nowrap; background: #fff; border: 1px solid #b7c5bd; color: #21352d; min-height: 46px; }
+.scene-alert-error { color: #852129; font-size: 16px; margin-bottom: 0; }
+.sign-in-shell .global-scene-alert, body:has(.mobile-app) .global-scene-alert { left: 24px; }
 @media (max-width: 900px) {
-  .global-scene-alert {
-    left: 16px;
-    right: 16px;
-    bottom: 16px;
-    flex-wrap: wrap;
-    padding: 16px;
-  }
-  .global-scene-actions {
-    width: 100%;
-    margin-left: 0;
-  }
-  .global-scene-actions .button {
-    flex: 1;
-    justify-content: center;
-  }
+  .global-scene-alert, body:has(.mobile-app) .global-scene-alert { left: 12px; right: 12px; bottom: 12px; padding: 18px; max-height: calc(100dvh - 80px); }
+  .scene-alert-heading { flex-wrap: wrap; gap: 10px; }
+  .scene-alert-heading h2 { font-size: 21px; }
+  .scene-alert-heading > div { flex: 1; }
+  .scene-alert-count { margin-left: 0; }
+  .scene-alert-report { grid-template-columns: 1fr; padding: 14px; }
+  .scene-alert-acknowledge { grid-row: auto; grid-column: 1; width: 100%; }
+  .scene-alert-footer { flex-direction: column; align-items: stretch; gap: 12px; }
+  .scene-alert-review { margin-left: 0; justify-content: center; }
 }
