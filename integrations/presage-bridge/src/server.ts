@@ -513,12 +513,28 @@ export class PresageBridge {
     }
     session.lastFrameTimestampUs = timestampUs;
     const capture = session.capture;
-    session.frameQueue = session.frameQueue
-      .catch(() => undefined)
-      .then(() => {
-        capture.sendFrame!(frame, frameWidth, frameHeight, timestampUs);
+    session.frameQueue = session.frameQueue.then(() => {
+      if (session.state !== "active")
+        throw new Error("Presage session is no longer active");
+      capture.sendFrame!(frame, frameWidth, frameHeight, timestampUs);
+    });
+    try {
+      await session.frameQueue;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Presage rejected the camera frame";
+      // A SmartSpectra invalid-state error is terminal for this SDK instance.
+      // Release the camera and close the event stream so clients can start a
+      // fresh check-in instead of continuing to post frames into a dead state.
+      session.log.append({
+        type: "error",
+        code: "PRESAGE_FRAME_REJECTED",
+        message: "Presage stopped accepting camera frames. Restart this check-in.",
+        retryable: false,
       });
-    await session.frameQueue;
+      await this.stopSession(session);
+      throw new HttpError(503, "PRESAGE_FRAME_REJECTED", message);
+    }
     const now = Date.now();
     if (session.frameWindowCount === 0) {
       session.frameWindowStartedAt = now;

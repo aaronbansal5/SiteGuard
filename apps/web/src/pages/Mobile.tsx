@@ -924,11 +924,17 @@ function MobileMeasuring({
               cache: "no-store",
             },
           )
-            .then((response) => {
-              if (!response.ok)
-                throw new Error(
-                  `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`,
-                );
+            .then(async (response) => {
+              if (!response.ok) {
+                let detail = `Camera frame rejected (${response.status}). Check Presage and restart this check-in.`;
+                try {
+                  const body = (await response.json()) as { message?: string };
+                  if (body.message) detail = body.message;
+                } catch {
+                  // Keep the status-based fallback when the server did not return JSON.
+                }
+                throw new Error(detail);
+              }
             })
             .catch(failCapture)
             .finally(() => {

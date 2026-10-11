@@ -95,8 +95,16 @@ export function Measurement() {
             cache: "no-store",
           },
         );
-        if (!response.ok)
-          throw new Error(`Camera frame rejected (${response.status}).`);
+        if (!response.ok) {
+          let detail = `Camera frame rejected (${response.status}).`;
+          try {
+            const body = (await response.json()) as { message?: string };
+            if (body.message) detail = body.message;
+          } catch {
+            // Keep the status-based fallback when the server did not return JSON.
+          }
+          throw new Error(detail);
+        }
       } catch (error) {
         fail(error);
       } finally {
