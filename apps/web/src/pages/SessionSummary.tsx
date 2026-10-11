@@ -287,6 +287,8 @@ function isRestSupportResult(value: unknown): value is RestSupportResult {
 const DEMO_SCENARIOS = [
   {
     label: "Rest",
+    pulse: [88, 84, -8],
+    breathing: [20, 19, -3],
     title: "Take a moment. Request extra rest.",
     story:
       "A worker finishes a demanding task and wants a little more time before their next assignment.",
@@ -294,6 +296,8 @@ const DEMO_SCENARIOS = [
   },
   {
     label: "Recheck",
+    pulse: [80, 77, -5],
+    breathing: [18, 17, -2],
     title: "Pause and check in again.",
     story:
       "The check-in is incomplete. The worker can try again with steadier positioning and better lighting.",
@@ -301,6 +305,8 @@ const DEMO_SCENARIOS = [
   },
   {
     label: "Support",
+    pulse: [92, 90, -7],
+    breathing: [22, 21, -3],
     title: "Ask someone to check in with you.",
     story:
       "A worker wants a human follow-up. Help does not depend on camera quality or a model result.",
@@ -311,6 +317,19 @@ const DEMO_SCENARIOS = [
 function PresentationPlayground({ sessionId }: { sessionId: string }) {
   const [selected, setSelected] = useState(0);
   const scenario = DEMO_SCENARIOS[selected];
+  const exampleMetric = ([
+    initial,
+    final,
+    historicalDelta,
+  ]: readonly number[]): MetricFeatures => ({
+    initial,
+    final,
+    delta: final - initial,
+    fractionalChange: (final - initial) / initial,
+    historicalDelta,
+    differenceFromHistory: final - initial - historicalDelta,
+    priorCount: 5,
+  });
   const shuffle = () => {
     const random = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
     setSelected(
@@ -363,6 +382,24 @@ function PresentationPlayground({ sessionId }: { sessionId: string }) {
         </Link>
       )}
       <HelpActions sessionId={sessionId} />
+      <details className="flow-details research-details" open>
+        <summary>Simulated example metrics</summary>
+        <p className="fine-print">
+          Fictional values and five fictional prior sessions for this role-play.
+          Actual camera evidence is listed separately below.
+        </p>
+        <RestSupportEvidence
+          caption="Simulated example metrics — fictional values and history"
+          evidence={{
+            source: "mock",
+            synthetic: true,
+            durationSeconds: 90,
+            pulse: exampleMetric(scenario.pulse),
+            breathing: exampleMetric(scenario.breathing),
+            issues: [],
+          }}
+        />
+      </details>
       <p className="fine-print demo-provenance">
         Fictional scenario, not a camera finding or model prediction. Shuffling
         changes only this preview, not measurements, confidence, or saved
@@ -543,8 +580,10 @@ export function ResearchRestSupportCard({
 
 function RestSupportEvidence({
   evidence,
+  caption = "Measurements used by the research rule",
 }: {
   evidence: RestSupportResult["evidence"];
+  caption?: string;
 }) {
   const rows = [
     ["initial", "Initial window"],
@@ -573,9 +612,7 @@ function RestSupportEvidence({
       tabIndex={0}
     >
       <table>
-        <caption className="sr-only">
-          Measurements used by the research rule
-        </caption>
+        <caption className="sr-only">{caption}</caption>
         <thead>
           <tr>
             <th scope="col">Metric</th>

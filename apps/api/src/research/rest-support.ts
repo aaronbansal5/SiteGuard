@@ -89,7 +89,10 @@ function extractMetric(
     final <= 0 ||
     metric.initialCount < 5 ||
     metric.finalCount < 5 ||
-    Math.abs(final - initial - delta) > 1e-9 * Math.max(1, Math.abs(delta)) ||
+    // Canonical analytics rounds the change to two decimals, while retaining
+    // full-precision window medians from Presage.
+    Math.abs(Math.round((final - initial) * 100) / 100 - delta) >
+      1e-9 * Math.max(1, Math.abs(delta)) ||
     !Number.isFinite(delta / initial)
   ) {
     issues.push(`${name}: unavailable or inconsistent initial/final windows.`);

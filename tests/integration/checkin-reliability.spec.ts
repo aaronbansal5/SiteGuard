@@ -273,7 +273,16 @@ for (const width of [1280, 390]) {
     await expect(playground.getByRole("heading")).toHaveText(
       "Ask someone to check in with you.",
     );
-    const details = page.locator("details.research-details");
+    const examples = playground.getByRole("table", {
+      name: "Simulated example metrics — fictional values and history",
+    });
+    await expect(examples.getByRole("cell")).toHaveCount(14);
+    await expect(
+      examples.getByRole("cell", { name: "Not available", exact: true }),
+    ).toHaveCount(0);
+    const details = page
+      .locator("details.research-details")
+      .filter({ hasText: "Research details and actual camera evidence" });
     await expect(details).not.toHaveAttribute("open");
     await details.locator("summary").click();
     await expect(
