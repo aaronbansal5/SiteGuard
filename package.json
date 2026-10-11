@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc --noEmit -p tsconfig.build.json && npm run build -w @siteguard/web && npm run build -w @siteguard/api",
+    "build:vercel": "npm run build && esbuild ./vercel-entry.ts --bundle --platform=node --format=esm --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --external:fastify --external:pg --external:@google/genai --external:zod --external:openid-client --external:@supabase/supabase-js --outfile=server.js",
     "start": "node apps/api/dist/server.js",
     "db:migrate": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts",
     "db:migrate:postgres": "tsx --env-file-if-exists=.env apps/api/src/db/migrate.ts postgres",

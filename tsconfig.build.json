@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "include": [
+    "vercel-entry.ts",
     "apps/api/src/**/*.ts",
     "apps/web/src/**/*.ts",
     "apps/web/src/**/*.tsx",
