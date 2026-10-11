@@ -63,8 +63,15 @@ protocol SiteGuardUploader {
     var pairedWorkerId: String? { get }
     func configure(origin: URL) throws
     func workers() async throws -> [DeviceWorker]
-    func pair(code: String, expectedWorkerId: String) async throws -> String
+    /// `expectedWorkerId` is nil when the server's worker list requires sign-in;
+    /// the one-time code (issued to the signed-in worker) then identifies the worker.
+    func pair(code: String, expectedWorkerId: String?) async throws -> PairedWorker
     func upload(_ checkIn: DeviceCheckIn) async throws -> String
+}
+
+struct PairedWorker: Equatable {
+    let id: String
+    let displayName: String?
 }
 
 final class LocalHTTPSUploader: SiteGuardUploader {
@@ -129,17 +136,19 @@ final class LocalHTTPSUploader: SiteGuardUploader {
         var request = URLRequest(url: origin.appending(path: "api/workers"))
         request.timeoutInterval = 15
         let (data, response) = try await session.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200
-        else { throw UploadError.invalidResponse }
+        guard let response = response as? HTTPURLResponse else { throw UploadError.invalidResponse }
+        // Account-mode servers keep the roster private; pairing then relies on the code alone.
+        if response.statusCode == 401 { return [] }
+        guard response.statusCode == 200 else { throw UploadError.invalidResponse }
         return try JSONDecoder().decode(Reply.self, from: data).workers
     }
 
-    func pair(code: String, expectedWorkerId: String) async throws -> String {
+    func pair(code: String, expectedWorkerId: String?) async throws -> PairedWorker {
         struct Body: Encodable { let code: String }
-        struct Reply: Decodable { let deviceToken: String; let workerId: String }
+        struct Reply: Decodable { let deviceToken: String; let workerId: String; let displayName: String? }
         let data = try await request(path: "api/devices/pair", body: Body(code: code.uppercased()))
         let reply = try JSONDecoder().decode(Reply.self, from: data)
-        guard reply.workerId == expectedWorkerId else { throw UploadError.wrongWorker }
+        if let expectedWorkerId, reply.workerId != expectedWorkerId { throw UploadError.wrongWorker }
         guard let origin, reply.deviceToken.count == 43 else { throw UploadError.invalidResponse }
         let value = Data("\(origin.absoluteString)|\(reply.workerId)|\(reply.deviceToken)".utf8)
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
@@ -150,7 +159,7 @@ final class LocalHTTPSUploader: SiteGuardUploader {
         item[kSecValueData as String] = value
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         guard SecItemAdd(item as CFDictionary, nil) == errSecSuccess else { throw UploadError.invalidResponse }
-        return reply.workerId
+        return PairedWorker(id: reply.workerId, displayName: reply.displayName)
     }
 
     func upload(_ checkIn: DeviceCheckIn) async throws -> String {

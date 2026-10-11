@@ -92,6 +92,17 @@ export const RequestSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
   note: z.string().nullable(),
 });
+export const RestRecommendationSchema = z.strictObject({
+  id: Id,
+  sessionId: Id,
+  workerId: Id,
+  suggestedMinutes: z.number().int().min(5).max(30),
+  rationale: z.array(z.string()).min(1),
+  limitations: z.array(z.string()).min(1),
+  origin: z.enum(["gemini", "deterministic"]),
+  modelVersion: z.string().min(1),
+  createdAt: ISO,
+});
 export const SymptomSchema = z.strictObject({
   id: Id,
   workerId: Id,
@@ -178,6 +189,7 @@ export type Assignment = z.infer<typeof AssignmentSchema>;
 export type Task = z.infer<typeof TaskSchema>;
 export type Availability = z.infer<typeof AvailabilitySchema>;
 export type RestRequest = z.infer<typeof RequestSchema>;
+export type RestRecommendation = z.infer<typeof RestRecommendationSchema>;
 export type Symptom = z.infer<typeof SymptomSchema>;
 export type MetricSummary = z.infer<typeof MetricSummarySchema>;
 export type Summary = z.infer<typeof SummarySchema>;
@@ -200,4 +212,5 @@ export interface Overview extends Schedule {
   symptomReports: Symptom[];
   sharedSessionIds: string[];
   sharedSessions: Session[];
+  restRecommendations?: RestRecommendation[];
 }

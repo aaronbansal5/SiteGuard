@@ -70,6 +70,12 @@ const cases: Case[] = [
     expected: { anonymous: 401, workerA: 403, workerB: 403, supervisor: 403 },
   },
   {
+    route: "GET /api/sessions/:id/rest-recommendation",
+    name: "rest recommendations are worker-private",
+    url: `/api/sessions/${UNSHARED}/rest-recommendation`,
+    expected: ownerOnly(200),
+  },
+  {
     route: "GET /api/health",
     name: "health",
     url: "/api/health",

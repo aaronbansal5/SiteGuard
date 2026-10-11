@@ -110,7 +110,7 @@ struct HomeView: View {
     @State private var connectionExpanded = false
 
     private var selectedMatchesPairing: Bool {
-        !model.isPaired || selectedWorkerId == model.pairedWorkerId
+        !model.isPaired || model.rosterRequiresSignIn || selectedWorkerId == model.pairedWorkerId
     }
 
     var body: some View {
@@ -172,7 +172,7 @@ struct HomeView: View {
                     .background(SGStyle.soft, in: Capsule())
             }
             Text(model.isPaired
-                 ? "Paired to \(model.availableWorkers.first(where: { $0.id == model.pairedWorkerId })?.displayName ?? model.pairedWorkerId ?? "worker"). Upload and manager sharing are still off unless you choose them for each check-in."
+                 ? "Paired to \(model.pairedWorkerName ?? model.availableWorkers.first(where: { $0.id == model.pairedWorkerId })?.displayName ?? "your account"). Upload and manager sharing are still off unless you choose them for each check-in."
                  : "You can measure locally now. Pair to send a future check-in to the desktop.")
                 .font(.callout).foregroundStyle(SGStyle.muted)
             DisclosureGroup(model.isPaired ? "Change pairing" : "Connect this phone", isExpanded: $connectionExpanded) {
@@ -209,7 +209,8 @@ struct HomeView: View {
                                                 selectedWorkerId: selectedWorkerId) }
                     }
                     .buttonStyle(SGPrimaryButton())
-                    .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).count != 8 || selectedWorkerId.isEmpty)
+                    .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).count != 8
+                              || (selectedWorkerId.isEmpty && !model.rosterRequiresSignIn))
                     if let message = model.pairingMessage {
                         Label(message, systemImage: model.isPaired ? "checkmark.circle" : "exclamationmark.circle")
                             .font(.footnote)

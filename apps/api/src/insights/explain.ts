@@ -1,7 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import type { Summary, Explanation } from "@siteguard/contracts";
+import { randomUUID } from "node:crypto";
+import type {
+  Summary,
+  Explanation,
+  RestRecommendation,
+} from "@siteguard/contracts";
 import type { Config } from "../config.js";
 export function sessionFacts(s: Summary) {
   const facts: Record<string, string[]> = {};
@@ -74,8 +79,128 @@ export function renderSelection(raw: unknown, facts: Record<string, string[]>) {
     return facts[s.factId][s.variant];
   });
 }
-// Gemini rejects request deadlines under 10 s (INVALID_ARGUMENT), so stay above that.
-export const GEMINI_TIMEOUT_MS = 12000;
+// Keep the fallback responsive while allowing normal hosted-model latency.
+export const GEMINI_TIMEOUT_MS = 5000;
+export const REST_RECOMMENDATION_MIN_MINUTES = 5;
+export const REST_RECOMMENDATION_MAX_MINUTES = 30;
+export const REST_RECOMMENDATION_MODEL_VERSION = "rest-recommendation-v1";
+const recommendationSchema = z.strictObject({
+  suggestedMinutes: z.number().int(),
+  rationale: z.array(z.string()).min(1).max(4),
+});
+const recommendationLimitations = [
+  "This is a non-diagnostic suggestion, not medical advice or work clearance.",
+  "It does not know symptoms, sensor error, workload causes, or clinical history.",
+  "A worker may ignore or change it; only the worker requests rest and a supervisor approves and schedules it.",
+];
+export function recommendationFacts(summary: Summary) {
+  return {
+    signal:
+      summary.pulse.status === "available" &&
+      summary.breathing.status === "available"
+        ? [
+            "Both pulse and breathing windows produced descriptive observations.",
+          ]
+        : [
+            "One or more measurement windows had insufficient valid observations.",
+          ],
+    context: [
+      summary.context.workload
+        ? `Recorded workload context: ${summary.context.workload}.`
+        : "Workload context was not recorded.",
+      summary.context.temperatureC === null
+        ? "Temperature context was not recorded."
+        : "Temperature context was recorded.",
+    ],
+  };
+}
+export class RestRecommender {
+  constructor(
+    private config: Config,
+    private generate?: (facts: Record<string, string[]>) => Promise<unknown>,
+  ) {}
+  async recommend(
+    summary: Summary,
+    sessionId: string,
+    workerId: string,
+  ): Promise<RestRecommendation> {
+    const facts = recommendationFacts(summary);
+    let origin: RestRecommendation["origin"] = "deterministic";
+    let suggestedMinutes =
+      summary.pulse.status === "available" &&
+      summary.breathing.status === "available"
+        ? 15
+        : 10;
+    let rationale = Object.values(facts).map((v) => v[0]);
+    if ((this.config.geminiKey && this.config.geminiModel) || this.generate) {
+      try {
+        const task = this.generate ? this.generate(facts) : this.call(facts);
+        const raw = await Promise.race([
+          task,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), GEMINI_TIMEOUT_MS),
+          ),
+        ]);
+        const parsed = recommendationSchema.parse(raw);
+        if (
+          parsed.suggestedMinutes >= REST_RECOMMENDATION_MIN_MINUTES &&
+          parsed.suggestedMinutes <= REST_RECOMMENDATION_MAX_MINUTES
+        ) {
+          suggestedMinutes = parsed.suggestedMinutes;
+          rationale = parsed.rationale;
+          origin = "gemini";
+        }
+      } catch {
+        // Deterministic bounded fallback is the expected degraded mode.
+      }
+    }
+    return {
+      id: randomUUID(),
+      sessionId,
+      workerId,
+      suggestedMinutes,
+      rationale,
+      limitations: recommendationLimitations,
+      origin,
+      modelVersion: REST_RECOMMENDATION_MODEL_VERSION,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  private async call(facts: Record<string, string[]>) {
+    const ai = new GoogleGenAI({ apiKey: this.config.geminiKey });
+    const response = await ai.models.generateContent({
+      model: this.config.geminiModel!,
+      contents: JSON.stringify({
+        instruction:
+          "Return a bounded, non-diagnostic suggestion only. Do not diagnose, claim clearance, schedule or approve rest. Use only provided facts.",
+        facts,
+      }),
+      config: {
+        httpOptions: {
+          timeout: GEMINI_TIMEOUT_MS,
+          retryOptions: { attempts: 1 },
+        },
+        abortSignal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        responseMimeType: "application/json",
+        responseJsonSchema: {
+          type: "object",
+          properties: {
+            suggestedMinutes: { type: "integer", minimum: 5, maximum: 30 },
+            rationale: {
+              type: "array",
+              items: { type: "string" },
+              minItems: 1,
+              maxItems: 4,
+            },
+          },
+          required: ["suggestedMinutes", "rationale"],
+          additionalProperties: false,
+        },
+      },
+    });
+    return JSON.parse(response.text || "null");
+  }
+}
 export class Explainer {
   private cache = new Map<string, Explanation>();
   /** Why the most recent explain() call used the deterministic fallback; never contains the API key. */

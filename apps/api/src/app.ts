@@ -118,7 +118,11 @@ export async function createApp(
       ["POST", "PATCH", "DELETE"].includes(req.method) &&
       req.url.startsWith("/api/") &&
       !req.headers.authorization &&
-      req.url.split("?")[0] !== "/api/auth/mobile/exchange"
+      // Cookie-less native exchanges: protected by single-use codes, not by
+      // browser origin.
+      !["/api/auth/mobile/exchange", "/api/devices/pair"].includes(
+        req.url.split("?")[0],
+      )
     ) {
       if (
         ![c.appOrigin, ...c.authAdditionalOrigins].includes(

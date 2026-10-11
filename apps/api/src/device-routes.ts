@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   ContextSchema,
@@ -14,6 +14,7 @@ import type { Config } from "./config.js";
 import { worker } from "./auth.js";
 import { fail } from "./errors.js";
 import { sessionSummary } from "./domain/sessions.js";
+import { RestRecommender } from "./insights/explain.js";
 
 // Deliberately local-demo-only. One-time codes stay in memory. Only a hash of
 // each device credential is persisted; no raw token or camera frame is stored.
@@ -44,6 +45,8 @@ export function registerDeviceRoutes(
 ) {
   const pairings = new Map<string, Pairing>();
   const failures = new Map<string, { count: number; until: number }>();
+  const restRecommender = new RestRecommender(c);
+  const localTest = c.checkInTestMode && c.demoMode && !c.hosted;
   const local = (req: FastifyRequest) => {
     const remote = req.socket.remoteAddress;
     if (
@@ -139,10 +142,12 @@ export function registerDeviceRoutes(
     );
     pairings.delete(code);
     failures.delete(key);
+    const paired = await r.get("workers", pairing.workerId);
     reply.code(201);
     return {
       deviceToken: token,
       workerId: pairing.workerId,
+      displayName: paired?.displayName ?? null,
       expiresAt: new Date(expiresAt).toISOString(),
     };
   });
@@ -193,12 +198,25 @@ export function registerDeviceRoutes(
           fail(409, "UPLOAD_CONFLICT", "This check-in ID was already used");
         return existing;
       }
-      const br = (await tx.list("breaks")).find(
+      let br = (await tx.list("breaks")).find(
         (b) =>
           b.workerId === workerId &&
           start >= Date.parse(b.startsAt) &&
           end <= Date.parse(b.endsAt),
       );
+      if (!br && localTest) {
+        br = {
+          id: randomUUID(),
+          workerId,
+          startsAt: body.startedAt,
+          endsAt: body.endedAt,
+          kind: "additional",
+          policyLabel: "Local test session · no scheduled break",
+          revision: 0,
+          requestId: null,
+        };
+        await tx.put("breaks", br);
+      }
       if (!br)
         fail(
           409,
@@ -223,7 +241,19 @@ export function registerDeviceRoutes(
         await tx.insertReading(body.id, envelope);
       return session;
     });
+    const summary = await sessionSummary(r, result.id);
+    let recommendation = (await r.list("rest_recommendations")).find(
+      (item) => item.sessionId === result.id,
+    );
+    if (!recommendation) {
+      recommendation = await restRecommender.recommend(
+        summary,
+        result.id,
+        result.workerId,
+      );
+      await r.put("rest_recommendations", recommendation);
+    }
     reply.code(201);
-    return { session: result, summary: await sessionSummary(r, result.id) };
+    return { session: result, summary, recommendation };
   });
 }

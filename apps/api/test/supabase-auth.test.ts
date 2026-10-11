@@ -66,6 +66,88 @@ async function login(
   });
 }
 describe("Supabase account auth", () => {
+  it("lets a native iPhone pair and upload without a browser origin", async () => {
+    const item = await createApp({
+      authMode: "supabase",
+      appOrigin: headers.origin,
+      supabaseUrl: "https://test.supabase.co",
+      supabasePublishableKey: "sb_publishable_fixture",
+      supabaseAdminEmail: "admin@example.com",
+      checkInTestMode: true,
+      demoMode: true,
+      hosted: false,
+      databaseUrl: undefined,
+      sqlitePath: ":memory:",
+      cookieSecret: "cookie-secret-at-least-32-characters",
+      measurementToken: "internal-test-token",
+      webDist: "/nonexistent",
+    });
+    apps.push(item);
+    const { app } = item;
+    authenticated();
+    const response = await login(app);
+    const cookie = response.cookies.find(
+      (entry) => entry.name === "siteguard_session",
+    )!;
+    const tls = { "x-siteguard-public-proto": "https" };
+    const issued = await app.inject({
+      method: "POST",
+      url: "/api/devices/pairings",
+      headers: { ...headers, ...tls, cookie: `${cookie.name}=${cookie.value}` },
+      payload: {},
+    });
+    expect(issued.statusCode).toBe(201);
+    // A cross-site browser page still cannot drive the exchange.
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/devices/pair",
+          headers: { ...tls, origin: "https://evil.example" },
+          payload: { code: issued.json().code },
+        })
+      ).statusCode,
+    ).toBe(403);
+    // The phone sends neither a cookie nor an Origin header.
+    const paired = await app.inject({
+      method: "POST",
+      url: "/api/devices/pair",
+      headers: tls,
+      payload: { code: issued.json().code },
+    });
+    expect(paired.statusCode).toBe(201);
+    expect(paired.json().workerId).toBe(response.json().identity.workerId);
+    expect(paired.json().displayName).toBe("Jordan");
+    const startedAt = new Date(Date.now() - 5000).toISOString();
+    const uploaded = await app.inject({
+      method: "POST",
+      url: "/api/device/check-ins",
+      headers: { ...tls, authorization: `Bearer ${paired.json().deviceToken}` },
+      payload: {
+        id: "00000000-0000-4000-8000-00000000f001",
+        startedAt,
+        endedAt: new Date(Date.now() - 1000).toISOString(),
+        consentVersion: "v1",
+        shareWithSupervisor: true,
+        context: { workload: null, temperatureC: null },
+        readings: [
+          {
+            sequence: 0,
+            reading: {
+              timestamp: new Date(Date.now() - 3000).toISOString(),
+              heartRateBpm: 72,
+              respiratoryRateBrpm: 15,
+              quality: "valid",
+              source: "presage",
+            },
+          },
+        ],
+      },
+    });
+    expect(uploaded.statusCode).toBe(201);
+    expect(uploaded.json().recommendation.suggestedMinutes).toBeGreaterThan(0);
+  });
+
   it("creates a dedicated worker, ignores metadata roles, isolates access and revokes logout sessions", async () => {
     const { app, repo } = await setup();
     authenticated();

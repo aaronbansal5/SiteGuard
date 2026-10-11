@@ -7,5 +7,6 @@ SiteGuardCheckIn.xcodeproj/
 # Xcode user state and build output
 xcuserdata/
 DerivedData/
+.derivedData/
 *.xcuserstate
 .swiftpm/

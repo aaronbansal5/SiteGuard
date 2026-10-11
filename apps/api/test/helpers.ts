@@ -5,6 +5,9 @@ export async function testApp() {
   return createApp({
     sqlitePath: ":memory:",
     databaseUrl: undefined,
+    authMode: "demo",
+    demoMode: true,
+    hosted: false,
     cookieSecret: "test-secret-at-least-thirty-two-characters",
     measurementToken: "internal-test-token",
     bridgeToken: undefined,

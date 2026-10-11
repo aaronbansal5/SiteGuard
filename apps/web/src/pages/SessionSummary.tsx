@@ -9,6 +9,7 @@ import type {
   MetricSummary,
   Comparison,
   TimeSeriesEvidence,
+  RestRecommendation,
 } from "@siteguard/contracts";
 import type {
   MetricFeatures,
@@ -279,6 +280,9 @@ function ResearchRestSupportCard({
   completed: boolean;
 }) {
   const [attempt, setAttempt] = useState(0);
+  const recommendation = useResource<{ recommendation: RestRecommendation }>(
+    `/sessions/${sessionId}/rest-recommendation`,
+  );
   const [result, setResult] = useState<
     | { status: "loading" }
     | { status: "available"; support: RestSupportResult }
@@ -378,6 +382,25 @@ function ResearchRestSupportCard({
               ? "Local synthetic-model theory demo — trained on fabricated research records; this output is unvalidated."
               : "Descriptive research rule — no trained-model result is available for this check-in."}
           </p>
+          {recommendation.data && (
+            <div className="notice subtle">
+              <strong>
+                Personal support suggestion:{" "}
+                {recommendation.data.recommendation.suggestedMinutes} minutes
+              </strong>
+              <p>
+                This is a bounded, non-diagnostic suggestion—not medical advice,
+                clearance, approval, or a scheduled break. You choose whether to
+                request it; a supervisor must explicitly approve and schedule
+                additional rest.
+              </p>
+              {recommendation.data.recommendation.rationale.map((text) => (
+                <p key={text} className="fine-print">
+                  {text}
+                </p>
+              ))}
+            </div>
+          )}
           <div className="limitations">
             <h3>Uncertainty: {result.support.uncertainty.level}</h3>
             {result.support.uncertainty.reasons.length ? (

@@ -42,6 +42,9 @@ function Worker({ workerId }: { workerId: string }) {
     ),
     requests = useResource<{ requests: RestRequest[] }>("/rest-requests", 3000);
   const now = Date.now(),
+    hasProtectedBreak = (breaks.data?.breaks ?? []).some(
+      (item) => item.kind === "protected",
+    ),
     br = breaks.data?.breaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
     ),
@@ -83,12 +86,16 @@ function Worker({ workerId }: { workerId: string }) {
                 : "Your next break is protected."}
             </h2>
             <p>
-              {br
-                ? `${time(br.startsAt)} – ${time(br.endsAt)} · ${br.policyLabel}`
-                : "Voluntary measurement is available during a scheduled break. Assistance is always available."}
+              {!hasProtectedBreak
+                ? "No protected break is available yet. Ask your supervisor to schedule your initial protected break; SiteGuard will not create one automatically."
+                : br
+                  ? `${time(br.startsAt)} – ${time(br.endsAt)} · ${br.policyLabel}`
+                  : "Voluntary measurement is available during a scheduled break. Assistance is always available."}
             </p>
           </div>
-          {active ? (
+          {!hasProtectedBreak ? (
+            <span className="badge amber">Supervisor scheduling required</span>
+          ) : active ? (
             <Link
               className="button primary"
               to={`/sessions/${active.id}/measure`}

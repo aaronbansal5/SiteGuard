@@ -37,7 +37,12 @@ import {
   validateAssignments,
 } from "./domain/scheduling.js";
 import { audit } from "./domain/requests.js";
-import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
+import {
+  Explainer,
+  RestRecommender,
+  scheduleFacts,
+  sessionFacts,
+} from "./insights/explain.js";
 import { personalInsights, personalTrend } from "./domain/personal.js";
 import { createResearchDemoEvaluator } from "./research/synthetic-demo.js";
 import { timeSeriesEvidence } from "./domain/timeseries-evidence.js";
@@ -49,6 +54,7 @@ export async function registerRoutes(
   manager: MeasurementManager,
 ) {
   const explainer = new Explainer(c);
+  const restRecommender = new RestRecommender(c);
   const evaluateResearchDemo = createResearchDemoEvaluator(c);
   const identityStreams = new Map<string, number>();
   const workerStreams = new Map<string, number>();
@@ -418,7 +424,19 @@ export async function registerRoutes(
       }
       return current;
     });
-    return { session, summary: await sessionSummary(r, s.id) };
+    const summary = await sessionSummary(r, s.id);
+    let recommendation = await r
+      .list("rest_recommendations")
+      .then((items) => items.find((item) => item.sessionId === s.id));
+    if (!recommendation) {
+      recommendation = await restRecommender.recommend(
+        summary,
+        s.id,
+        s.workerId,
+      );
+      await r.put("rest_recommendations", recommendation);
+    }
+    return { session, summary, recommendation };
   });
   app.get("/api/sessions/:id/summary", async (req) => {
     const s = await access(req, id(req));
@@ -448,6 +466,23 @@ export async function registerRoutes(
       );
     const summary = await sessionSummary(r, s.id);
     return evaluateResearchDemo(summary);
+  });
+  app.get("/api/sessions/:id/rest-recommendation", async (req) => {
+    const s = await access(req, id(req));
+    if (s.status !== "completed")
+      fail(409, "SESSION_ACTIVE", "Complete the check-in first");
+    let recommendation = (await r.list("rest_recommendations")).find(
+      (item) => item.sessionId === s.id,
+    );
+    if (!recommendation) {
+      recommendation = await restRecommender.recommend(
+        await sessionSummary(r, s.id),
+        s.id,
+        s.workerId,
+      );
+      await r.put("rest_recommendations", recommendation);
+    }
+    return { recommendation };
   });
   app.get("/api/sessions/:id/personal-insights", async (req) => {
     const s = await ownSession(req);
@@ -914,6 +949,14 @@ export async function registerRoutes(
           .filter((s) => s.shareWithSupervisor && s.status === "completed")
           .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
           .slice(0, 20),
+        // Recommendations contain only bounded operational guidance and are
+        // included only when the worker shared the linked session.
+        restRecommendations: (await r.list("rest_recommendations")).filter(
+          (recommendation) =>
+            sessions.some(
+              (s) => s.id === recommendation.sessionId && s.shareWithSupervisor,
+            ),
+        ),
         coverageGaps: coverageGaps(schedule),
       },
       sessions,

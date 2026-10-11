@@ -275,6 +275,24 @@ function Operations() {
                           </p>
                         )}
                         {r.note && <div className="request-note">{r.note}</div>}
+                        {r.kind === "additional_rest" &&
+                          r.sessionId &&
+                          o.restRecommendations?.find(
+                            (recommendation) =>
+                              recommendation.sessionId === r.sessionId,
+                          ) && (
+                            <div className="request-note">
+                              Worker-shared support suggestion:{" "}
+                              {
+                                o.restRecommendations.find(
+                                  (recommendation) =>
+                                    recommendation.sessionId === r.sessionId,
+                                )!.suggestedMinutes
+                              }{" "}
+                              minutes. This is non-diagnostic guidance only;
+                              supervisor approval and scheduling are required.
+                            </div>
+                          )}
                         <div className="request-actions">
                           {!["resolved", "declined"].includes(r.status) && (
                             <>

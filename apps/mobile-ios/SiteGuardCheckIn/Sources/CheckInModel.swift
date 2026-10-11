@@ -51,8 +51,11 @@ final class CheckInModel {
     private(set) var pairingMessage: String?
     private(set) var hasSavedPresageKey = false
     var pairedWorkerId: String? { uploader.pairedWorkerId }
+    private(set) var pairedWorkerName = UserDefaults.standard.string(forKey: "siteguard-paired-worker-name")
     private(set) var serverURLText: String
     private(set) var availableWorkers: [DeviceWorker] = []
+    /// True when the server keeps its worker list behind sign-in; the pairing code identifies the worker.
+    private(set) var rosterRequiresSignIn = false
     private(set) var canRetryUpload = false
     private(set) var isFinishing = false
     var isPaired: Bool { uploader.isPaired }
@@ -160,27 +163,36 @@ final class CheckInModel {
             else { throw UploadError.notConfigured }
             try uploader.configure(origin: origin)
             availableWorkers = try await uploader.workers()
-            pairingMessage = availableWorkers.isEmpty ? "No demo workers found on this server." : nil
+            rosterRequiresSignIn = availableWorkers.isEmpty
+            pairingMessage = rosterRequiresSignIn
+                ? "Connected. Sign in on the SiteGuard website, get a one-time code, and enter it below."
+                : nil
         } catch {
             availableWorkers = []
+            rosterRequiresSignIn = false
             pairingMessage = error.localizedDescription
         }
     }
 
     func pair(code: String, serverURL: String, selectedWorkerId: String) async {
         do {
-            guard availableWorkers.contains(where: { $0.id == selectedWorkerId }) else {
-                throw UploadError.wrongWorker
+            if !rosterRequiresSignIn {
+                guard availableWorkers.contains(where: { $0.id == selectedWorkerId }) else {
+                    throw UploadError.wrongWorker
+                }
             }
             guard let origin = URL(string: serverURL.trimmingCharacters(in: .whitespacesAndNewlines))
             else { throw UploadError.notConfigured }
             try uploader.configure(origin: origin)
-            let workerId = try await uploader.pair(
+            let worker = try await uploader.pair(
                 code: code.trimmingCharacters(in: .whitespacesAndNewlines),
-                expectedWorkerId: selectedWorkerId)
+                expectedWorkerId: rosterRequiresSignIn ? nil : selectedWorkerId)
             serverURLText = origin.absoluteString
             UserDefaults.standard.set(serverURLText, forKey: "siteguard-device-origin")
-            pairingMessage = "Paired to worker \(workerId). Upload remains optional for every check-in."
+            pairedWorkerName = worker.displayName
+                ?? availableWorkers.first(where: { $0.id == worker.id })?.displayName
+            UserDefaults.standard.set(pairedWorkerName, forKey: "siteguard-paired-worker-name")
+            pairingMessage = "Paired to \(pairedWorkerName ?? "your account"). Upload remains optional for every check-in."
         } catch {
             pairingMessage = error.localizedDescription
         }

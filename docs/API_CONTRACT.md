@@ -35,6 +35,12 @@ PATCH /sessions/:id/sharing {shareWithSupervisor:false} → {session}. Owning wo
 GET /workers/:id/supervisor-view → {view:SupervisorView}. Worker self only (supervisors 403). The records about this worker that GET /supervisor/overview returns (breaks, assignments, referenced tasks, availability, requests, symptom reports) plus every session the worker currently shares (id, source, status, times, linkedToRequest). No readings, summaries, personal insights or self-reports.
 POST /symptom-reports {sessionId:null|UUID,codes:nonempty array,note:null|string} → 201 {report,request}. Atomic report/assistance linkage, no session required.
 POST /rest-requests {sessionId:null|UUID,kind,requestedMinutes:null|integer} → 201 {request}. Additional rest 1..120; assistance null. Input bounds are not medical recommendations.
+Completed check-ins may also produce a private `RestRecommendation`: a
+non-diagnostic suggested duration bounded to 5–30 minutes, rationale facts,
+uncertainty/limitations, and origin (`gemini` or deterministic). It is persisted
+by session and never schedules a break. The worker chooses whether to request
+rest; only an explicit supervisor approval creates an additional break. A
+supervisor sees the recommendation only when the linked session was shared.
 GET /rest-requests → own worker requests or supervisor list.
 PATCH /rest-requests/:id {action:acknowledge|approve|resolve|decline,revision,note,restStartsAt?,restEndsAt?} → {request,scheduleRevision}. Supervisor. Assistance acknowledge/resolve only. Approval creates rest >=requested minutes; no protected changes. Explicit note required. Acknowledgment retains block. Audit every action; stale revisions 409.
 GET /supervisor/overview → {workers,breaks,requests,assignments,tasks,availability,symptomReports,sharedSessionIds,sharedSessions,coverageGaps,scheduleRevision}. `sharedSessions` contains metadata for the 20 newest completed sessions with worker sharing consent; readings remain on the separately authorized session endpoint. No physiological histories, personal insights or self-reports in the overview.

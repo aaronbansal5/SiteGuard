@@ -361,6 +361,70 @@ describe("local iPhone upload", () => {
     ).toBe(409);
   });
 
+  it("identifies the paired worker, and uploads outside a break only in local test mode", async () => {
+    const workerId = fixtureId(6); // its seeded protected break is later
+    for (const checkInTestMode of [false, true]) {
+      const ctx = await createApp({
+        sqlitePath: ":memory:",
+        databaseUrl: undefined,
+        authMode: "demo",
+        demoMode: true,
+        hosted: false,
+        checkInTestMode,
+        cookieSecret: "test-secret-at-least-thirty-two-characters",
+        measurementToken: "internal-test-token",
+        bridgeToken: undefined,
+        webDist: "/nonexistent/siteguard-web",
+        geminiKey: undefined,
+        geminiModel: undefined,
+      });
+      running.push(ctx);
+      const cookie = await login(ctx.app, "worker", workerId);
+      const code = await ctx.app.inject({
+        method: "POST",
+        url: "/api/devices/pairings",
+        headers: { ...tls, cookie },
+        payload: {},
+      });
+      const exchange = await ctx.app.inject({
+        method: "POST",
+        url: "/api/devices/pair",
+        headers: tls,
+        payload: { code: code.json().code },
+      });
+      expect(exchange.statusCode).toBe(201);
+      expect(exchange.json().workerId).toBe(workerId);
+      expect(exchange.json().displayName).toBe(
+        (await ctx.repo.get("workers", workerId))!.displayName,
+      );
+      const upload = payload(false);
+      const uploaded = await ctx.app.inject({
+        method: "POST",
+        url: "/api/device/check-ins",
+        headers: {
+          ...tls,
+          authorization: `Bearer ${exchange.json().deviceToken}`,
+        },
+        payload: upload,
+      });
+      if (!checkInTestMode) {
+        expect(uploaded.statusCode).toBe(409);
+        expect(uploaded.json().error.code).toBe("BREAK_INACTIVE");
+        continue;
+      }
+      expect(uploaded.statusCode).toBe(201);
+      const recommendation = uploaded.json().recommendation;
+      expect(recommendation.sessionId).toBe(upload.id);
+      expect(recommendation.suggestedMinutes).toBeGreaterThanOrEqual(5);
+      expect(recommendation.suggestedMinutes).toBeLessThanOrEqual(30);
+      expect(
+        (await ctx.repo.list("rest_recommendations")).some(
+          (item) => item.sessionId === upload.id,
+        ),
+      ).toBe(true);
+    }
+  });
+
   it("rejects synthetic and stale data", async () => {
     const { app, token } = await pair();
     const headers = { ...tls, authorization: `Bearer ${token}` };

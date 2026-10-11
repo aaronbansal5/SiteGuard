@@ -14,6 +14,7 @@ import type {
   ReadingEnvelope,
   Schedule,
   SelfReport,
+  RestRecommendation,
 } from "@siteguard/contracts";
 import { IngestSchema, SelfReportSchema } from "@siteguard/contracts";
 import type { Config } from "../config.js";
@@ -37,6 +38,7 @@ export interface Entities {
   worker_availability: Availability;
   symptom_reports: Symptom;
   audit_events: Audit;
+  rest_recommendations: RestRecommendation;
 }
 const columns: Record<keyof Entities, string[]> = {
   workers: [],
@@ -48,6 +50,7 @@ const columns: Record<keyof Entities, string[]> = {
   worker_availability: ["workerId"],
   symptom_reports: ["workerId", "sessionId", "assistanceRequestId"],
   audit_events: [],
+  rest_recommendations: ["sessionId", "workerId"],
 };
 const snake = (s: string) => s.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
 export class Repository {
@@ -65,6 +68,7 @@ export class Repository {
       "004_device_pairings",
       "004_safety",
       "005_mobile",
+      "006_rest_recommendations",
     ]) {
       await this.transaction(async (r) => {
         const applied = await r.driver.query(

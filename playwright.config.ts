@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: "http://127.0.0.1:5173/api/health",
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 30000,
     env: {
       SQLITE_PATH: ".data/e2e.sqlite",
@@ -24,6 +24,11 @@ export default defineConfig({
       SITEGUARD_ALLOW_SQLITE: "true",
       COOKIE_SECRET: "e2e-cookie-secret-at-least-thirty-two-characters",
       MEASUREMENT_TOKEN: "e2e-internal-token",
+      AUTH_MODE: "demo",
+      SUPABASE_URL: "",
+      SUPABASE_PUBLISHABLE_KEY: "",
+      VITE_SUPABASE_URL: "",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "",
       DEMO_MODE: "true",
       CHECK_IN_TEST_MODE: "false",
       HOSTED: "false",

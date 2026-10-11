@@ -22,21 +22,21 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UILaunchScreen</key>
-	<dict/>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>SiteGuard uses the front camera only during a check-in you start, to measure pulse and breathing on this phone. Images and video are not stored.</string>
-	<key>SMARTSPECTRA_API_KEY</key>
-	<string>$(SMARTSPECTRA_API_KEY)</string>
 	<key>SITEGUARD_CHECKIN_INTERVAL_SECONDS</key>
 	<string>$(SITEGUARD_CHECKIN_INTERVAL_SECONDS)</string>
 	<key>SITEGUARD_DEMO_MODE</key>
 	<string>$(SITEGUARD_DEMO_MODE)</string>
 	<key>SITEGUARD_WEB_URL</key>
 	<string>$(SITEGUARD_WEB_URL)</string>
+	<key>SMARTSPECTRA_API_KEY</key>
+	<string>$(SMARTSPECTRA_API_KEY)</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
 </dict>
 </plist>

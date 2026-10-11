@@ -37,6 +37,7 @@ export async function seed(r: Repository, reset = false) {
       await tx.driver.query("UPDATE breaks SET request_id=NULL");
       await tx.driver.query("UPDATE rest_requests SET session_id=NULL");
       await tx.clear("rest_requests");
+      await tx.clear("rest_recommendations");
       await tx.clear("sessions");
       await tx.clear("breaks");
       await tx.clear("tasks");

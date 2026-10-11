@@ -34,11 +34,14 @@ export function CheckIn() {
   const availableBreak =
     workerBreaks.find(
       (b) => Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now,
-    ) ?? workerBreaks.find((b) => Date.parse(b.endsAt) > now);
-  const requestedBreak = workerBreaks.find(
-    (b) => b.id === search.get("breakId"),
+    ) ??
+    [...(breaks.data?.breaks ?? [])].sort(
+      (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
+    )[0];
+  const breakId = search.get("breakId") || availableBreak?.id;
+  const hasProtectedBreak = (breaks.data?.breaks ?? []).some(
+    (item) => item.kind === "protected",
   );
-  const breakId = requestedBreak?.id || availableBreak?.id;
   const onDemand = Boolean(
     availableBreak &&
     !(
@@ -62,6 +65,22 @@ export function CheckIn() {
     }
   }, [browserCamera, localTest, health.data, sourceSelected]);
   if (identity?.role !== "worker") return <ChooseWorker />;
+  if (!breaks.loading && breaks.data && !hasProtectedBreak) {
+    return (
+      <section className="card empty-state">
+        <ShieldCheck size={30} />
+        <h1>No protected break is scheduled</h1>
+        <p>
+          A supervisor must schedule your initial protected break. SiteGuard
+          never creates one automatically.
+        </p>
+        <Link className="button secondary" to="/worker">
+          Return to workspace
+        </Link>
+        <HelpActions />
+      </section>
+    );
+  }
   return (
     <>
       <PageHeading
