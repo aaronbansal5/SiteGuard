@@ -50,15 +50,11 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(spacing: 11) {
-                        Image(systemName: "shield.lefthalf.filled")
-                            .font(.title3)
-                            .foregroundStyle(SGStyle.primary)
-                            .frame(width: 40, height: 40)
-                            .background(SGStyle.soft, in: RoundedRectangle(cornerRadius: 12))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("SiteGuard").font(.title3.bold()).foregroundStyle(SGStyle.ink)
-                            Text("AdaptiveBreak").font(.caption).foregroundStyle(SGStyle.muted)
-                        }
+                        Image("SiteGuardLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 44)
+                            .accessibilityLabel("SiteGuard")
                         Spacer()
                         if model.configuration.demoMode {
                             Text("DEMO")
