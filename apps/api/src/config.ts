@@ -18,6 +18,8 @@ export interface Config {
   demoMode: boolean;
   /** Explicit opt-in to the local synthetic research artifact; never production. */
   researchDemoEnabled: boolean;
+  /** Local theory-demo override for applying the synthetic artifact to Presage summaries. */
+  researchDemoAllowPresage: boolean;
   hosted: boolean;
   bridgeUrl: string;
   bridgeToken?: string;
@@ -57,6 +59,10 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     researchDemoEnabled:
       process.env.DEMO_MODE === "true" &&
       process.env.RESEARCH_DEMO_ENABLED === "true",
+    researchDemoAllowPresage:
+      process.env.DEMO_MODE === "true" &&
+      process.env.RESEARCH_DEMO_ENABLED === "true" &&
+      process.env.RESEARCH_DEMO_ALLOW_PRESAGE === "true",
     hosted,
     bridgeUrl: process.env.PRESAGE_BRIDGE_URL || "http://127.0.0.1:4311",
     bridgeToken: process.env.PRESAGE_BRIDGE_TOKEN,
@@ -68,8 +74,11 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
       process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || undefined,
     ...overrides,
   };
-  if (!c.demoMode || process.env.NODE_ENV === "production")
+  if (!c.demoMode || process.env.NODE_ENV === "production") {
     c.researchDemoEnabled = false;
+    c.researchDemoAllowPresage = false;
+  }
+  if (!c.researchDemoEnabled) c.researchDemoAllowPresage = false;
   if (
     c.hosted &&
     (!(process.env.COOKIE_SECRET || overrides.cookieSecret) ||

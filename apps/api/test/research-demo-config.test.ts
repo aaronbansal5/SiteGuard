@@ -39,4 +39,14 @@ describe("explicit synthetic research demo configuration", () => {
         .researchDemoEnabled,
     ).toBe(false);
   });
+
+  it("keeps the Presage theory-demo override opt-in and non-production", () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("DEMO_MODE", "true");
+    vi.stubEnv("RESEARCH_DEMO_ENABLED", "true");
+    vi.stubEnv("RESEARCH_DEMO_ALLOW_PRESAGE", "true");
+    expect(loadConfig().researchDemoAllowPresage).toBe(true);
+    vi.stubEnv("NODE_ENV", "production");
+    expect(loadConfig().researchDemoAllowPresage).toBe(false);
+  });
 });

@@ -49,6 +49,15 @@ function enabled(c: Config): boolean {
   );
 }
 
+function canUseMeasurementSource(
+  c: Config,
+  source: Summary["source"] | null,
+): boolean {
+  return (
+    source === "mock" || (source === "presage" && c.researchDemoAllowPresage)
+  );
+}
+
 async function loadArtifact(): Promise<LoadedArtifact | null> {
   try {
     const file = await open(resolve(DEMO_ARTIFACT_PATH), "r");
@@ -93,7 +102,7 @@ export function createResearchDemoEvaluator(c: Config) {
   return async (summary: Summary): Promise<RestSupportResult> => {
     const base = evaluateRestSupport(summary);
     if (!enabled(c)) return base;
-    if (base.evidence.source !== "mock" || base.evidence.synthetic !== true)
+    if (!canUseMeasurementSource(c, base.evidence.source))
       return {
         ...base,
         demoModel: {
@@ -136,7 +145,9 @@ export function createResearchDemoEvaluator(c: Config) {
         target: TARGET,
       },
       disclaimer:
-        "Synthetic demo model — trained on fabricated records; not validated. " +
+        (base.evidence.source === "presage"
+          ? "Theory demo only: real Presage measurements are scored by a synthetic model; this is not validated. "
+          : "Synthetic demo model — trained on fabricated records; not validated. ") +
         "Experimental research estimate — not medical advice or work clearance. " +
         "The worker chooses whether to request rest; scheduled breaks remain protected.",
       uncertainty: {
