@@ -355,6 +355,9 @@ export class PresageBridge {
       );
     }
     this.sessions.set(session.bridgeSessionId, session);
+    // The caller may disappear during SDK startup, before ever opening SSE.
+    // Start the lease now; attaching the API event stream cancels it.
+    this.scheduleOrphanStop(session);
     this.retainBounded();
     this.json(res, 201, { bridgeSessionId: session.bridgeSessionId });
   }

@@ -842,6 +842,7 @@ main {
 }
 .demo-scenario-picker {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   background: #e8eee4;
   padding: 4px;

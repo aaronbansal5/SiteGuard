@@ -311,6 +311,15 @@ const DEMO_SCENARIOS = [
       "A worker wants a human follow-up. Help does not depend on camera quality or a model result.",
     next: "Select Request assistance to demonstrate the human follow-up flow. Requests are sent only when you choose to submit them.",
   },
+  {
+    label: "Feeling rested",
+    pulse: [78, 72, -5],
+    breathing: [18, 16, -2],
+    title: "Feeling rested? Check in with yourself.",
+    story:
+      "In this fictional scenario, the worker reports feeling rested after their break and has no concerns to raise. This is a self-report, not a conclusion from their pulse.",
+    next: "Return to the worker portal to continue the walkthrough. This experimental preview does not clear anyone for work or shorten a scheduled break.",
+  },
 ] as const;
 
 function PresentationPlayground({ sessionId }: { sessionId: string }) {
@@ -333,7 +342,8 @@ function PresentationPlayground({ sessionId }: { sessionId: string }) {
     const random = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
     setSelected(
       (current) =>
-        (current + 1 + Math.floor(random * 2)) % DEMO_SCENARIOS.length,
+        (current + 1 + Math.floor(random * (DEMO_SCENARIOS.length - 1))) %
+        DEMO_SCENARIOS.length,
     );
   };
   return (
@@ -380,6 +390,11 @@ function PresentationPlayground({ sessionId }: { sessionId: string }) {
           Start a fresh camera check-in
         </Link>
       )}
+      {selected === 3 && (
+        <Link className="button secondary" to="/worker">
+          Return to worker portal
+        </Link>
+      )}
       <HelpActions sessionId={sessionId} />
       <details className="flow-details research-details" open>
         <summary>Simulated example metrics</summary>
@@ -421,6 +436,19 @@ export function ResearchRestSupportCard({
   const recommendation = useResource<{ recommendation: RestRecommendation }>(
     `/sessions/${sessionId}/rest-recommendation`,
   );
+  const [demoAllowed, setDemoAllowed] = useState(false);
+  const [previewDemo, setPreviewDemo] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void api<{ presentationDemo?: boolean }>("/health")
+      .then((health) => {
+        if (active) setDemoAllowed(health.presentationDemo === true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const [result, setResult] = useState<
     | { status: "loading" }
     | { status: "available"; support: RestSupportResult }
@@ -460,7 +488,7 @@ export function ResearchRestSupportCard({
     >
       <div className="card-header">
         <div>
-          <h2 id="research-rest-support-title">Suggested next step</h2>
+          <h2 id="research-rest-support-title">What’s next?</h2>
           <p>
             {result.status === "available" &&
             result.support.presentationSimulation
@@ -478,6 +506,25 @@ export function ResearchRestSupportCard({
       {source === "mock" && (
         <p className="fine-print">Uses synthetic demo measurements.</p>
       )}
+      {demoAllowed &&
+        completed &&
+        !(
+          result.status === "available" && result.support.presentationSimulation
+        ) && (
+          <>
+            <button
+              type="button"
+              className="button secondary"
+              aria-expanded={previewDemo}
+              onClick={() => setPreviewDemo((value) => !value)}
+            >
+              {previewDemo
+                ? "Close experimental role-play"
+                : "Explore experimental role-play"}
+            </button>
+            {previewDemo && <PresentationPlayground sessionId={sessionId} />}
+          </>
+        )}
       {!completed ? (
         <p className="muted">Available after this check-in is completed.</p>
       ) : result.status === "loading" ? (

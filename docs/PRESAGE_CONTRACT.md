@@ -17,6 +17,9 @@ GET /v1/sessions/:id/events?after=sequence → SSE numeric monotonic event IDs.
 Data: {type:"reading",reading:VitalReading}, {type:"status",state:"positioning"|"measuring"|"stopped",message:string|null}, {type:"error",code,message,retryable:boolean}.
 POST /v1/sessions/:id/stop → {status:"stopped"}, idempotent, releases camera.
 One active camera; concurrent start 409. Same appSessionId start returns existing session.
+New captures have a ten-second event-connection grace period. If the app never
+opens its event stream, the bridge releases the orphaned capture. A connected
+stream cancels that timer; disconnect starts the same grace period for reconnect.
 Heartbeat comments every five seconds; replay latest 120 seconds. Expired cursor 409 REPLAY_EXPIRED. Backend reconnect after 1,2,4 seconds; interruption visible. Replay gap requires new session. Sequence deduplicated by backend. Persist before publishing. Stop bridge and drain writes before completion.
 Never substitute mock into Presage session. Start failure leaves app session stoppable with insufficient data. Source change starts new session.
 

@@ -204,7 +204,7 @@ test("phone countdown completes into the same labelled result", async ({
   await expect(page.getByTestId("checkin-elapsed")).toHaveText("01:30");
   await page.clock.fastForward(91000);
   await expect(
-    page.getByRole("heading", { name: "Suggested next step" }),
+    page.getByRole("heading", { name: "What’s next?" }),
   ).toBeVisible();
   await expect(
     page.getByText("Presentation result", { exact: true }),
@@ -273,6 +273,18 @@ for (const width of [1280, 390]) {
       .click();
     await expect(playground.getByRole("heading")).toHaveText(
       "Ask someone to check in with you.",
+    );
+    await playground
+      .getByRole("button", { name: "Feeling rested", exact: true })
+      .click();
+    await expect(playground.getByRole("heading")).toHaveText(
+      "Feeling rested? Check in with yourself.",
+    );
+    await expect(
+      playground.getByRole("link", { name: "Return to worker portal" }),
+    ).toHaveAttribute("href", "/worker");
+    await expect(playground).toContainText(
+      "self-report, not a conclusion from their pulse",
     );
     const examples = playground.getByRole("table", {
       name: "Simulated example metrics — fictional values and history",
