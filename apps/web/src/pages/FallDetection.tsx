@@ -313,8 +313,10 @@ function SceneView({ manager }: { manager: boolean }) {
                   </div>
                   <p>
                     {clock.format(new Date(incident.observedAt))} ·{" "}
-                    {incident.zoneId} · {incident.durationSeconds.toFixed(1)}{" "}
-                    seconds horizontal
+                    {incident.zoneId} ·{" "}
+                    {incident.durationSeconds === 0
+                      ? "Flagged immediately"
+                      : "Horizontal posture observed"}
                   </p>
                   <small>
                     {incident.source === "synthetic"
