@@ -10,6 +10,7 @@ import {
 import type { ReadingEnvelope } from "@siteguard/contracts";
 import { Activity, Wind } from "lucide-react";
 import { number } from "../lib/api";
+import { vitalSeries } from "../lib/vital-series";
 export function VitalChart({
   readings,
   metric,
@@ -19,24 +20,11 @@ export function VitalChart({
   metric: "pulse" | "breathing";
   startedAt: string;
 }) {
-  const key = metric === "pulse" ? "heartRateBpm" : "respiratoryRateBrpm",
-    valid = readings.filter(
-      (e) => e.reading.quality === "valid" && e.reading[key] !== null,
-    ),
-    latest = readings.at(-1)?.reading;
-  const latestValue = latest?.quality === "valid" ? latest[key] : null;
-  const observations = readings.map((e) => ({
-    seconds: Math.round(
-      (Date.parse(e.reading.timestamp) - Date.parse(startedAt)) / 1000,
-    ),
-    value: e.reading.quality === "valid" ? e.reading[key] : null,
-  }));
-  const data = observations.flatMap((observation, index) => {
-    const previous = observations[index - 1];
-    return previous && observation.seconds - previous.seconds > 2
-      ? [{ seconds: previous.seconds + 1, value: null }, observation]
-      : [observation];
-  });
+  const { data, validCount, latestValue, latestSeconds } = vitalSeries(
+    readings,
+    metric,
+    startedAt,
+  );
   return (
     <section className="card chart-card">
       <div className="chart-heading">
@@ -59,7 +47,7 @@ export function VitalChart({
       <div
         className="chart"
         role="img"
-        aria-label={`${metric === "pulse" ? "Pulse" : "Breathing rate"} over time; ${valid.length} valid observations. Latest valid observation: ${number(latestValue ?? null)} ${metric === "pulse" ? "bpm" : "brpm"}. Gaps indicate missing or invalid observations.`}
+        aria-label={`${metric === "pulse" ? "Pulse" : "Breathing rate"} over time; ${validCount} valid observations. Latest observation: ${number(latestValue)} ${metric === "pulse" ? "bpm" : "brpm"}. Gaps indicate missing or invalid observations.`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -73,13 +61,25 @@ export function VitalChart({
             />
             <XAxis
               dataKey="seconds"
+              type="number"
+              domain={["dataMin", "dataMax"]}
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 14, fill: "#4f635b" }}
-              tickFormatter={(v) => `${v}s`}
+              tickFormatter={(v) => `${Math.round(v)}s`}
             />
             <YAxis
-              domain={["auto", "auto"]}
+              domain={([min, max]: readonly [number, number]) => {
+                const span = Math.max(
+                  metric === "pulse" ? 20 : 6,
+                  (max - min) * 1.2,
+                );
+                const middle = (min + max) / 2;
+                return [
+                  Math.max(0, Math.floor(middle - span / 2)),
+                  Math.ceil(middle + span / 2),
+                ];
+              }}
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 14, fill: "#4f635b" }}
@@ -89,25 +89,37 @@ export function VitalChart({
                 value,
                 metric === "pulse" ? "bpm" : "brpm",
               ]}
-              labelFormatter={(v) => `${v} seconds`}
+              labelFormatter={(v) => `${number(Number(v))} seconds`}
             />
             <Line
               dataKey="value"
               type="linear"
               stroke={metric === "pulse" ? "#207a68" : "#557eb4"}
               strokeWidth={2.5}
-              dot={false}
+              dot={{
+                r: 2,
+                strokeWidth: 0,
+                fill: metric === "pulse" ? "#207a68" : "#557eb4",
+              }}
               connectNulls={false}
               isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>
-        {!data.length && (
-          <div className="chart-empty">Waiting for observations</div>
+        {!validCount && (
+          <div className="chart-empty">
+            Waiting for usable {metric === "pulse" ? "pulse" : "breathing"}{" "}
+            readings
+          </div>
         )}
       </div>
       <footer>
-        <span>{valid.length} valid observations</span>
+        <span>
+          {validCount} valid observations
+          {latestSeconds !== null
+            ? ` · Last sample at ${number(latestSeconds)}s`
+            : ""}
+        </span>
         <span>Gaps indicate missing or invalid data</span>
       </footer>
     </section>

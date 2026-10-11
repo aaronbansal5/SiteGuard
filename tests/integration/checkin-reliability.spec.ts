@@ -18,7 +18,7 @@ async function fixture(
     context: { workload: null, temperatureC: null },
     consentVersion: "local-test",
     shareWithSupervisor: false,
-    interruption: null,
+    interruption: null as string | null,
   };
   const metric = {
     status: "insufficient_data",
@@ -71,6 +71,7 @@ async function fixture(
         workers: [{ id: workerId, displayName: "Test worker", skills: [] }],
       };
     else if (path === "/breaks") body = { breaks: [] };
+    else if (path === "/fall-detection/state") body = { incidents: [] };
     else if (path.includes("/history")) body = { sessions: [session] };
     else if (path.endsWith("/events"))
       return route.fulfill({
@@ -324,4 +325,62 @@ test("real research results never acquire random scenario controls", async ({
     page.getByText("Consider additional rest", { exact: true }),
   ).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test("a failed camera start shows its cause and stops preview polling", async ({
+  page,
+}) => {
+  const { session } = await fixture(page);
+  session.interruption =
+    "Measurement source failed to start. Another check-in holds the camera. Finish it before starting again.";
+  const previews: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/preview")) previews.push(request.url());
+  });
+  await page.clock.install();
+  await page.goto(`/sessions/${sessionId}/measure`);
+  await expect(
+    page.getByText("Camera unavailable", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Camera startup failed", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".live-camera-image")).toContainText(
+    "Another check-in holds the camera",
+  );
+  await page.clock.fastForward(6000);
+  expect(previews).toEqual([]);
+});
+
+test("separate pulse and breathing packets keep both chart values visible", async ({
+  page,
+}) => {
+  const { session, errors } = await fixture(page, "presage", false);
+  session.status = "completed";
+  const readings = Array.from({ length: 24 }, (_, sequence) => ({
+    sequence,
+    reading: {
+      timestamp: new Date(
+        Date.parse(session.startedAt) + (Math.floor(sequence / 2) + 1) * 1000,
+      ).toISOString(),
+      heartRateBpm:
+        sequence % 2 === 0 ? 72 + Math.floor(sequence / 2) / 10 : null,
+      respiratoryRateBrpm:
+        sequence % 2 === 1 ? 18 - Math.floor(sequence / 2) / 10 : null,
+      quality: "valid",
+      source: "presage",
+    },
+  }));
+  await page.route(`**/api/sessions/${sessionId}/readings`, (route) =>
+    route.fulfill({ json: { readings } }),
+  );
+  await page.goto(`/sessions/${sessionId}`);
+  const charts = page.locator(".chart-card");
+  await expect(charts.nth(0).locator(".metric-value")).toContainText("73.1");
+  await expect(charts.nth(1).locator(".metric-value")).toContainText("16.9");
+  await expect(charts.nth(0).locator(".recharts-line-curve")).toBeVisible();
+  expect(errors).toEqual([]);
+  await charts
+    .nth(0)
+    .screenshot({ path: test.info().outputPath("pulse-trend.png") });
 });
