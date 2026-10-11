@@ -162,6 +162,7 @@ jobs:
           npm run verify:tiger > verify.log 2>&1 || true
           cat verify.log
           grep -q "vital_readings hypertable: yes" verify.log
+          grep -q "10-second time buckets:" verify.log
           grep -q "self_reports" verify.log
           grep -Eq "TLS: +NO" verify.log
       - run: npm run test:postgres

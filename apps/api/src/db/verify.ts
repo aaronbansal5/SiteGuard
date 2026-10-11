@@ -35,11 +35,18 @@ try {
     "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY 1",
   )) as { table_name: string }[];
   let hyper = false;
+  let buckets: number | null = null;
   if (ext.length) {
     const h = (await r.driver.query(
       "SELECT count(*)::text AS n FROM timescaledb_information.hypertables WHERE hypertable_name='vital_readings'",
     )) as { n: string }[];
     hyper = h[0]?.n === "1";
+    if (hyper) {
+      const grouped = (await r.driver.query(
+        "SELECT count(*)::int AS n FROM (SELECT session_id,time_bucket('10 seconds',timestamp) AS bucket FROM vital_readings GROUP BY session_id,bucket) AS buckets",
+      )) as { n: number }[];
+      buckets = Number(grouped[0]?.n ?? 0);
+    }
   }
   console.log("host:           ", host);
   console.log("server:         ", v.version.split(" on ")[0]);
@@ -50,6 +57,10 @@ try {
     tables.map((t) => t.table_name).join(", ") || "(none)",
   );
   console.log("vital_readings hypertable:", hyper ? "yes" : "no");
+  console.log(
+    "10-second time buckets:      ",
+    buckets === null ? "unavailable" : buckets,
+  );
   if (!tls?.ssl) ok = false;
   if (!tables.some((t) => t.table_name === "vital_readings")) {
     console.log("-> run: npm run db:migrate:postgres");

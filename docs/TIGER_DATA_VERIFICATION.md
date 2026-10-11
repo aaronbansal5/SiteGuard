@@ -1,6 +1,12 @@
 # Tiger Data / PostgreSQL verification
 
-**Status: Tiger Cloud itself is UNVERIFIED.** No Tiger Cloud database connection string was available. A Tiger public API key is not a database connection string and cannot be used by SiteGuard. Everything in "Verified locally" was run against a local PostgreSQL server with a locally built TimescaleDB extension, not against Tiger Cloud.
+**Current code status:** Tiger Cloud credentials are intentionally not stored in the repository. The historical verification at the end of this document confirmed the team's Tiger Cloud schema and hypertable. The new ten-second evidence query must be run again against the final service before it is claimed in the presentation.
+
+## Time-series evidence feature
+
+Completed-session reports expose `GET /api/sessions/:id/timeseries-evidence`. When `vital_readings` is a verified TimescaleDB hypertable, the repository groups observations with native `time_bucket('10 seconds', timestamp)` and returns storage provenance, observation counts, valid pulse/breathing coverage, and per-bucket descriptive averages. SQLite and plain PostgreSQL retain a contract-compatible application aggregation for the credential-free fallback demo. Synthetic and Presage sessions are never mixed.
+
+`npm run verify:tiger` now executes a read-only ten-second `time_bucket` query as well as checking TLS, the extension, schema, and hypertable. Coverage is observation availability, not measurement accuracy, recovery, or safety.
 
 ## Verified locally (2026-10-10)
 

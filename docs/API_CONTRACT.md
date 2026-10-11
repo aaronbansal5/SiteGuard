@@ -22,6 +22,7 @@ POST /sessions/:id/readings {readings:ReadingEnvelope[]} → {accepted,duplicate
 GET /sessions/:id/readings → {readings}.
 POST /sessions/:id/complete {} → {session,summary}; idempotent, stops source first.
 GET /sessions/:id/summary → {summary}.
+GET /sessions/:id/timeseries-evidence → {evidence}. Same access rules as the session summary. Returns ten-second observation buckets, valid metric coverage and storage provenance. A verified TimescaleDB hypertable uses `time_bucket`; SQLite or plain PostgreSQL uses the same response contract with application aggregation. Coverage describes data availability, not measurement accuracy or worker safety.
 GET /workers/:id/history?limit=20&before=cursor → {sessions:[Session & {summary}],nextCursor}; worker-only history.
 GET /sessions/:id/personal-insights → {insights:PersonalInsights}. Owning worker only; supervisors 403 even with sharing consent. Experimental, same-source own history only; explicit insufficient_data states.
 POST /sessions/:id/self-report {tiredness:1..5|null} → {selfReport:SelfReport|null}. Owning worker only, completed session only (409 otherwise); null removes. Voluntary; never used for scheduling, approvals or supervisor views.

@@ -7,6 +7,7 @@ import {
   ReadingEnvelopeSchema,
   AssignmentSchema,
   SummarySchema,
+  TimeSeriesEvidenceSchema,
 } from "./models.js";
 export const LoginSchema = z.discriminatedUnion("role", [
   z.strictObject({ role: z.literal("worker"), workerId: Id }),
@@ -89,4 +90,7 @@ export const HistoryQuerySchema = z.object({
   before: z.string().optional(),
 });
 export const SummaryResponseSchema = z.strictObject({ summary: SummarySchema });
+export const TimeSeriesEvidenceResponseSchema = z.strictObject({
+  evidence: TimeSeriesEvidenceSchema,
+});
 export type Explanation = z.infer<typeof ExplanationSchema>;

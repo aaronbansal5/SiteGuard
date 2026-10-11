@@ -44,7 +44,7 @@ Playwright starts isolated dev servers and `.data/e2e.sqlite`; keep ports 3001/5
 
 Copy `.env.example` to `.env` and configure only the required adapters. Secrets stay server-side.
 
-- PostgreSQL/Tiger Data: `DATABASE_URL`; run `npm run db:migrate:postgres`. Explicit Timescale enable command checks extension presence. No automatic fallback on connection failure.
+- PostgreSQL/Tiger Data: `DATABASE_URL`; run `npm run db:migrate:postgres`. Explicit Timescale enable command checks extension presence. Completed-session reports use TimescaleDB `time_bucket` for ten-second observation evidence when `vital_readings` is a verified hypertable. No automatic fallback on connection failure.
 - Gemini: `GEMINI_API_KEY` and an account-verified `GEMINI_MODEL`. Selects server-approved factual sentences, with deterministic fallback. No schedule/medical decisions.
 - Presage: separately supplied native bridge plus `PRESAGE_BRIDGE_TOKEN`. Local app only. Source remains fixed within each session.
 
