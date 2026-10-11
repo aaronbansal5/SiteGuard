@@ -189,51 +189,56 @@ describe("transport and auth", () => {
     expect(timestamps).toEqual([200]);
   });
 
-  test("releases an orphaned camera session after its app event stream closes", async () => {
-    let closes = 0;
-    const adapter: SdkAdapter = {
-      kind: "presage-sdk",
-      async probe() {
-        return { ready: true, reason: null };
-      },
-      async open() {
-        return {
-          async close() {
-            closes++;
-          },
-          sendFrame() {},
-        };
-      },
-    };
-    const bridge = new PresageBridge({
-      token: TOKEN,
-      adapter,
-      port: 0,
-      orphanGraceMs: 10,
-    });
-    const port = await bridge.listen();
-    cleanup.push(() => bridge.close());
-    const base = `http://127.0.0.1:${port}`;
-    const auth = { Authorization: `Bearer ${TOKEN}` };
-    const start = async () =>
-      fetch(`${base}/v1/sessions`, {
-        method: "POST",
-        headers: { ...auth, "Content-Type": "application/json" },
-        body: JSON.stringify({ appSessionId: randomUUID(), input: "custom" }),
+  test.each([true, false])(
+    "releases an orphaned camera with initial event connection=%s",
+    async (connectEvents) => {
+      let closes = 0;
+      const adapter: SdkAdapter = {
+        kind: "presage-sdk",
+        async probe() {
+          return { ready: true, reason: null };
+        },
+        async open() {
+          return {
+            async close() {
+              closes++;
+            },
+            sendFrame() {},
+          };
+        },
+      };
+      const bridge = new PresageBridge({
+        token: TOKEN,
+        adapter,
+        port: 0,
+        orphanGraceMs: 10,
       });
-    const first = await start();
-    expect(first.status).toBe(201);
-    const { bridgeSessionId } = BridgeSessionSchema.parse(await first.json());
-    const events = await fetch(
-      `${base}/v1/sessions/${bridgeSessionId}/events?after=-1`,
-      { headers: auth },
-    );
-    expect(events.status).toBe(200);
-    bridge.disconnectStreams();
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(closes).toBe(1);
-    expect((await start()).status).toBe(201);
-  });
+      const port = await bridge.listen();
+      cleanup.push(() => bridge.close());
+      const base = `http://127.0.0.1:${port}`;
+      const auth = { Authorization: `Bearer ${TOKEN}` };
+      const start = async () =>
+        fetch(`${base}/v1/sessions`, {
+          method: "POST",
+          headers: { ...auth, "Content-Type": "application/json" },
+          body: JSON.stringify({ appSessionId: randomUUID(), input: "custom" }),
+        });
+      const first = await start();
+      expect(first.status).toBe(201);
+      const { bridgeSessionId } = BridgeSessionSchema.parse(await first.json());
+      if (connectEvents) {
+        const events = await fetch(
+          `${base}/v1/sessions/${bridgeSessionId}/events?after=-1`,
+          { headers: auth },
+        );
+        expect(events.status).toBe(200);
+        bridge.disconnectStreams();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(closes).toBe(1);
+      expect((await start()).status).toBe(201);
+    },
+  );
   test("binds loopback only, on an ephemeral port in tests", async () => {
     const b = await fixtureBridge("valid-steady");
     const a = b.bridge.address();
