@@ -12,6 +12,7 @@ test("persisted incident pulses worker, manager and phone pages until shared ack
   const [worker, manager, phone] = await Promise.all(
     contexts.map((context) => context.newPage()),
   );
+  await phone.setViewportSize({ width: 390, height: 844 });
   try {
     await manager.request.post("/api/demo/login", {
       data: { role: "supervisor" },
@@ -59,6 +60,12 @@ test("persisted incident pulses worker, manager and phone pages until shared ack
       await expect(
         page.getByRole("alert", { name: "Site incident alert" }),
       ).toBeVisible();
+      const alert = page.getByRole("alert", { name: "Site incident alert" });
+      await expect(alert.getByText("test-zone", { exact: true })).toBeVisible();
+      await expect(alert.getByText("test-camera", { exact: true })).toBeVisible();
+      await expect(alert.locator("time")).toHaveCount(1);
+      await expect(alert.getByText("Acknowledging stops the shared alert. It does not resolve the incident.")).toBeVisible();
+      await expect(alert.getByRole("link", { name: "View scene & follow up" })).toBeVisible();
       await expect(page.locator("body")).toHaveClass(/fall-alert-active/);
       expect(
         await page.evaluate(
@@ -66,6 +73,9 @@ test("persisted incident pulses worker, manager and phone pages until shared ack
         ),
       ).toBe("fall-screen-flash");
     }
+    await worker.screenshot({ path: ".data/alert-desktop.png" });
+    await phone.screenshot({ path: ".data/alert-phone.png" });
+    expect(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     // Changing routes cannot silence an unacknowledged incident.
     await worker
       .getByRole("navigation")
@@ -100,4 +110,30 @@ test("persisted incident pulses worker, manager and phone pages until shared ack
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }
+});
+
+test("acknowledging one location keeps other open locations alerting", async ({ page }) => {
+  await page.request.post("/api/demo/login", { data: { role: "worker", workerId: fixtureId(1) } });
+  const incidents = ["North scaffold", "Loading bay"].map((zoneId) => ({
+    id: randomUUID(), zoneId, cameraId: "site-camera-02", status: "open", revision: 1,
+    observedAt: new Date().toISOString(),
+  }));
+  await page.route("**/api/fall-detection/state", route => route.fulfill({ json: { incidents } }));
+  await page.route("**/api/safety/incidents/*", async route => {
+    const id = route.request().url().split("/").pop();
+    const incident = incidents.find(item => item.id === id)!;
+    expect(route.request().postDataJSON()).toMatchObject({ action: "acknowledge", revision: 1 });
+    incident.status = "acknowledged";
+    await route.fulfill({ json: { incident } });
+  });
+  await page.goto("/history");
+  const alert = page.getByRole("alert", { name: "Site incident alert" });
+  await expect(alert.getByText("2 new alerts")).toBeVisible();
+  await alert.locator("article").filter({ hasText: "North scaffold" }).getByRole("button").click();
+  await expect(alert.getByText("North scaffold", { exact: true })).toHaveCount(0);
+  await expect(alert.getByText("Loading bay", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).toHaveClass(/fall-alert-active/);
+  await alert.getByRole("button", { name: "Acknowledge alerts" }).click();
+  await expect(alert).toHaveCount(0);
+  await expect(page.locator("body")).not.toHaveClass(/fall-alert-active/);
 });
