@@ -33,15 +33,15 @@ success is claimed or simulated outside the explicitly labelled fixture adapter.
 This is its own package with its own `package-lock.json`, outside the root
 workspaces. Tests and smoke import the app's schemas from
 `packages/contracts` and its consumer from `apps/api` by relative path, so you
-need to run the repo root `npm install` too.
+need to install the repository root dependencies too.
 
 ## Run
 
 ```sh
 # from the repo root (needed for packages/contracts' zod)
-npm install
+npm ci
 cd integrations/presage-bridge
-npm install
+npm ci
 npm test               # vitest contract tests (fixture adapter)
 npm run typecheck
 npm run smoke          # in-process bridge + FixtureAdapter; exits 0 on pass

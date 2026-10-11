@@ -37,6 +37,7 @@ import {
 import { audit } from "./domain/requests.js";
 import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
 import { personalInsights, personalTrend } from "./domain/personal.js";
+import { evaluateRestSupport } from "./research/rest-support.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
   app: FastifyInstance,
@@ -223,6 +224,19 @@ export async function registerRoutes(
           "SESSION_ACTIVE",
           "Resume or stop the existing session first",
         );
+      const priorContext =
+        b.context.workload === null && b.context.temperatureC === null
+          ? (await tx.list("sessions"))
+              .filter(
+                (candidate) =>
+                  candidate.workerId === workerId &&
+                  candidate.source === b.source &&
+                  candidate.status === "completed",
+              )
+              .sort((left, right) =>
+                right.startedAt.localeCompare(left.startedAt),
+              )[0]?.context
+          : undefined;
       const s: Session = {
         id: randomUUID(),
         workerId,
@@ -231,7 +245,10 @@ export async function registerRoutes(
         status: "active",
         startedAt: new Date().toISOString(),
         endedAt: null,
-        context: b.context,
+        // Workers are not required to answer workload or temperature
+        // questions. Reuse the latest same-source context only when both are
+        // omitted; otherwise preserve the supplied values.
+        context: priorContext ?? b.context,
         consentVersion: b.consentVersion,
         shareWithSupervisor: b.shareWithSupervisor,
         interruption: null,
@@ -333,6 +350,17 @@ export async function registerRoutes(
       fail(403, "FORBIDDEN", "This session belongs to another worker");
     return s;
   };
+  app.get("/api/sessions/:id/rest-support", async (req) => {
+    const s = await ownSession(req);
+    if (s.status !== "completed")
+      fail(
+        409,
+        "SESSION_ACTIVE",
+        "Complete the check-in before reviewing rest support",
+      );
+    const summary = await sessionSummary(r, s.id);
+    return evaluateRestSupport(summary);
+  });
   app.get("/api/sessions/:id/personal-insights", async (req) => {
     const s = await ownSession(req);
     return { insights: await personalInsights(r, s.id) };

@@ -384,6 +384,7 @@ test.describe("Gemini failures fall back to deterministic facts", () => {
               { factId: "breathing_history", variant: 0 },
               { factId: "pulse", variant: 0 },
               { factId: "pulse_history", variant: 0 },
+              { factId: "rest_guidance", variant: 0 },
             ],
           }),
         ),

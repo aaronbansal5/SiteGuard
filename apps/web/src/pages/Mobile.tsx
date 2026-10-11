@@ -337,17 +337,41 @@ function DevicePairingCard() {
   return (
     <section className="mobile-card">
       <h2>Pair the iPhone app</h2>
-      <p>Pair only your own phone. Pairing does not upload anything; the app asks separately before every check-in and before manager sharing.</p>
-      {pairing && <p role="status">One-time code: <strong>{pairing.code}</strong> · expires {time(pairing.expiresAt)}</p>}
+      <p>
+        Pair only your own phone. Pairing does not upload anything; the app asks
+        separately before every check-in and before manager sharing.
+      </p>
+      {pairing && (
+        <p role="status">
+          One-time code: <strong>{pairing.code}</strong> · expires{" "}
+          {time(pairing.expiresAt)}
+        </p>
+      )}
       <ErrorNotice message={error} />
-      <button className="button secondary" disabled={busy || !window.isSecureContext}
+      <button
+        className="button secondary"
+        disabled={busy || !window.isSecureContext}
         onClick={() => {
           setBusy(true);
-          void api<{ code: string; expiresAt: string }>("/devices/pairings", {}, "POST")
-            .then((value) => { setPairing(value); setError(""); })
-            .catch((reason) => setError(reason instanceof Error ? reason.message : "Pairing unavailable"))
+          void api<{ code: string; expiresAt: string }>(
+            "/devices/pairings",
+            {},
+            "POST",
+          )
+            .then((value) => {
+              setPairing(value);
+              setError("");
+            })
+            .catch((reason) =>
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "Pairing unavailable",
+              ),
+            )
             .finally(() => setBusy(false));
-        }}>
+        }}
+      >
         Get one-time pairing code
       </button>
     </section>
@@ -535,7 +559,8 @@ function MobileHome({
 
 function NotificationOptIn() {
   const isIOS =
-    typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+    typeof navigator !== "undefined" &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent);
   if (isIOS)
     return (
       <p className="fine-print">
@@ -609,9 +634,7 @@ function MobileConsent({
     [source, setSource] = useState<"presage" | "mock">(
       browserCamera ? "presage" : "mock",
     ),
-    [share, setShare] = useState(false),
-    [workload, setWorkload] = useState(""),
-    [temp, setTemp] = useState("");
+    [share, setShare] = useState(false);
   const a = useAction();
   return (
     <form
@@ -644,10 +667,7 @@ function MobileConsent({
               ...(source === "presage" ? { input: "custom" as const } : {}),
               consentVersion: "v1",
               shareWithSupervisor: share,
-              context: {
-                workload: workload || null,
-                temperatureC: temp === "" ? null : Number(temp),
-              },
+              context: { workload: null, temperatureC: null },
             });
             onStarted(result.session.id, media);
           } catch (error) {
@@ -703,31 +723,10 @@ function MobileConsent({
           </select>
         </label>
       )}
-      <div className="form-grid">
-        <label>
-          Recent workload
-          <select
-            value={workload}
-            onChange={(e) => setWorkload(e.target.value)}
-          >
-            <option value="">Not recorded</option>
-            <option value="light">Light</option>
-            <option value="moderate">Moderate</option>
-            <option value="heavy">Heavy</option>
-          </select>
-        </label>
-        <label>
-          Temperature (°C)
-          <input
-            type="number"
-            inputMode="decimal"
-            step="any"
-            value={temp}
-            onChange={(e) => setTemp(e.target.value)}
-            placeholder="Optional"
-          />
-        </label>
-      </div>
+      <p className="fine-print">
+        No workload or temperature questions are required. SiteGuard handles the
+        before/after windows and eligible history automatically.
+      </p>
       <label className="checkbox mobile-toggle">
         <input
           type="checkbox"

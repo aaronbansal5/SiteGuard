@@ -84,23 +84,24 @@ jobs:
 
   presage-bridge:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: integrations/presage-bridge
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: integrations/presage-bridge/package-lock.json
-      # Bridge contract/consumer tests intentionally import application code.
-      # Install the root workspace dependencies as well as the bridge's own.
+          cache-dependency-path: |
+            package-lock.json
+            integrations/presage-bridge/package-lock.json
+      # Contract tests import the shared contracts and app consumer, so both
+      # independent dependency trees must be installed.
       - run: npm ci
-        working-directory: .
       - run: npm ci
+        working-directory: integrations/presage-bridge
       - run: npx tsc --noEmit
+        working-directory: integrations/presage-bridge
       - run: npx vitest run
+        working-directory: integrations/presage-bridge
 
   fall-detection:
     runs-on: ubuntu-latest
