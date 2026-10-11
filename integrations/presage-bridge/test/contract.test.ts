@@ -91,9 +91,11 @@ describe("transport and auth", () => {
     });
     expect(started.status).toBe(201);
     const { bridgeSessionId } = BridgeSessionSchema.parse(await started.json());
-    const frameUrl = `${base}/v1/sessions/${bridgeSessionId}/frame?timestampUs=1700000000000000`;
+    let nextTimestampUs = 1700000000000000;
+    const frameUrl = () =>
+      `${base}/v1/sessions/${bridgeSessionId}/frame?timestampUs=${nextTimestampUs++}`;
     const send = (body: Buffer) =>
-      fetch(frameUrl, {
+      fetch(frameUrl(), {
         method: "POST",
         headers: { ...auth, "Content-Type": "application/octet-stream" },
         body: new Uint8Array(body),
@@ -106,7 +108,7 @@ describe("transport and auth", () => {
       .jpeg()
       .toBuffer();
     const sendJpeg = (body: Buffer) =>
-      fetch(frameUrl, {
+      fetch(frameUrl(), {
         method: "POST",
         headers: { ...auth, "Content-Type": "image/jpeg" },
         body: new Uint8Array(body),
@@ -143,6 +145,48 @@ describe("transport and auth", () => {
       headers: auth,
     });
     expect((await send(Buffer.alloc(480 * 360 * 4))).status).toBe(409);
+  });
+
+  test("drops late browser frames instead of failing the camera session", async () => {
+    const timestamps: number[] = [];
+    const adapter: SdkAdapter = {
+      kind: "presage-sdk",
+      async probe() {
+        return { ready: true, reason: null };
+      },
+      async open() {
+        return {
+          async close() {},
+          sendFrame(_frame, _width, _height, timestampUs) {
+            timestamps.push(timestampUs);
+          },
+        };
+      },
+    };
+    const bridge = new PresageBridge({ token: TOKEN, adapter, port: 0 });
+    const port = await bridge.listen();
+    cleanup.push(() => bridge.close());
+    const base = `http://127.0.0.1:${port}`;
+    const auth = { Authorization: `Bearer ${TOKEN}` };
+    const started = await fetch(`${base}/v1/sessions`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ appSessionId: randomUUID(), input: "custom" }),
+    });
+    const { bridgeSessionId } = BridgeSessionSchema.parse(await started.json());
+    const frame = new Uint8Array(480 * 360 * 4);
+    const send = (timestampUs: number) =>
+      fetch(
+        `${base}/v1/sessions/${bridgeSessionId}/frame?timestampUs=${timestampUs}`,
+        {
+          method: "POST",
+          headers: { ...auth, "Content-Type": "application/octet-stream" },
+          body: frame,
+        },
+      );
+    expect((await send(200)).status).toBe(204);
+    expect((await send(100)).status).toBe(204);
+    expect(timestamps).toEqual([200]);
   });
   test("binds loopback only, on an ephemeral port in tests", async () => {
     const b = await fixtureBridge("valid-steady");

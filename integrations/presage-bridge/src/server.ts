@@ -59,6 +59,8 @@ class BridgeSession {
   stopping?: Promise<void>;
   frameWindowStartedAt = 0;
   frameWindowCount = 0;
+  lastFrameTimestampUs = 0;
+  frameQueue: Promise<void> = Promise.resolve();
   readonly log: EventLog;
   readonly streams = new Set<ServerResponse>();
   constructor(
@@ -500,7 +502,23 @@ export class PresageBridge {
         );
       frame = Buffer.concat(chunks);
     }
-    session.capture.sendFrame(frame, frameWidth, frameHeight, timestampUs);
+    // Browser uploads can complete out of order when a frame is encoded while
+    // another request is still in flight. SmartSpectra requires strictly
+    // increasing timestamps, so stale frames are harmlessly discarded and
+    // accepted frames are delivered one at a time.
+    if (timestampUs <= session.lastFrameTimestampUs) {
+      res.writeHead(204, { "Cache-Control": "no-store" });
+      res.end();
+      return;
+    }
+    session.lastFrameTimestampUs = timestampUs;
+    const capture = session.capture;
+    session.frameQueue = session.frameQueue
+      .catch(() => undefined)
+      .then(() => {
+        capture.sendFrame!(frame, frameWidth, frameHeight, timestampUs);
+      });
+    await session.frameQueue;
     const now = Date.now();
     if (session.frameWindowCount === 0) {
       session.frameWindowStartedAt = now;
