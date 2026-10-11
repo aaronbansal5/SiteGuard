@@ -12,6 +12,7 @@ export interface Config {
   port: number;
   sqlitePath: string;
   databaseUrl?: string;
+  allowSqlite: boolean;
   cookieSecret: string;
   measurementToken: string;
   demoMode: boolean;
@@ -42,6 +43,11 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     port: Number(process.env.PORT || 3001),
     sqlitePath: resolve(process.env.SQLITE_PATH || ".data/siteguard.sqlite"),
     databaseUrl: process.env.DATABASE_URL || undefined,
+    // SQLite is an isolated test/rehearsal adapter, never an implicit app
+    // fallback. Vitest sets NODE_ENV=test; other harnesses must opt in.
+    allowSqlite:
+      process.env.SITEGUARD_ALLOW_SQLITE === "true" ||
+      process.env.NODE_ENV === "test",
     cookieSecret: process.env.COOKIE_SECRET || randomBytes(32).toString("hex"),
     measurementToken:
       process.env.MEASUREMENT_TOKEN || randomBytes(32).toString("hex"),

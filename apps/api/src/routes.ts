@@ -40,6 +40,7 @@ import { audit } from "./domain/requests.js";
 import { Explainer, scheduleFacts, sessionFacts } from "./insights/explain.js";
 import { personalInsights, personalTrend } from "./domain/personal.js";
 import { evaluateRestSupport } from "./research/rest-support.js";
+import { timeSeriesEvidence } from "./domain/timeseries-evidence.js";
 import { seed } from "./db/seed.js";
 export async function registerRoutes(
   app: FastifyInstance,
@@ -395,6 +396,10 @@ export async function registerRoutes(
   app.get("/api/sessions/:id/summary", async (req) => {
     const s = await access(req, id(req));
     return { summary: await sessionSummary(r, s.id) };
+  });
+  app.get("/api/sessions/:id/timeseries-evidence", async (req) => {
+    const s = await access(req, id(req));
+    return { evidence: await timeSeriesEvidence(r, s) };
   });
   // Worker-only experimental personal insights (docs/RECOVERY_MODEL.md).
   // worker() rejects supervisors outright, regardless of sharing consent.

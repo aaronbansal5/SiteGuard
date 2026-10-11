@@ -4,6 +4,7 @@ import { test, expect, describe, beforeEach, afterEach } from "vitest";
 import { fixtureId, fixtures } from "@siteguard/mock-data";
 import {
   SummarySchema,
+  TimeSeriesEvidenceResponseSchema,
   ExplanationSchema,
   type Break,
   type RestRequest,
@@ -53,6 +54,20 @@ test("API journey: check-in → summary → rest request → approval → protec
   // Seeded synthetic history: four same-source/context sessions.
   expect(summary.pulseComparison.status).toBe("available");
   expect(summary.pulseComparison.count).toBe(4);
+  const evidence = TimeSeriesEvidenceResponseSchema.parse(
+    (await worker.get(`/api/sessions/${sessionId}/timeseries-evidence`)).body,
+  ).evidence;
+  // 60 injected readings plus any the live mock source stored before stopping.
+  expect(evidence.totals.observations).toBe(
+    (await h.repo.readings(sessionId)).length,
+  );
+  expect(evidence.totals.observations).toBeGreaterThanOrEqual(60);
+  expect(evidence.buckets.length).toBeGreaterThanOrEqual(6);
+  expect(evidence.storage).toMatchObject({
+    database: "sqlite",
+    hypertable: false,
+    aggregation: "application_10s",
+  });
 
   // 3. Factual explanation without Gemini credentials is deterministic.
   const sessionExplain = await worker.post("/api/insights/explain", {

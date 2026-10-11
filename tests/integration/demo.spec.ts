@@ -43,6 +43,14 @@ test("real-time mock check-in → summary → request → protected staffing cha
   await expect(
     page.getByText("4 matching prior sessions", { exact: false }),
   ).toHaveCount(2);
+  await expect(
+    page.getByRole("heading", { name: "Measurement evidence" }),
+  ).toBeVisible();
+  await expect(page.getByText("60", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("Local demo storage", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("10s", { exact: false }).first()).toBeVisible();
   await page.getByRole("button", { name: "Request additional rest" }).click();
   await page.getByLabel("Additional minutes").fill("5");
   await page.getByRole("button", { name: "Send request", exact: true }).click();

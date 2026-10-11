@@ -15,6 +15,7 @@ const child = spawn(process.execPath, ["apps/api/dist/server.js"], {
     PORT: port,
     SQLITE_PATH: join(dir, "verify.sqlite"),
     DATABASE_URL: "",
+    SITEGUARD_ALLOW_SQLITE: "true",
     HOSTED: "false",
     DEMO_MODE: "true",
     COOKIE_SECRET:

@@ -8,6 +8,7 @@ import type {
   Explanation,
   MetricSummary,
   Comparison,
+  TimeSeriesEvidence,
 } from "@siteguard/contracts";
 import type {
   MetricFeatures,
@@ -24,6 +25,7 @@ import {
 import { SourceBadge } from "../components/SourceBadge";
 import { VitalChart } from "../components/VitalChart";
 import { PersonalInsightsPanel } from "../components/PersonalInsights";
+import { TimeSeriesEvidencePanel } from "../components/TimeSeriesEvidence";
 import { useIdentity } from "../App";
 export function SessionSummary() {
   const { id } = useParams(),
@@ -32,6 +34,9 @@ export function SessionSummary() {
     session = useResource<{ session: Session }>(`/sessions/${id}`),
     readings = useResource<{ readings: ReadingEnvelope[] }>(
       `/sessions/${id}/readings`,
+    ),
+    evidence = useResource<{ evidence: TimeSeriesEvidence }>(
+      `/sessions/${id}/timeseries-evidence`,
     );
   const [explanation, setExplanation] = useState<Explanation>(),
     [explanationError, setExplanationError] = useState("");
@@ -68,7 +73,11 @@ export function SessionSummary() {
         <ArrowLeft size={15} />
         Back to workspace
       </Link>
-      <ErrorNotice message={summary.error || session.error || readings.error} />
+      <ErrorNotice
+        message={
+          summary.error || session.error || readings.error || evidence.error
+        }
+      />
       {!s || !v ? (
         (summary.loading || session.loading) && <Loading />
       ) : (
@@ -124,6 +133,9 @@ export function SessionSummary() {
                 startedAt={s.startedAt}
               />
             </div>
+          )}
+          {evidence.data && (
+            <TimeSeriesEvidencePanel evidence={evidence.data.evidence} />
           )}
           <section className="card explanation">
             <div className="card-header">

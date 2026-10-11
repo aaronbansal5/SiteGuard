@@ -173,6 +173,7 @@ async function main() {
       HOST: "127.0.0.1",
       SQLITE_PATH: db,
       DATABASE_URL: "",
+      SITEGUARD_ALLOW_SQLITE: "true",
       DEMO_MODE: "true",
       HOSTED: "false",
       GEMINI_API_KEY: "",

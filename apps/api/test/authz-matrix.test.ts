@@ -173,6 +173,18 @@ const cases: Case[] = [
     expected: ownerOrSharing(200),
   },
   {
+    route: "GET /api/sessions/:id/timeseries-evidence",
+    name: "unshared time-series evidence",
+    url: `/api/sessions/${UNSHARED}/timeseries-evidence`,
+    expected: ownerOnly(200),
+  },
+  {
+    route: "GET /api/sessions/:id/timeseries-evidence",
+    name: "shared time-series evidence",
+    url: `/api/sessions/${SHARED}/timeseries-evidence`,
+    expected: ownerOrSharing(200),
+  },
+  {
     route: "GET /api/sessions/:id/personal-insights",
     name: "insights unshared",
     url: `/api/sessions/${UNSHARED}/personal-insights`,

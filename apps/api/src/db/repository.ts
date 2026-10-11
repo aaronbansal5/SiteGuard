@@ -318,6 +318,10 @@ function digest(e: ReadingEnvelope) {
   return createHash("sha256").update(JSON.stringify(e)).digest("hex");
 }
 export async function openRepository(config: Config) {
+  if (!config.databaseUrl && !config.allowSqlite)
+    throw new Error(
+      "DATABASE_URL is required. SiteGuard does not fall back to local SQLite; set SITEGUARD_ALLOW_SQLITE=true only for isolated tests or rehearsals.",
+    );
   const r = new Repository(
     config.databaseUrl
       ? await postgresDriver(config.databaseUrl)
